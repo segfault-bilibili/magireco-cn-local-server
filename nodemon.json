@@ -1,0 +1,20 @@
+{
+    "restartable": "rs",
+    "ignore": [
+      ".git",
+      "node_modules/**/node_modules"
+    ],
+    "verbose": true,
+    "execMap": {
+      "js": "ts-node ./src/proxy_main.ts"
+    },
+    "events": {
+    },
+    "watch": [
+      "src/"
+    ],
+    "env": {
+      "NODE_ENV": "development"
+    },
+    "ext": "ts,js,json"
+}

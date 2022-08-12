@@ -1,0 +1,31 @@
+{
+  "name": "magireco-cn-local-server",
+  "version": "1.0.0",
+  "description": "Magia Record CN Local Server",
+  "main": "out/proxy_main.js",
+  "scripts": {
+    "once": "npx ts-node ./src/proxy_main.ts",
+    "dev": "npx nodemon",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/segfault-bilibili/magireco-cn-local-server.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/segfault-bilibili/magireco-cn-local-server/issues"
+  },
+  "homepage": "https://github.com/segfault-bilibili/magireco-cn-local-server#readme",
+  "files": [
+    "out/**/*"
+  ],
+  "devDependencies": {
+    "@types/node": "^18.7.18",
+    "nodemon": "^2.0.19",
+    "ts-node": "^10.9.1",
+    "typescript": "^4.7.4"
+  }
+}
