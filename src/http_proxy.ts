@@ -146,10 +146,10 @@ export class httpProxy {
             let port = parseInt((matched[0].match(/\d+$/) as RegExpMatchArray)[0]);
             let host = req.url.substring(0, req.url.length - matched[0].length);
 
-            if (port == 443) {
+            const localServerHost = this.params.listenList.localServer.host;
+            const localServerPort = this.params.listenList.localServer.port;
+            if (port == 443 || (port == localServerPort && host == localServerHost)) {
                 //pass to local server, which will then pass to upstream HTTP CONNECT proxy if possible
-                const localServerHost = this.params.listenList.localServer.host;
-                const localServerPort = this.params.listenList.localServer.port;
                 let conn = net.connect(localServerPort, localServerHost, () => {
                     socket.write("HTTP/1.1 200 Connection Established\r\n\r\n", () => {
                         conn.pipe(socket);
