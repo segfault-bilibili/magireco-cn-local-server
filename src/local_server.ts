@@ -76,7 +76,7 @@ export class localServer {
             }
 
             console.log(`stream accepted, authority=[${authority}] alpn=[${alpn}] sni=[${sni}]`);
-            this.getSessionAsync(`https://${authority}/`, alpn, sni).then((sess) => {
+            this.getSessionAsync(new URL(`https://${authority}/`), alpn, sni).then((sess) => {
                 let svrReq = sess.request(headers);
                 svrReq.on('continue', () => {
                     stream.respond({
@@ -148,7 +148,8 @@ export class localServer {
         this._closed = true;
     }
 
-    private async getSessionAsync(authority: string, alpn?: string, sni?: string): Promise<http2.ClientHttp2Session> {
+    private async getSessionAsync(authorityURL: URL, alpn?: string, sni?: string): Promise<http2.ClientHttp2Session> {
+        const authority = authorityURL.href;
         let sess = this.openSess.get(authority);
         if (sess != null) {
             if (!sess.closed && !sess.destroyed) {
@@ -156,7 +157,6 @@ export class localServer {
             } else this.openSess.delete(authority);
         }
 
-        const authorityURL = new URL(authority);
         const host = authorityURL.hostname;
         const port = isNaN(parseInt(authorityURL.port)) ? 443 : parseInt(authorityURL.port);
         let socket: net.Socket;
