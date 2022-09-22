@@ -1,7 +1,6 @@
 import * as net from "net";
 import * as http from "http";
 import * as parameters from "./parameters";
-import * as http2 from "http2";
 import { httpProxy } from "./http_proxy";
 import { localServer } from "./local_server";
 
