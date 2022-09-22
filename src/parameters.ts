@@ -50,6 +50,7 @@ export class params {
     get upstreamProxyCACert(): string | undefined | null { return this.mapData.get("upstreamProxyCACert"); }
     get CACertAndKey(): certGenerator.certAndKey { return this.mapData.get("CACertAndKey"); }
     get CACertPEM(): string { return this.CACertAndKey.cert; }
+    get CACertSubjectHashOld(): string { return "9489bdaf"; }//FIXME
 
     private constructor(mapData: Map<string, any>) {
         this.mapData = mapData;
