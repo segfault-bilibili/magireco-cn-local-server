@@ -31,6 +31,7 @@ const persistParams: Record<string, any> = {
         port: 8080,
     },
     upstreamProxyEnabled: false,
+    upstreamProxyCACert: null,
     CACertAndKey: null,
 }
 
@@ -46,6 +47,7 @@ export class params {
     get listenList(): listenList { return this.mapData.get("listenList"); }
     get upstreamProxy(): listenAddr { return this.mapData.get("upstreamProxy"); }
     get upstreamProxyEnabled(): boolean { return this.mapData.get("upstreamProxyEnabled"); }
+    get upstreamProxyCACert(): string | undefined | null { return this.mapData.get("upstreamProxyCACert"); }
     get CACertAndKey(): certGenerator.certAndKey { return this.mapData.get("CACertAndKey"); }
     get CACertPEM(): string { return this.CACertAndKey.cert; }
 
