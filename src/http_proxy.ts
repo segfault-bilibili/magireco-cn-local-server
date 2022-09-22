@@ -178,41 +178,6 @@ export class httpProxy {
                 console.error(`Error: ${logMsg}`, e);
                 socket.end();
             });
-
-            /*
-            //commented out because this code snippet can neither monitor nor intercept communication
-            //NOTE: `host` and `port` were parsed from CONNECT
-            if (params.upstreamProxyEnabled) {
-                //pass to upstream HTTP CONNECT proxy
-                let proxyPort = params.upstreamProxy.port;
-                let proxyHost = params.upstreamProxy.host;
-                let logMsg = `${socket.remoteAddress}:${socket.remotePort} => ${proxyHost}:${proxyPort} => ${req.url}`;
-                console.log(logMsg);
-                let upstream = net.connect(proxyPort, proxyHost, () => {
-                    upstream.write(`CONNECT ${req.url} ${req.httpVersion}\r\nHost: ${req.url}\r\n\r\n`, () => {
-                        upstream.pipe(socket);
-                        socket.pipe(upstream);
-                    });
-                });
-                upstream.on('error', (e) => {
-                    console.error(`Error: ${logMsg}`, e);
-                    socket.end();
-                });
-            } else {
-                let logMsg = `direct ${socket.remoteAddress}:${socket.remotePort} => ${req.url}`;
-                console.log(logMsg);
-                let conn = net.connect(port, host, () => {
-                    socket.write("HTTP/1.1 200 Connection Established\r\n\r\n", () => {
-                        conn.pipe(socket);
-                        socket.pipe(conn);
-                    });
-                });
-                conn.on('error', (e) => {
-                    console.error(`Error: ${logMsg}`, e);
-                    socket.end();
-                });
-            }
-            */
         });
 
         let listenAddr = params.listenList.httpProxy;
