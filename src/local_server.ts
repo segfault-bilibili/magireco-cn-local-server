@@ -252,6 +252,7 @@ export class localServer {
     }
     close(): void {
         this.http2SecureServer.close();
+        this.http1TlsServer.close();
         this._closed = true;
     }
 
