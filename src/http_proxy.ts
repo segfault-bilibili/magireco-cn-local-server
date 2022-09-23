@@ -182,8 +182,6 @@ export class httpProxy {
                 //probe finished
                 if (supportH2 == null) {
                     console.error(`cannot probe supportH2: [${authorityURL}]`);
-                    socket.end("HTTP/1.1 502 Bad Gateway\r\n\r\n");
-                    return;
                 }
                 //pass to local server, which will then pass to upstream HTTP CONNECT proxy if possible
                 let localPort = supportH2 ? localH2Port : localH1Port;
