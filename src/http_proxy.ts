@@ -98,10 +98,14 @@ export class httpProxy {
                 method: req.method,
                 headers: req.headers,
             }, (svrRes) => {
-                let statusCode = svrRes.statusCode == null ? 502 : svrRes.statusCode;
-                let statusMessage = svrRes.statusCode == null ? "Bad Gateway" : svrRes.statusMessage;
-                res.writeHead(statusCode, statusMessage, svrRes.headers);
-                svrRes.pipe(res);
+                if (svrRes.statusCode == null) {
+                    res.writeHead(502, { "Content-Type": "text/plain" });
+                    res.end("502 Bad Gateway");
+                } else {
+                    if (svrRes.statusMessage == null) res.writeHead(svrRes.statusCode, svrRes.headers);
+                    else res.writeHead(svrRes.statusCode, svrRes.statusMessage, svrRes.headers);
+                    svrRes.pipe(res);
+                }
             }).on('end', () => {
                 res.end();
             }).on('error', (error) => {

@@ -44,16 +44,12 @@ export class localServer {
 
             cliReq.on('error', (err) => {
                 console.log(`request error: host=[${host}] alpn=[${alpn}] sni=[${sni}]`, err);
-                cliRes.writeHead(502, {
-                    ["Content-Type"]: "text/plain",
-                });
+                cliRes.writeHead(502, { ["Content-Type"]: "text/plain" });
                 cliRes.end("502 Bad Gateway");
             });
 
             if (host == null) {
-                cliRes.writeHead(403, {
-                    ["Content-Type"]: "text/plain",
-                });
+                cliRes.writeHead(403, { ["Content-Type"]: "text/plain" });
                 cliRes.end("403 Forbidden");
                 return;
             }
@@ -63,6 +59,8 @@ export class localServer {
             try {
                 let tlsSocket = await localServer.getTlsSocketAsync(this.params, true, new URL(`https://${host}/`), alpn, sni);
                 let svrReq = http.request({
+                    method: cliReq.method,
+                    path: cliReq.url,
                     createConnection: (options, onCreate) => {
                         return tlsSocket;
                     },
@@ -72,9 +70,17 @@ export class localServer {
                     cliRes.writeHead(100);
                 });
                 svrReq.on('response', (svrRes) => {
-                    try {//FIXME temporary workaround to avoid ERR_HTTP2_INVALID_STREAM crash
-                        svrRes.pipe(cliRes);
+                    try {
+                        if (svrRes.statusCode == null) {
+                            cliRes.writeHead(502, { ["Content-Type"]: "text/plain" });
+                            cliRes.end("502 Bad Gateway");
+                        } else {
+                            if (svrRes.statusMessage == null) cliRes.writeHead(svrRes.statusCode, svrRes.headers);
+                            else cliRes.writeHead(svrRes.statusCode, svrRes.statusMessage, svrRes.headers);
+                            svrRes.pipe(cliRes);
+                        }
                     } catch (e) {
+                        //FIXME temporary workaround to avoid ERR_HTTP2_INVALID_STREAM crash
                         console.error(`http1 host=[${host}] svrRes.pipe() error`, e);
                     }
                 });
@@ -84,9 +90,7 @@ export class localServer {
                 });
                 svrReq.on('error', (err) => {
                     console.error(`svrReq error: host=[${host}] alpn=[${alpn}] sni=[${sni}]`, err);
-                    cliRes.writeHead(502, {
-                        ["Content-Type"]: "text/plain",
-                    });
+                    cliRes.writeHead(502, { ["Content-Type"]: "text/plain" });
                     cliRes.end("502 Bad Gateway");
                 });
 
@@ -100,18 +104,14 @@ export class localServer {
             } catch (e) {
                 if (e instanceof Error) switch (e.message) {
                     case constants.IS_SELF_IP:
-                        cliRes.writeHead(200, {
-                            ["Content-Type"]: 'text/plain'
-                        });
+                        cliRes.writeHead(200, { ["Content-Type"]: 'text/plain' });
                         cliRes.end('Magireco Local Server');
                         return;
                 }
                 console.error("cannot create http1 tlsSocket", e);
-                cliRes.writeHead(502, {
-                    ["Content-Type"]: "text/plain",
-                });
+                cliRes.writeHead(502, { ["Content-Type"]: "text/plain" });
                 cliRes.end("502 Bad Gateway");
-                return
+                return;
             };
         });
 
@@ -220,6 +220,9 @@ export class localServer {
         http1TlsServer.on('secureConnection', (tlsSocket) => {
             let servername: string | undefined = (tlsSocket as any).servername;
             let alpn = tlsSocket.alpnProtocol;
+            tlsSocket.on('error', (err) => {
+                console.error(`http1TlsServer tlsSocket error sni=[${servername}] alpn=[${alpn}]`, err);
+            });
             let options: tls.ConnectionOptions = {
                 ca: this.params.CACerts,
                 host: http2ListenAddr.host,
@@ -232,7 +235,9 @@ export class localServer {
                 console.log(`sni=[${servername}] alpn=[${alpn}] piped to h1-compatible h2 local server`);
                 tlsSocket.pipe(h1CompatH2TlsSocket);
                 h1CompatH2TlsSocket.pipe(tlsSocket);
-            });
+            }).on('error', (err) => {
+                console.error(`http1TlsServer h1CompatH2TlsSocket error sni=[${servername}] alpn=[${alpn}]`, err);
+            })
         });
 
         const http1ListenAddr = params.listenList.localHttp1Server;
