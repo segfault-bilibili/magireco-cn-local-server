@@ -451,7 +451,7 @@ export class localServer {
                         port: port,
                         ALPNProtocols: [],
                     }
-                    if (typeof alpn === 'string')  {
+                    if (typeof alpn === 'string') {
                         let array = (options.ALPNProtocols as Array<string>);
                         if (!array.find((existing) => existing === alpn)) array.push(alpn);
                     }

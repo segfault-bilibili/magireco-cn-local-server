@@ -1,4 +1,3 @@
-import * as net from "net";
 import * as http from "http";
 import * as parameters from "./parameters";
 import { httpProxy } from "./http_proxy";
