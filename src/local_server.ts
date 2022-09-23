@@ -60,7 +60,7 @@ export class localServer {
             console.log(`request accepted, host=[${host}] alpn=[${alpn}] sni=[${sni}]`);
 
             try {
-                let tlsSocket = await localServer.getTlsSocketAsync(this.params, new URL(`https://${host}/`), alpn, sni);
+                let tlsSocket = await localServer.getTlsSocketAsync(this.params, true, new URL(`https://${host}/`), alpn, sni);
                 let svrReq = http.request({
                     createConnection: (options, onCreate) => {
                         return tlsSocket;
@@ -261,11 +261,11 @@ export class localServer {
     private static socketRemoteIPAsync(socket: net.Socket): Promise<string> {
         return new Promise((resolve, reject) => {
             let lookupListener: (err: Error, address: string, family: string | number, host: string) => void
-            = (err, address, family, host) => {
-                socket.off('lookup', lookupListener);
-                if (err != null) reject(err);
-                else resolve(address);
-            }
+                = (err, address, family, host) => {
+                    socket.off('lookup', lookupListener);
+                    if (err != null) reject(err);
+                    else resolve(address);
+                }
             if (socket.remoteAddress != null) resolve(socket.remoteAddress);
             else socket.on('lookup', lookupListener);
         });
@@ -330,7 +330,7 @@ export class localServer {
         return sess;
     }
 
-    static async getTlsSocketAsync(params: parameters.params,
+    static async getTlsSocketAsync(params: parameters.params, rejectUnauthorized: boolean,
         authorityURL: URL, alpn?: string | null | boolean, sni?: string | null | boolean
     ): Promise<tls.TLSSocket> {
         let tlsSocket: tls.TLSSocket;
@@ -344,7 +344,8 @@ export class localServer {
             socket = await this.directConnectAsync(host, port);
             if (await this.isHostSelfAsync(socket, params.listenList)) throw new Error(constants.IS_SELF_IP);
         }
-        tlsSocket = await this.createTlsSocketAsync(socket, params.CACerts, authorityURL, alpn, sni);
+        let CACerts = rejectUnauthorized ? params.CACerts : null;
+        tlsSocket = await this.createTlsSocketAsync(socket, CACerts, authorityURL, alpn, sni);
         return tlsSocket;
     }
 
@@ -384,7 +385,7 @@ export class localServer {
         });
     }
 
-    private static createTlsSocketAsync(socket: net.Socket, CACerts: Array<string>,
+    private static createTlsSocketAsync(socket: net.Socket, CACerts: Array<string> | null,
         authorityURL: URL, alpn?: string | boolean | null, sni?: string | boolean | null
     ): Promise<tls.TLSSocket> {
         return new Promise((resolve, reject) => {
@@ -395,12 +396,13 @@ export class localServer {
             let port = parseInt(authorityURL.port);
             if (isNaN(port)) port = 443;
             let options: tls.ConnectionOptions = {
-                ca: CACerts,
                 socket: socket,
                 host: host,
                 port: port,
                 ALPNProtocols: [],
             }
+            if (CACerts == null) options.rejectUnauthorized = false;
+            else options.ca = CACerts;
             if (typeof alpn === 'string') (options.ALPNProtocols as Array<string>).push(alpn);
             if (typeof sni === 'string' && !net.isIP(sni)) options.servername = sni;//mute warning about RFC6066 disallowing IP SNI
             console.log(`creating tlsSocket [${host}:${port}] alpn=[${alpn}] sni=[${sni}]`);

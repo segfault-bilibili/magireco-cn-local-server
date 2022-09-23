@@ -166,7 +166,8 @@ export class httpProxy {
                     supportH2 = this.getSupportH2(authorityURL);
                     if (supportH2 == null) try {
                         const alpn = "h2";
-                        let probeTlsSocket = await localServer.localServer.getTlsSocketAsync(this.params, authorityURL, alpn, host);
+                        let probeTlsSocket = await localServer.localServer.getTlsSocketAsync(this.params, false,
+                            authorityURL, alpn, host);
                         probeTlsSocket.on('error', (e) => {
                             console.error(`probeTlsSocket error ${logMsg}`, e);
                         });
