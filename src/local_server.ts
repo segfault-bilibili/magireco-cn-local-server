@@ -130,19 +130,29 @@ export class localServer {
 
             stream.on('error', (err) => {
                 console.log(`stream error: authority=[${authority}] alpn=[${alpn}] sni=[${sni}]`, err);
-                stream.respond({
-                    [http2.constants.HTTP2_HEADER_STATUS]: http2.constants.HTTP_STATUS_BAD_GATEWAY,
-                    [http2.constants.HTTP2_HEADER_CONTENT_TYPE]: "text/plain",
-                });
-                stream.end("502 Bad Gateway");
+                try {
+                    stream.respond({
+                        [http2.constants.HTTP2_HEADER_STATUS]: http2.constants.HTTP_STATUS_BAD_GATEWAY,
+                        [http2.constants.HTTP2_HEADER_CONTENT_TYPE]: "text/plain",
+                    });
+                    stream.end("502 Bad Gateway");
+                } catch (e) {
+                    //FIXME temporary workaround to avoid ERR_HTTP2_INVALID_STREAM crash
+                    console.error(`http2 authority=[${authority}] stream.respond() error`, e);
+                }
             });
 
             if (authority == null) {
-                stream.respond({
-                    [http2.constants.HTTP2_HEADER_STATUS]: 403,
-                    [http2.constants.HTTP2_HEADER_CONTENT_TYPE]: 'text/plain; charset=utf-8'
-                });
-                stream.end("403 Forbidden");
+                try {
+                    stream.respond({
+                        [http2.constants.HTTP2_HEADER_STATUS]: 403,
+                        [http2.constants.HTTP2_HEADER_CONTENT_TYPE]: 'text/plain; charset=utf-8'
+                    });
+                    stream.end("403 Forbidden");
+                } catch (e) {
+                    //FIXME temporary workaround to avoid ERR_HTTP2_INVALID_STREAM crash
+                    console.error(`http2 authority=[${authority}] stream.respond() error`, e);
+                }
                 return;
             }
 
@@ -152,68 +162,114 @@ export class localServer {
                 let sess = await this.getH2SessionAsync(authorityURL, alpn, sni);
                 let svrReq = sess.request(headers);
                 svrReq.on('continue', () => {
-                    stream.respond({
-                        [http2.constants.HTTP2_HEADER_STATUS]: http2.constants.HTTP_STATUS_CONTINUE,
-                    });
+                    try {
+                        stream.respond({
+                            [http2.constants.HTTP2_HEADER_STATUS]: http2.constants.HTTP_STATUS_CONTINUE,
+                        });
+                    } catch (e) {
+                        //FIXME temporary workaround to avoid ERR_HTTP2_INVALID_STREAM crash
+                        console.error(`http2 authority=[${authority}] stream.respond() error`, e);
+                    }
                 });
                 svrReq.on('response', (headers, flags) => {
-                    try {//FIXME temporary workaround to avoid ERR_HTTP2_INVALID_STREAM crash
+                    try {
                         stream.respond(headers);
                     } catch (e) {
+                        //FIXME temporary workaround to avoid ERR_HTTP2_INVALID_STREAM crash
                         console.error(`http2 authority=[${authority}] stream.respond() error`, e);
                     }
                 });
                 svrReq.on('data', (chunk) => {
-                    stream.write(chunk);
+                    try {
+                        stream.write(chunk);
+                    } catch (e) {
+                        //FIXME temporary workaround to avoid ERR_HTTP2_INVALID_STREAM crash
+                        console.error(`http2 authority=[${authority}] stream.write() error`, e);
+                    }
                 });
                 svrReq.on('end', () => {
                     console.log(`ending stream downlink: authority=[${authority}] alpn=[${alpn}] sni=[${sni}]`);
-                    stream.end();
+                    try {
+                        stream.end();
+                    } catch (e) {
+                        //FIXME temporary workaround to avoid ERR_HTTP2_INVALID_STREAM crash
+                        console.error(`http2 authority=[${authority}] stream.end() error`, e);
+                    }
                 });
                 svrReq.on('error', (err) => {
                     console.error(`svrReq error: authority=[${authority}] alpn=[${alpn}] sni=[${sni}]`, err);
-                    stream.respond({
-                        [http2.constants.HTTP2_HEADER_STATUS]: http2.constants.HTTP_STATUS_BAD_GATEWAY,
-                        [http2.constants.HTTP2_HEADER_CONTENT_TYPE]: "text/plain",
-                    });
-                    stream.end("502 Bad Gateway");
+                    try {
+                        stream.respond({
+                            [http2.constants.HTTP2_HEADER_STATUS]: http2.constants.HTTP_STATUS_BAD_GATEWAY,
+                            [http2.constants.HTTP2_HEADER_CONTENT_TYPE]: "text/plain",
+                        });
+                        stream.end("502 Bad Gateway");
+                    } catch (e) {
+                        //FIXME temporary workaround to avoid ERR_HTTP2_INVALID_STREAM crash
+                        console.error(`http2 authority=[${authority}] stream.respond() error`, e);
+                    }
                 });
 
                 stream.on('data', (chunk) => {
-                    svrReq.write(chunk);
+                    try {
+                        svrReq.write(chunk);
+                    } catch (e) {
+                        //FIXME temporary workaround to avoid ERR_HTTP2_INVALID_STREAM crash
+                        console.error(`http2 authority=[${authority}] svrReq.write() error`, e);
+                    }
                 });
                 stream.on('end', () => {
                     console.log(`stream uplink ended: authority=[${authority}] alpn=[${alpn}] sni=[${sni}]`);
-                    svrReq.end();
+                    try {
+                        svrReq.end();
+                    } catch (e) {
+                        //FIXME temporary workaround to avoid ERR_HTTP2_INVALID_STREAM crash
+                        console.error(`http2 authority=[${authority}] svrReq.end() error`, e);
+                    }
                 });
             } catch (e) {
                 if (e instanceof Error) switch (e.message) {
                     case constants.IS_SELF_IP:
-                        stream.respond({
-                            [http2.constants.HTTP2_HEADER_STATUS]: http2.constants.HTTP_STATUS_OK,
-                            [http2.constants.HTTP2_HEADER_CONTENT_TYPE]: 'text/plain; charset=utf-8'
-                        });
-                        stream.end('Magireco Local Server');
+                        try {
+                            stream.respond({
+                                [http2.constants.HTTP2_HEADER_STATUS]: http2.constants.HTTP_STATUS_OK,
+                                [http2.constants.HTTP2_HEADER_CONTENT_TYPE]: 'text/plain; charset=utf-8'
+                            });
+                            stream.end('Magireco Local Server');
+                        } catch (e) {
+                            //FIXME temporary workaround to avoid ERR_HTTP2_INVALID_STREAM crash
+                            console.error(`http2 authority=[${authority}] stream.respond() error`, e);
+                        }
                         return;
                     case constants.DOWNGRADE_TO_HTTP1:
                         //FIXME
                         this.params.setSupportH2(authorityURL, false);//FIXME not working when IP addr used in HTTP CONNECT
                         console.log(`marked [${authorityURL}] supportHTTP2=false`);
                         console.log("sending status code 505 and goaway");
-                        stream.respond({
-                            [http2.constants.HTTP2_HEADER_STATUS]: http2.constants.HTTP_STATUS_HTTP_VERSION_NOT_SUPPORTED,
-                            [http2.constants.HTTP2_HEADER_CONTENT_TYPE]: "text/plain",
-                        });
-                        stream.end("505 HTTP Version Not Supported");
+                        try {
+                            stream.respond({
+                                [http2.constants.HTTP2_HEADER_STATUS]: http2.constants.HTTP_STATUS_HTTP_VERSION_NOT_SUPPORTED,
+                                [http2.constants.HTTP2_HEADER_CONTENT_TYPE]: "text/plain",
+                            });
+                            stream.end("505 HTTP Version Not Supported");
+                        } catch (e) {
+                            //FIXME temporary workaround to avoid ERR_HTTP2_INVALID_STREAM crash
+                            console.error(`http2 authority=[${authority}] stream.respond() error`, e);
+                        }
                         stream.session.goaway(http2.constants.NGHTTP2_HTTP_1_1_REQUIRED);
                         return;
                 }
                 console.error("cannot create http2 session", e);
-                stream.respond({
-                    [http2.constants.HTTP2_HEADER_STATUS]: http2.constants.HTTP_STATUS_BAD_GATEWAY,
-                    [http2.constants.HTTP2_HEADER_CONTENT_TYPE]: "text/plain",
-                });
-                stream.end("502 Bad Gateway");
+                try {
+                    stream.respond({
+                        [http2.constants.HTTP2_HEADER_STATUS]: http2.constants.HTTP_STATUS_BAD_GATEWAY,
+                        [http2.constants.HTTP2_HEADER_CONTENT_TYPE]: "text/plain",
+                    });
+                    stream.end("502 Bad Gateway");
+                } catch (e) {
+                    //FIXME temporary workaround to avoid ERR_HTTP2_INVALID_STREAM crash
+                    console.error(`http2 authority=[${authority}] stream.respond() error`, e);
+                }
             };
         });
 
