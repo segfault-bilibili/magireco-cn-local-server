@@ -407,11 +407,14 @@ export class localServer {
                 socket: socket,
                 host: host,
                 port: port,
-                ALPNProtocols: [],
+                ALPNProtocols: ["http/1.1"],
             }
             if (CACerts == null) options.rejectUnauthorized = false;
             else options.ca = CACerts;
-            if (typeof alpn === 'string') (options.ALPNProtocols as Array<string>).push(alpn);
+            if (typeof alpn === 'string') {
+                let array = (options.ALPNProtocols as Array<string>);
+                if (!array.find((existing) => existing === alpn)) array.push(alpn);
+            }
             if (typeof sni === 'string' && !net.isIP(sni)) options.servername = sni;//mute warning about RFC6066 disallowing IP SNI
             console.log(`creating tlsSocket [${host}:${port}] alpn=[${alpn}] sni=[${sni}]`);
             let tlsSocket = tls.connect(options, () => {
@@ -448,7 +451,10 @@ export class localServer {
                         port: port,
                         ALPNProtocols: [],
                     }
-                    if (typeof alpn === 'string') (options.ALPNProtocols as Array<string>).push(alpn);
+                    if (typeof alpn === 'string')  {
+                        let array = (options.ALPNProtocols as Array<string>);
+                        if (!array.find((existing) => existing === alpn)) array.push(alpn);
+                    }
                     if (typeof sni === 'string' && !net.isIP(sni)) options.servername = sni;//mute warning about RFC6066 disallowing IP SNI
                     console.log(`creating http2 session [${host}:${port}] alpn=[${alpn}] sni=[${sni}]`);
                     let tlsSocket = tls.connect(options, () => {
