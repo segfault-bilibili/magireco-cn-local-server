@@ -9,38 +9,60 @@ export class controlInterface {
         return this._closed;
     }
     private readonly params: parameters.params;
-    private readonly httpServer: http.Server;
+    private readonly httpServerSelf: http.Server;
     private readonly serverList: Array<httpProxy | localServer>;
 
     constructor(params: parameters.params, serverList: Array<httpProxy | localServer>) {
-        const httpServer = http.createServer((req, res) => {
-            if (req.url === "/ca.crt") {
-                console.log("serving ca.crt");
-                res.statusCode = 200;
-                res.setHeader("Content-Type", "application/x-x509-ca-cert");
-                res.end(this.params.CACertPEM);
-            } else if (req.url === "/api/close") {
-                res.statusCode = 200;
-                res.setHeader("Content-Type", "text/plain");
-                res.end("closing");
-                this.close();
-            } else {
-                res.writeHead(403, { 'Content-Type': 'text/plain' });
+        const httpServerSelf = http.createServer((req, res) => {
+            if (req.url == null) {
+                res.writeHead(403, { ["Content-Type"]: "text/plain" });
                 res.end("403 Forbidden");
+                return;
             }
+
+            let apiName: string;
+            if (req.url.startsWith("/api/")) switch (apiName = req.url.replace(/(^\/api\/)|(\/$)/g, "")) {
+                case "close":
+                    res.writeHead(200, { ["Content-Type"]: "text/plain" });
+                    res.end("closing");
+                    this.close();
+                    return;
+            }
+
+            switch (req.url) {
+                case "/":
+                    console.log("serving /");
+                    res.writeHead(200, { ["Content-Type"]: "text/html" });
+                    res.end("<!doctype html><html><title>Magireco Local Server</title><body><h1>Magireco Local Server</h1></body></html>");
+                    return;
+                case "/ca.crt":
+                    console.log("serving ca.crt");
+                    res.writeHead(200, { ["Content-Type"]: "application/x-x509-ca-cert" });
+                    res.end(this.params.CACertPEM);
+                    return;
+                case "/ca_subject_hash_old.txt":
+                    let ca_subject_hash_old = this.params.CACertSubjectHashOld;
+                    console.log(`servering ca_subject_hash_old=[${ca_subject_hash_old}]`);
+                    res.writeHead(200, { ["Content-Type"]: "text/plain" });
+                    res.end(ca_subject_hash_old);
+                    return;
+            }
+
+            res.writeHead(403, { 'Content-Type': 'text/plain' });
+            res.end("403 Forbidden");
         });
 
         let port = params.listenList.controlInterface.port;
         let host = params.listenList.controlInterface.host;
-        httpServer.listen(port, host);
+        httpServerSelf.listen(port, host);
 
         this.params = params;
-        this.httpServer = httpServer;
+        this.httpServerSelf = httpServerSelf;
         this.serverList = serverList;
     }
     close(): void {
         this.serverList.forEach((server) => server.close());
-        this.httpServer.close();
+        this.httpServerSelf.close();
         this._closed = true;
     }
 }

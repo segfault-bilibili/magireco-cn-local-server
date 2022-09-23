@@ -28,6 +28,7 @@ export class httpProxy {
 
             let host: string, port: number, path: string;
 
+            let isControlInterface = false;
             if (matchedHostPort == null) {
                 //invisible mode
                 let svrHost: string, svrPort: number;
@@ -50,7 +51,13 @@ export class httpProxy {
                         res.end("403 Forbidden");
                     }
                 }
-                if (params.upstreamProxyEnabled) {
+                if (svrHost.match(/^(|www\.)magireco\.local$/)) {
+                    isControlInterface = true;
+                    host = params.listenList.controlInterface.host;
+                    req.headers.host = `${svrHost}:${svrPort}`;
+                    port = params.listenList.controlInterface.port;
+                    path = req.url;//not a proxy-style path because we are in invisible mode
+                } else if (params.upstreamProxyEnabled) {
                     host = params.upstreamProxy.host;
                     port = params.upstreamProxy.port;
                     path = `http://${svrHost}:${svrPort}${req.url}`;//convert to proxy-style
@@ -61,7 +68,13 @@ export class httpProxy {
                 }
             } else {
                 //ordinary HTTP proxy mode
-                if (params.upstreamProxyEnabled) {
+                if (matchedHostPort[0].match(/^http:\/\/(|www\.)magireco\.local(|:\d{1,5})\/$/)) {
+                    isControlInterface = true;
+                    host = this.params.listenList.controlInterface.host;
+                    req.headers.host = matchedHostPort[0].replace(/(^http:\/\/)|\/$/g, "");
+                    port = this.params.listenList.controlInterface.port;
+                    path = req.url.replace(matchedHostPort[0], "/");
+                } else if (params.upstreamProxyEnabled) {
                     host = params.upstreamProxy.host;
                     port = params.upstreamProxy.port;
                     path = req.url;//url is already proxy-style
@@ -85,7 +98,7 @@ export class httpProxy {
             }
 
             let logMsg: string;
-            if (params.upstreamProxyEnabled)
+            if (params.upstreamProxyEnabled && !isControlInterface)
                 logMsg = `proxified ${req.socket.remoteAddress}:${req.socket.remotePort} => ${host}:${port} => ${path}`;
             else
                 logMsg = `direct ${req.socket.remoteAddress}:${req.socket.remotePort} => http://${host}:${port}${path}`;
@@ -157,12 +170,14 @@ export class httpProxy {
             const localH1Port = this.params.listenList.localHttp1Server.port;
             let isLocalH2 = port == localH2Port && host == localH2Host;
             let isLocalH1 = port == localH1Port && host == localH1Host;
+            let isControlInterface = host.match(/^(|www\.)magireco\.local$/) ? true : false;
             if (port == 443 || isLocalH2 || isLocalH1) {
                 //probe supportH2 (if unprobed) first
                 const authorityURL = new URL(`https://${host}:${port}`);
                 let supportH2: boolean | undefined;
                 if (isLocalH2) supportH2 = true;//skip probing because getTlsSocketAsync disallows conneting to local
                 else if (isLocalH1) supportH2 = false;//same as above, skip probing
+                else if (isControlInterface) supportH2 = false;
                 else {
                     supportH2 = this.params.getSupportH2(authorityURL);
                     if (supportH2 == null) try {

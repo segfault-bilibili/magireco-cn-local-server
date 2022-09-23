@@ -57,12 +57,19 @@ export class localServer {
             console.log(`request accepted, host=[${host}] alpn=[${alpn}] sni=[${sni}]`);
 
             try {
-                let tlsSocket = await localServer.getTlsSocketAsync(this.params, true, new URL(`https://${host}/`), alpn, sni);
+                let socket: net.Socket | tls.TLSSocket;
+                if (host.match(/^(|www\.)magireco\.local(|:\d{1,5})$/)) {
+                    let controlInterfaceHost = this.params.listenList.controlInterface.host;
+                    let controlInterfacePort = this.params.listenList.controlInterface.port;
+                    socket = await localServer.directConnectAsync(controlInterfaceHost, controlInterfacePort);
+                } else {
+                    socket = await localServer.getTlsSocketAsync(this.params, true, new URL(`https://${host}/`), alpn, sni);
+                }
                 let svrReq = http.request({
                     method: cliReq.method,
                     path: cliReq.url,
                     createConnection: (options, onCreate) => {
-                        return tlsSocket;
+                        return socket;
                     },
                     headers: headers,
                 });
