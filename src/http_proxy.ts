@@ -49,8 +49,19 @@ export class httpProxy {
                         console.error("cannot parse port");
                         res.writeHead(403, { 'Content-Type': 'text/plain' });
                         res.end("403 Forbidden");
+                        return;
                     }
                 }
+
+                let selfHost = this.params.listenList.httpProxy.host;
+                let selfPort = this.params.listenList.httpProxy.port;
+                if ((svrHost === selfHost || svrHost === "localhost") && svrPort == selfPort) {
+                    console.error("should not self-connect");//FIXME
+                    res.writeHead(403, { 'Content-Type': 'text/plain' });
+                    res.end("403 Forbidden");
+                    return;
+                }
+
                 if (svrHost.match(/^(|www\.)magireco\.local$/)) {
                     isControlInterface = true;
                     host = params.listenList.controlInterface.host;
