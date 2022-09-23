@@ -190,7 +190,8 @@ export class localServer {
                         return;
                     case constants.DOWNGRADE_TO_HTTP1:
                         //FIXME
-                        this.params.setSupportH2(authorityURL, false);
+                        this.params.setSupportH2(authorityURL, false);//FIXME not working when IP addr used in HTTP CONNECT
+                        console.log(`marked [${authorityURL}] supportHTTP2=false`);
                         console.log("sending status code 505 and goaway");
                         stream.respond({
                             [http2.constants.HTTP2_HEADER_STATUS]: http2.constants.HTTP_STATUS_HTTP_VERSION_NOT_SUPPORTED,
