@@ -1,5 +1,7 @@
 import { portFinder } from "./port_finder";
 import * as certGenerator from "./cert_generator";
+import * as net from "net";
+import * as dns from "dns";
 
 export type listenAddr = {
     port: number,
@@ -10,6 +12,7 @@ export type listenList = Record<string, listenAddr> & {
     controlInterface: listenAddr,
     httpProxy: listenAddr,
     localServer: listenAddr,
+    localHttp1Server: listenAddr,
 }
 
 export enum mode {
@@ -24,6 +27,7 @@ const persistParams: Record<string, any> = {
         controlInterface: { port: 10000, host: "127.0.0.1" },
         httpProxy: { port: 10001, host: "127.0.0.1" },
         localServer: { port: 10002, host: "127.0.0.1" },
+        localHttp1Server: { port: 10003, host: "127.0.0.1" },
     },
     upstreamProxy: {
         //HTTP
@@ -72,6 +76,14 @@ export class params {
                     for (let name in persistParams.listenList) {
                         if (val[name] == null) val[name] = persistParams.listenList[name];
                         let host = val[name].host;
+                        if (!net.isIP(host)) try {
+                            let ip = await resolveToIP(host);
+                            console.log(`lookup hostname=[${host}] result ip=${ip}`);
+                            host = ip;
+                        } catch (e) {
+                            console.error(`error lookup hostname=${host}`, e);
+                            throw e;
+                        }
                         let port = val[name].port;
                         while (true) {
                             port = await portFinder.findAfter(port, host);
@@ -110,4 +122,11 @@ export function reviver(key: any, value: any) {
         }
     }
     return value;
+}
+
+export async function resolveToIP(hostname: string): Promise<string> {
+    return new Promise((res, rej) => dns.lookup(hostname, (err, address, family) => {
+        if (err == null) res(address);
+        else rej(err);
+    }))
 }

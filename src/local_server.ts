@@ -7,6 +7,7 @@ import * as certGenerator from "./cert_generator";
 
 export enum constants {
     DOWNGRADE_TO_HTTP1 = "DOWNGRADE_TO_HTTP1",
+    IS_SELF_IP = "IS_SELF_IP",
 }
 
 export class localServer {
@@ -16,9 +17,10 @@ export class localServer {
     }
     private readonly params: parameters.params;
     private readonly http2SecureServer: http2.Http2SecureServer;
+    private readonly http1TlsServer: tls.Server;
     private readonly certGen: certGenerator.certGen;
     private readonly CACerts: Array<string>;
-    private readonly openSess: Map<string, http2.ClientHttp2Session>;
+    private readonly openSess: Map<URL, http2.ClientHttp2Session>;
 
     constructor(params: parameters.params) {
         const certGen = new certGenerator.certGen(params.CACertAndKey);
@@ -31,16 +33,97 @@ export class localServer {
             console.log("added upstreamProxyCACert to CACerts");
         }
 
-        const options: http2.SecureServerOptions = certGen.getCertAndKey(params.listenList.localServer.host);
-        options.SNICallback = (servername, cb) => {
+        const SNICallback = (servername: string, cb: (err: Error | null, ctx?: tls.SecureContext | undefined) => void) => {
             let certAndKey = this.certGen.getCertAndKey(servername);
             let ctx = tls.createSecureContext(certAndKey);
             cb(null, ctx);
         }
-        options.allowHTTP1 = true;
-        const http2SecureServer = http2.createSecureServer(options);
 
-        http2SecureServer.on('stream', (stream, headers, flags) => {
+        const http2ServerOptions: http2.SecureServerOptions = certGen.getCertAndKey(params.listenList.localServer.host);
+        http2ServerOptions.SNICallback = SNICallback;
+        http2ServerOptions.allowHTTP1 = true;
+        const http2SecureServer = http2.createSecureServer(http2ServerOptions, async (cliReq, cliRes) => {
+            if (cliReq.httpVersionMajor !== 1) return;//handled in stream event
+
+            const headers = cliReq.headers;
+            const host = headers.host;
+            const alpn = (cliReq.socket as tls.TLSSocket).alpnProtocol;
+            const sni = (cliReq.socket as any).servername;
+
+            cliReq.on('error', (err) => {
+                console.log(`request error: host=[${host}] alpn=[${alpn}] sni=[${sni}]`, err);
+                cliRes.writeHead(502, {
+                    ["Content-Type"]: "text/plain",
+                });
+                cliRes.end("502 Bad Gateway");
+            });
+
+            if (host == null) {
+                cliRes.writeHead(403, {
+                    ["Content-Type"]: "text/plain",
+                });
+                cliRes.end("403 Forbidden");
+                return;
+            }
+
+            console.log(`request accepted, host=[${host}] alpn=[${alpn}] sni=[${sni}]`);
+
+            try {
+                let tlsSocket = await this.getH1TlsSocketAsync(new URL(`https://${host}/`), alpn, sni);
+                let svrReq = http.request({
+                    createConnection: (options, onCreate) => {
+                        return tlsSocket;
+                    },
+                    headers: headers,
+                });
+                svrReq.on('continue', () => {
+                    cliRes.writeHead(100);
+                });
+                svrReq.on('response', (svrRes) => {
+                    try {//FIXME temporary workaround to avoid ERR_HTTP2_INVALID_STREAM crash
+                        svrRes.pipe(cliRes);
+                    } catch (e) {
+                        console.error(`http1 host=[${host}] svrRes.pipe() error`, e);
+                    }
+                });
+                svrReq.on('end', () => {
+                    console.log(`ending cliRes downlink: host=[${host}] alpn=[${alpn}] sni=[${sni}]`);
+                    cliRes.end();
+                });
+                svrReq.on('error', (err) => {
+                    console.error(`svrReq error: host=[${host}] alpn=[${alpn}] sni=[${sni}]`, err);
+                    cliRes.writeHead(502, {
+                        ["Content-Type"]: "text/plain",
+                    });
+                    cliRes.end("502 Bad Gateway");
+                });
+
+                cliReq.on('data', (chunk) => {
+                    svrReq.write(chunk);
+                });
+                cliReq.on('end', () => {
+                    console.log(`cliReq uplink ended: host=[${host}] alpn=[${alpn}] sni=[${sni}]`);
+                    svrReq.end();
+                });
+            } catch (e) {
+                if (e instanceof Error) switch (e.message) {
+                    case constants.IS_SELF_IP:
+                        cliRes.writeHead(200, {
+                            ["Content-Type"]: 'text/plain'
+                        });
+                        cliRes.end('Magireco Local Server');
+                        return;
+                }
+                console.error("cannot create http1 tlsSocket", e);
+                cliRes.writeHead(502, {
+                    ["Content-Type"]: "text/plain",
+                });
+                cliRes.end("502 Bad Gateway");
+                return
+            };
+        });
+
+        http2SecureServer.on('stream', async (stream, headers, flags) => {
             const authority = headers[":authority"];
             const alpn = stream.session.alpnProtocol;
             const sni = (stream.session.socket as any).servername;
@@ -63,20 +146,10 @@ export class localServer {
                 return;
             }
 
-            if (
-                authority === this.params.listenList.localServer.host
-                || authority === `${this.params.listenList.localServer.host}:${this.params.listenList.localServer.port}`
-            ) {
-                stream.respond({
-                    [http2.constants.HTTP2_HEADER_STATUS]: 200,
-                    [http2.constants.HTTP2_HEADER_CONTENT_TYPE]: 'text/plain; charset=utf-8'
-                });
-                stream.end('Magireco Local Server');
-                return;
-            }
+            console.log(`http2 stream accepted, authority=[${authority}] alpn=[${alpn}] sni=[${sni}]`);
 
-            console.log(`stream accepted, authority=[${authority}] alpn=[${alpn}] sni=[${sni}]`);
-            this.getSessionAsync(new URL(`https://${authority}/`), alpn, sni).then((sess) => {
+            try {
+                let sess = await this.getH2SessionAsync(new URL(`https://${authority}/`), alpn, sni);
                 let svrReq = sess.request(headers);
                 svrReq.on('continue', () => {
                     stream.respond({
@@ -113,69 +186,131 @@ export class localServer {
                     console.log(`stream uplink ended: authority=[${authority}] alpn=[${alpn}] sni=[${sni}]`);
                     svrReq.end();
                 });
-            }).catch((e) => {
-                if (e instanceof Error && e.message === constants.DOWNGRADE_TO_HTTP1) {
-                    //FIXME
-                    console.log("sent status code 505 and goaway");
-                    stream.respond({
-                        [http2.constants.HTTP2_HEADER_STATUS]: http2.constants.HTTP_STATUS_HTTP_VERSION_NOT_SUPPORTED,
-                        [http2.constants.HTTP2_HEADER_CONTENT_TYPE]: "text/plain",
-                    });
-                    stream.end("505 HTTP Version Not Supported");
-                    stream.session.goaway(http2.constants.NGHTTP2_HTTP_1_1_REQUIRED);
-                } else {
-                    console.error("cannot create http2 session", e);
-                    stream.respond({
-                        [http2.constants.HTTP2_HEADER_STATUS]: http2.constants.HTTP_STATUS_BAD_GATEWAY,
-                        [http2.constants.HTTP2_HEADER_CONTENT_TYPE]: "text/plain",
-                    });
-                    stream.end("502 Bad Gateway");
+            } catch (e) {
+                if (e instanceof Error) switch (e.message) {
+                    case constants.IS_SELF_IP:
+                        stream.respond({
+                            [http2.constants.HTTP2_HEADER_STATUS]: http2.constants.HTTP_STATUS_OK,
+                            [http2.constants.HTTP2_HEADER_CONTENT_TYPE]: 'text/plain; charset=utf-8'
+                        });
+                        stream.end('Magireco Local Server');
+                        return;
+                    case constants.DOWNGRADE_TO_HTTP1:
+                        //FIXME
+                        console.log("sent status code 505 and goaway");
+                        stream.respond({
+                            [http2.constants.HTTP2_HEADER_STATUS]: http2.constants.HTTP_STATUS_HTTP_VERSION_NOT_SUPPORTED,
+                            [http2.constants.HTTP2_HEADER_CONTENT_TYPE]: "text/plain",
+                        });
+                        stream.end("505 HTTP Version Not Supported");
+                        stream.session.goaway(http2.constants.NGHTTP2_HTTP_1_1_REQUIRED);
+                        return;
                 }
+                console.error("cannot create http2 session", e);
+                stream.respond({
+                    [http2.constants.HTTP2_HEADER_STATUS]: http2.constants.HTTP_STATUS_BAD_GATEWAY,
+                    [http2.constants.HTTP2_HEADER_CONTENT_TYPE]: "text/plain",
+                });
+                stream.end("502 Bad Gateway");
+            };
+        });
+
+        const http2ListenAddr = params.listenList.localServer;
+        http2SecureServer.listen(http2ListenAddr.port, http2ListenAddr.host);
+
+        const http1TlsServerOptions: tls.TlsOptions = certGen.getCertAndKey(params.listenList.localHttp1Server.host);
+        http1TlsServerOptions.SNICallback = SNICallback;
+        http1TlsServerOptions.ALPNProtocols = ["http/1.1"];
+        const http1TlsServer = tls.createServer(http1TlsServerOptions);
+
+        http1TlsServer.on('secureConnection', (tlsSocket) => {
+            let servername: string | undefined = (tlsSocket as any).servername;
+            let alpn = tlsSocket.alpnProtocol;
+            let options: tls.ConnectionOptions = {
+                ca: this.CACerts,
+                host: http2ListenAddr.host,
+                port: http2ListenAddr.port,
+                ALPNProtocols: [],
+            }
+            if (typeof servername === 'string') options.servername = servername;
+            if (typeof alpn === 'string') (options.ALPNProtocols as Array<string>).push(alpn);
+            let h1CompatH2TlsSocket = tls.connect(options, () => {
+                console.log(`sni=[${servername}] alpn=[${alpn}] piped to h1-compatible h2 local server`);
+                tlsSocket.pipe(h1CompatH2TlsSocket);
+                h1CompatH2TlsSocket.pipe(tlsSocket);
             });
         });
 
-        let listenAddr = params.listenList.localServer;
-        http2SecureServer.listen(listenAddr.port, listenAddr.host);
+        const http1ListenAddr = params.listenList.localHttp1Server;
+        http1TlsServer.listen(http1ListenAddr.port, http1ListenAddr.host);
 
         this.params = params;
         this.certGen = certGen;
         this.CACerts = CACerts;
         this.http2SecureServer = http2SecureServer;
-        this.openSess = new Map<string, http2.ClientHttp2Session>();
+        this.http1TlsServer = http1TlsServer;
+        this.openSess = new Map<URL, http2.ClientHttp2Session>();
     }
     close(): void {
         this.http2SecureServer.close();
         this._closed = true;
     }
 
-    private async getSessionAsync(authorityURL: URL, alpn?: string, sni?: string): Promise<http2.ClientHttp2Session> {
-        const authority = authorityURL.href;
-        let sess = this.openSess.get(authority);
+    private async isHostSelfAsync(host: string | net.Socket): Promise<boolean> {
+        if (typeof host !== 'string') host = await this.socketRemoteIPAsync(host);
+        if (!net.isIPv6(host)) host = host.replace(/:\d+$/, "");//strip port number
+        if (!net.isIP(host)) host = await parameters.resolveToIP(host);
+        if (["127.0.0.1", "::1",].find((ip) => ip === host)) return true;
+        for (let key in this.params.listenList) {
+            let listenAddr = this.params.listenList[key];
+            if (listenAddr.host === host) return true;
+        }
+        return false;
+    }
+
+    private socketRemoteIPAsync(socket: net.Socket): Promise<string> {
+        return new Promise((resolve, reject) => {
+            let lookupListener: (err: Error, address: string, family: string | number, host: string) => void
+            = (err, address, family, host) => {
+                socket.off('lookup', lookupListener);
+                if (err != null) reject(err);
+                else resolve(address);
+            }
+            if (socket.remoteAddress != null) resolve(socket.remoteAddress);
+            else socket.on('lookup', lookupListener);
+        });
+    }
+
+    private async getH2SessionAsync(authorityURL: URL, alpn?: string | null | boolean, sni?: string | null | boolean
+    ): Promise<http2.ClientHttp2Session> {
+        let sess = this.openSess.get(authorityURL);
         if (sess != null) {
             if (!sess.closed && !sess.destroyed) {
                 return sess;
-            } else this.openSess.delete(authority);
+            } else this.openSess.delete(authorityURL);
         }
 
         const host = authorityURL.hostname;
         const port = isNaN(parseInt(authorityURL.port)) ? 443 : parseInt(authorityURL.port);
         let socket: net.Socket;
         if (this.params.upstreamProxyEnabled) {
+            if (await this.isHostSelfAsync(host)) throw new Error(constants.IS_SELF_IP);
             socket = await this.httpTunnelAsync(host, port);
         } else {
-            socket = net.connect(port, host);
+            socket = await this.directConnectAsync(host, port);
+            if (await this.isHostSelfAsync(socket)) throw new Error(constants.IS_SELF_IP);
         }
 
-        sess = await this.createClientHttp2SessionAsync(socket, authority, alpn, sni);
+        sess = await this.createClientH2SessionAsync(socket, authorityURL, alpn, sni);
 
-        sess.on('close', () => () => {
-            this.openSess.delete(authority);
+        sess.on('close', () => {
+            this.openSess.delete(authorityURL);
         });
 
         let errorListener = ((sess) => {
             let func = (err: any) => {
-                console.error(`error in http2 session authority=[${authority}]`, err);
-                this.openSess.delete(authority);
+                console.error(`error in http2 session authority=[${authorityURL}]`, err);
+                this.openSess.delete(authorityURL);
                 sess.close();
             }
             return func;
@@ -184,7 +319,7 @@ export class localServer {
 
         let timeoutListener = ((sess) => {
             let func = () => {
-                this.openSess.delete(authority);
+                this.openSess.delete(authorityURL);
                 sess.close();
             }
             return func;
@@ -193,23 +328,41 @@ export class localServer {
 
         let goawayListener = ((sess) => {
             let func = (errorCode: any, lastStreamID: any, opaqueData: any) => {
-                this.openSess.delete(authority);
+                this.openSess.delete(authorityURL);
                 sess.close();
             }
             return func;
         })(sess);
         sess.on('goaway', goawayListener);
 
-        this.openSess.set(authority, sess);
+        this.openSess.set(authorityURL, sess);
 
         return sess;
+    }
+
+    private async getH1TlsSocketAsync(authorityURL: URL, alpn?: string | null | boolean, sni?: string | null | boolean
+    ): Promise<tls.TLSSocket> {
+        let tlsSocket: tls.TLSSocket;
+        const host = authorityURL.hostname;
+        const port = isNaN(parseInt(authorityURL.port)) ? 443 : parseInt(authorityURL.port);
+        let socket: net.Socket;
+        if (this.params.upstreamProxyEnabled) {
+            if (await this.isHostSelfAsync(host)) throw new Error(constants.IS_SELF_IP);
+            socket = await this.httpTunnelAsync(host, port);
+        } else {
+            socket = await this.directConnectAsync(host, port);
+            if (await this.isHostSelfAsync(socket)) throw new Error(constants.IS_SELF_IP);
+        }
+        tlsSocket = await this.createH1TlsSocketAsync(socket, authorityURL, alpn, sni);
+        return tlsSocket;
     }
 
     private httpTunnelAsync(host: string, port: number): Promise<net.Socket> {
         return new Promise((resolve, reject) => {
             const proxyHost = this.params.upstreamProxy.host;
             const proxyPort = this.params.upstreamProxy.port;
-            http
+            let errorListener: (err: Error) => void = (err) => reject(err);
+            let req = http
                 .request({
                     host: proxyHost,
                     port: proxyPort,
@@ -219,20 +372,70 @@ export class localServer {
                         ["Host"]: `${host}:${port}`,
                     }
                 })
-                .on('connect', (response, socket, head) => resolve(socket))
-                .on('error', (err) => reject(err))
+                .on('connect', (response, socket, head) => {
+                    req.off('error', errorListener);
+                    resolve(socket);
+                })
+                .on('error', errorListener)
                 .end();
         });
     }
 
-    private createClientHttp2SessionAsync(socket: net.Socket,
-        authority: string, alpn?: string, sni?: string
-    ): Promise<http2.ClientHttp2Session> {
+    private directConnectAsync(host: string, port: number): Promise<net.Socket> {
+        return new Promise((resolve, reject) => {
+            let errorListener: (err: Error) => void = (err) => reject(err);
+            let socket = net.createConnection(port, host)
+                .on('error', errorListener)
+                .on('connect', () => {
+                    socket.off('error', errorListener);
+                    resolve(socket);
+                });
+        });
+    }
+
+    private createH1TlsSocketAsync(socket: net.Socket,
+        authorityURL: URL, alpn?: string | boolean | null, sni?: string | boolean | null
+    ): Promise<tls.TLSSocket> {
         return new Promise((resolve, reject) => {
             let errorListener = (err: Error) => {
                 reject(err);
             }
-            let session = http2.connect(authority, {
+            let host = authorityURL.hostname;
+            let port = parseInt(authorityURL.port);
+            if (isNaN(port)) port = 443;
+            let options: tls.ConnectionOptions = {
+                ca: this.CACerts,
+                socket: socket,
+                host: host,
+                port: port,
+                ALPNProtocols: [],
+            }
+            if (typeof alpn === 'string') (options.ALPNProtocols as Array<string>).push(alpn);
+            if (typeof sni === 'string') options.servername = sni;
+            console.log(`creating tlsSocket [${host}:${port}] alpn=[${alpn}] sni=[${sni}]`);
+            let tlsSocket = tls.connect(options, () => {
+                let actualAlpn = tlsSocket.alpnProtocol;
+                console.log(`tlsSocket [${host}:${port}]`
+                    + ` alpn=[${actualAlpn}]${alpn === actualAlpn ? "" : "(requested=[" + alpn + "])"}`
+                    + ` sni=[${sni}] created`);
+
+                tlsSocket.off('error', errorListener);
+
+                resolve(tlsSocket);
+            });
+            tlsSocket.on('error', errorListener);
+            return tlsSocket;
+        });
+    }
+
+    private createClientH2SessionAsync(socket: net.Socket,
+        authorityURL: URL, alpn?: string | boolean | null, sni?: string | boolean | null
+    ): Promise<http2.ClientHttp2Session> {
+        return new Promise((resolve, reject) => {
+            let errorListener: (err: Error) => void = (err) => {
+                reject(err);
+            }
+            let session = http2.connect(authorityURL, {
                 createConnection: (authorityURL: URL, option: http2.SessionOptions) => {
                     let host = authorityURL.hostname;
                     let port = parseInt(authorityURL.port);
@@ -244,8 +447,8 @@ export class localServer {
                         port: port,
                         ALPNProtocols: [],
                     }
-                    if (alpn != null) (options.ALPNProtocols as Array<string>).push(alpn);
-                    if (sni != null) options.servername = sni;
+                    if (typeof alpn === 'string') (options.ALPNProtocols as Array<string>).push(alpn);
+                    if (typeof sni === 'string') options.servername = sni;
                     console.log(`creating http2 session [${host}:${port}] alpn=[${alpn}] sni=[${sni}]`);
                     let tlsSocket = tls.connect(options, () => {
                         let actualAlpn = tlsSocket.alpnProtocol;
