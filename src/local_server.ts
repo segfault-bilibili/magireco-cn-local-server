@@ -19,7 +19,7 @@ export class localServer {
     private readonly http2SecureServer: http2.Http2SecureServer;
     private readonly http1TlsServer: tls.Server;
     private readonly certGen: certGenerator.certGen;
-    private readonly openSess: Map<URL, http2.ClientHttp2Session>;
+    private readonly openSess: Map<string, http2.ClientHttp2Session>;
 
     constructor(params: parameters.params) {
         const certGen = new certGenerator.certGen(params.CACertAndKey);
@@ -239,7 +239,7 @@ export class localServer {
         this.certGen = certGen;
         this.http2SecureServer = http2SecureServer;
         this.http1TlsServer = http1TlsServer;
-        this.openSess = new Map<URL, http2.ClientHttp2Session>();
+        this.openSess = new Map<string, http2.ClientHttp2Session>();
     }
     close(): void {
         this.http2SecureServer.close();
@@ -273,11 +273,11 @@ export class localServer {
 
     private async getH2SessionAsync(authorityURL: URL, alpn?: string | null | boolean, sni?: string | null | boolean
     ): Promise<http2.ClientHttp2Session> {
-        let sess = this.openSess.get(authorityURL);
+        let sess = this.openSess.get(authorityURL.href);
         if (sess != null) {
             if (!sess.closed && !sess.destroyed) {
                 return sess;
-            } else this.openSess.delete(authorityURL);
+            } else this.openSess.delete(authorityURL.href);
         }
 
         const host = authorityURL.hostname;
@@ -294,13 +294,13 @@ export class localServer {
         sess = await this.createClientH2SessionAsync(socket, authorityURL, alpn, sni);
 
         sess.on('close', () => {
-            this.openSess.delete(authorityURL);
+            this.openSess.delete(authorityURL.href);
         });
 
         let errorListener = ((sess) => {
             let func = (err: any) => {
                 console.error(`error in http2 session authority=[${authorityURL}]`, err);
-                this.openSess.delete(authorityURL);
+                this.openSess.delete(authorityURL.href);
                 sess.close();
             }
             return func;
@@ -309,7 +309,7 @@ export class localServer {
 
         let timeoutListener = ((sess) => {
             let func = () => {
-                this.openSess.delete(authorityURL);
+                this.openSess.delete(authorityURL.href);
                 sess.close();
             }
             return func;
@@ -318,14 +318,14 @@ export class localServer {
 
         let goawayListener = ((sess) => {
             let func = (errorCode: any, lastStreamID: any, opaqueData: any) => {
-                this.openSess.delete(authorityURL);
+                this.openSess.delete(authorityURL.href);
                 sess.close();
             }
             return func;
         })(sess);
         sess.on('goaway', goawayListener);
 
-        this.openSess.set(authorityURL, sess);
+        this.openSess.set(authorityURL.href, sess);
 
         return sess;
     }
