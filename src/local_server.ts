@@ -292,11 +292,11 @@ export class localServer {
                                 [http2.constants.HTTP2_HEADER_CONTENT_TYPE]: "text/plain",
                             });
                             stream.end("505 HTTP Version Not Supported");
+                            stream.session.goaway(http2.constants.NGHTTP2_HTTP_1_1_REQUIRED);
                         } catch (e) {
                             //FIXME temporary workaround to avoid ERR_HTTP2_INVALID_STREAM crash
                             console.error(`http2 authority=[${authority}] stream.respond() error`, e);
                         }
-                        stream.session.goaway(http2.constants.NGHTTP2_HTTP_1_1_REQUIRED);
                         return;
                 }
                 console.error("cannot create http2 session", e);
