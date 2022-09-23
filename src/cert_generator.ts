@@ -45,6 +45,7 @@ export class certGen {
         cert.validity.notAfter = new Date();
         if (isCA) cert.validity.notAfter.setFullYear(cert.validity.notBefore.getFullYear() + 10);
         else cert.validity.notAfter.setTime(cert.validity.notBefore.getTime() + 90 * 24 * 60 * 60 * 1000);
+        cert.validity.notBefore.setTime(cert.validity.notBefore.getTime() - 5 * 24 * 60 * 60 * 1000);
         let attrs: Array<any> = [{
             name: 'commonName',
             value: commonName
