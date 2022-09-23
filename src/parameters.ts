@@ -57,6 +57,9 @@ export class params {
     get CACertPEM(): string { return this.CACertAndKey.cert; }
     get CACertSubjectHashOld(): string { return "9489bdaf"; }//FIXME
     readonly CACerts: Array<string>;
+    private readonly supportH2Map: Map<string, { h2: boolean, time: number }>;
+    private supportH2Expire = 3600 * 1000;
+    private supportH2MaxSize = 1024;
 
     private constructor(mapData: Map<string, any>) {
         this.mapData = mapData;
@@ -68,6 +71,7 @@ export class params {
             console.log("added upstreamProxyCACert to CACerts");
         }
         this.CACerts = CACerts;
+        this.supportH2Map = new Map<string, { h2: boolean, time: number }>();
     }
     static async init(mapJsonData: Map<string, string>): Promise<params> {
         let mapData = new Map<string, any>();
@@ -111,6 +115,30 @@ export class params {
             mapData.set(key, val);
         };
         return new params(mapData);
+    }
+
+    private cleanupSupportH2(): void {
+        while (this.supportH2Map.size > this.supportH2MaxSize) {
+            let key = this.supportH2Map.entries().next().value[0];
+            this.supportH2Map.delete(key);
+        }
+        const time = new Date().getTime();
+        let keysToDel: Array<string> = [];
+        this.supportH2Map.forEach((val, key) => {
+            if (time - val.time > this.supportH2Expire) keysToDel.push(key);
+        });
+        keysToDel.forEach((key) => this.supportH2Map.delete(key));
+    }
+    getSupportH2(url: URL): boolean | undefined {
+        if (this.supportH2Map.size > this.supportH2MaxSize) this.cleanupSupportH2();
+        let val = this.supportH2Map.get(url.href);
+        if (val == null) return val;
+        else return val.h2;
+    }
+    setSupportH2(url: URL, supportH2: boolean | null/* not undefined */): void {
+        if (this.supportH2Map.size > this.supportH2MaxSize) this.cleanupSupportH2();
+        if (supportH2 == null) this.supportH2Map.delete(url.href);
+        else this.supportH2Map.set(url.href, { h2: supportH2, time: new Date().getTime() });
     }
 }
 

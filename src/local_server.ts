@@ -4,6 +4,7 @@ import * as http2 from "http2";
 import * as tls from "tls";
 import * as parameters from "./parameters";
 import * as certGenerator from "./cert_generator";
+import * as httpProxy from "./http_proxy";
 
 export enum constants {
     DOWNGRADE_TO_HTTP1 = "DOWNGRADE_TO_HTTP1",
@@ -116,6 +117,7 @@ export class localServer {
 
         http2SecureServer.on('stream', async (stream, headers, flags) => {
             const authority = headers[":authority"];
+            const authorityURL = new URL(`https://${authority}/`);
             const alpn = stream.session.alpnProtocol;
             const sni = (stream.session.socket as any).servername;
 
@@ -140,7 +142,7 @@ export class localServer {
             console.log(`http2 stream accepted, authority=[${authority}] alpn=[${alpn}] sni=[${sni}]`);
 
             try {
-                let sess = await this.getH2SessionAsync(new URL(`https://${authority}/`), alpn, sni);
+                let sess = await this.getH2SessionAsync(authorityURL, alpn, sni);
                 let svrReq = sess.request(headers);
                 svrReq.on('continue', () => {
                     stream.respond({
@@ -188,7 +190,8 @@ export class localServer {
                         return;
                     case constants.DOWNGRADE_TO_HTTP1:
                         //FIXME
-                        console.log("sent status code 505 and goaway");
+                        this.params.setSupportH2(authorityURL, false);
+                        console.log("sending status code 505 and goaway");
                         stream.respond({
                             [http2.constants.HTTP2_HEADER_STATUS]: http2.constants.HTTP_STATUS_HTTP_VERSION_NOT_SUPPORTED,
                             [http2.constants.HTTP2_HEADER_CONTENT_TYPE]: "text/plain",
