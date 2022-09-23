@@ -44,13 +44,23 @@ export class localServer {
 
             cliReq.on('error', (err) => {
                 console.log(`request error: host=[${host}] alpn=[${alpn}] sni=[${sni}]`, err);
-                cliRes.writeHead(502, { ["Content-Type"]: "text/plain" });
-                cliRes.end("502 Bad Gateway");
+                try {
+                    cliRes.writeHead(502, { ["Content-Type"]: "text/plain" });
+                    cliRes.end("502 Bad Gateway");
+                } catch (e) {
+                    //FIXME temporary workaround to avoid ERR_HTTP2_INVALID_STREAM crash
+                    console.error(`http1 host=[${host}] cliRes.writeHead() error`, e);
+                }
             });
 
             if (host == null) {
-                cliRes.writeHead(403, { ["Content-Type"]: "text/plain" });
-                cliRes.end("403 Forbidden");
+                try {
+                    cliRes.writeHead(403, { ["Content-Type"]: "text/plain" });
+                    cliRes.end("403 Forbidden");
+                } catch (e) {
+                    //FIXME temporary workaround to avoid ERR_HTTP2_INVALID_STREAM crash
+                    console.error(`http1 host=[${host}] cliRes.writeHead() error`, e);
+                }
                 return;
             }
 
@@ -74,7 +84,12 @@ export class localServer {
                     headers: headers,
                 });
                 svrReq.on('continue', () => {
-                    cliRes.writeHead(100);
+                    try {
+                        cliRes.writeHead(100);
+                    } catch (e) {
+                        //FIXME temporary workaround to avoid ERR_HTTP2_INVALID_STREAM crash
+                        console.error(`http1 host=[${host}] cliRes.writeHead() error`, e);
+                    }
                 });
                 svrReq.on('response', (svrRes) => {
                     try {
@@ -93,31 +108,56 @@ export class localServer {
                 });
                 svrReq.on('end', () => {
                     console.log(`ending cliRes downlink: host=[${host}] alpn=[${alpn}] sni=[${sni}]`);
-                    cliRes.end();
+                    try {
+                        cliRes.end();
+                    } catch (e) {
+                        //FIXME temporary workaround to avoid ERR_HTTP2_INVALID_STREAM crash
+                        console.error(`http1 host=[${host}] cliRes.end() error`, e);
+                    }
                 });
                 svrReq.on('error', (err) => {
                     console.error(`svrReq error: host=[${host}] alpn=[${alpn}] sni=[${sni}]`, err);
-                    cliRes.writeHead(502, { ["Content-Type"]: "text/plain" });
-                    cliRes.end("502 Bad Gateway");
+                    try {
+                        cliRes.writeHead(502, { ["Content-Type"]: "text/plain" });
+                        cliRes.end("502 Bad Gateway");
+                    } catch (e) {
+                        //FIXME temporary workaround to avoid ERR_HTTP2_INVALID_STREAM crash
+                        console.error(`http1 host=[${host}] cliRes.writeHead() error`, e);
+                    }
                 });
 
                 cliReq.on('data', (chunk) => {
-                    svrReq.write(chunk);
+                    try {
+                        svrReq.write(chunk);
+                    } catch (e) {
+                        //FIXME temporary workaround to avoid ERR_HTTP2_INVALID_STREAM crash
+                        console.error(`http1 host=[${host}] svrReq.write() error`, e);
+                    }
                 });
                 cliReq.on('end', () => {
                     console.log(`cliReq uplink ended: host=[${host}] alpn=[${alpn}] sni=[${sni}]`);
-                    svrReq.end();
+                    try {
+                        svrReq.end();
+                    } catch (e) {
+                        //FIXME temporary workaround to avoid ERR_HTTP2_INVALID_STREAM crash
+                        console.error(`http1 host=[${host}] svrReq.end() error`, e);
+                    }
                 });
             } catch (e) {
-                if (e instanceof Error) switch (e.message) {
-                    case constants.IS_SELF_IP:
-                        cliRes.writeHead(200, { ["Content-Type"]: 'text/plain' });
-                        cliRes.end('Magireco Local Server');
-                        return;
+                try {
+                    if (e instanceof Error) switch (e.message) {
+                        case constants.IS_SELF_IP:
+                            cliRes.writeHead(200, { ["Content-Type"]: 'text/plain' });
+                            cliRes.end('Magireco Local Server');
+                            return;
+                    }
+                    console.error("cannot create http1 tlsSocket", e);
+                    cliRes.writeHead(502, { ["Content-Type"]: "text/plain" });
+                    cliRes.end("502 Bad Gateway");
+                } catch (e) {
+                    //FIXME temporary workaround to avoid ERR_HTTP2_INVALID_STREAM crash
+                    console.error(`http1 host=[${host}] cliRes.writeHead() error`, e);
                 }
-                console.error("cannot create http1 tlsSocket", e);
-                cliRes.writeHead(502, { ["Content-Type"]: "text/plain" });
-                cliRes.end("502 Bad Gateway");
                 return;
             };
         });
