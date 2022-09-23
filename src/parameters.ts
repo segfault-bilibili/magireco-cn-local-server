@@ -87,7 +87,11 @@ export class params {
             switch (key) {
                 case "listenList":
                     let portInUse = new Map<number, string>();
-                    for (let name in persistParams.listenList) {
+                    for (let name in val) {
+                        if (persistParams.listenList[name] == null) {
+                            delete val[name];
+                            continue;
+                        }
                         if (val[name] == null) val[name] = persistParams.listenList[name];
                         let host = val[name].host;
                         if (!net.isIP(host)) try {
