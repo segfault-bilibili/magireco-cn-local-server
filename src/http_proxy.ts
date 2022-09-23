@@ -1,6 +1,7 @@
 import * as net from "net";
 import * as http from "http";
 import * as parameters from "./parameters";
+import * as localServer from "./local_server";
 
 export class httpProxy {
     private _closed = false;
@@ -9,6 +10,9 @@ export class httpProxy {
     }
     private readonly params: parameters.params;
     private readonly httpServer: http.Server;
+    private readonly supportH2Map: Map<string, { h2: boolean, time: number }>;
+    private supportH2Expire = 3600 * 1000;
+    private supportH2MaxSize = 1024;
 
     constructor(params: parameters.params) {
         const httpServer = http.createServer((req, res) => {
@@ -121,7 +125,7 @@ export class httpProxy {
             });
         });
 
-        httpServer.on('connect', (req, socket: net.Socket, head) => {
+        httpServer.on('connect', async (req, socket: net.Socket, head) => {
             if (req.url == null) {
                 console.error(`Empty URL in proxy request from ${socket.remoteAddress}:${socket.remotePort}`);
                 socket.end();
@@ -146,11 +150,45 @@ export class httpProxy {
             let port = parseInt((matched[0].match(/\d+$/) as RegExpMatchArray)[0]);
             let host = req.url.substring(0, req.url.length - matched[0].length);
 
-            const localServerHost = this.params.listenList.localServer.host;
-            const localServerPort = this.params.listenList.localServer.port;
-            if (port == 443 || (port == localServerPort && host == localServerHost)) {
+            const localH2Host = this.params.listenList.localServer.host;
+            const localH2Port = this.params.listenList.localServer.port;
+            const localH1Host = this.params.listenList.localHttp1Server.host;
+            const localH1Port = this.params.listenList.localHttp1Server.port;
+            let isLocalH2 = port == localH2Port && host == localH2Host;
+            let isLocalH1 = port == localH1Port && host == localH1Host;
+            if (port == 443 || isLocalH2 || isLocalH1) {
+                //probe supportH2 (if unprobed) first
+                const authorityURL = new URL(`https://${host}:${port}`);
+                let supportH2: boolean | undefined;
+                if (isLocalH2) supportH2 = true;//skip probing because getTlsSocketAsync disallows conneting to local
+                else if (isLocalH1) supportH2 = false;//same as above, skip probing
+                else {
+                    supportH2 = this.getSupportH2(authorityURL);
+                    if (supportH2 == null) try {
+                        const alpn = "h2";
+                        let probeTlsSocket = await localServer.localServer.getTlsSocketAsync(this.params, authorityURL, alpn, host);
+                        probeTlsSocket.on('error', (e) => {
+                            console.error(`probeTlsSocket error ${logMsg}`, e);
+                        });
+                        supportH2 = probeTlsSocket.alpnProtocol === alpn;
+                        console.log(`probe result: [${authorityURL}] supportH2=${supportH2}`);
+                        probeTlsSocket.destroy();
+                    } catch (e) {
+                        console.error(e);
+                        supportH2 = undefined;
+                    }
+                    this.setSupportH2(authorityURL, supportH2);
+                }
+                //probe finished
+                if (supportH2 == null) {
+                    console.error(`cannot probe supportH2: [${authorityURL}]`);
+                    socket.end("HTTP/1.1 502 Bad Gateway\r\n\r\n");
+                    return;
+                }
                 //pass to local server, which will then pass to upstream HTTP CONNECT proxy if possible
-                let conn = net.connect(localServerPort, localServerHost, () => {
+                let localPort = supportH2 ? localH2Port : localH1Port;
+                let localHost = supportH2 ? localH2Host : localH1Host;
+                let conn = net.connect(localPort, localHost, () => {
                     socket.write("HTTP/1.1 200 Connection Established\r\n\r\n", () => {
                         conn.pipe(socket);
                         socket.pipe(conn);
@@ -185,9 +223,34 @@ export class httpProxy {
 
         this.params = params;
         this.httpServer = httpServer;
+        this.supportH2Map = new Map<string, { h2: boolean, time: number }>();
     }
     close(): void {
         this.httpServer.close();
         this._closed = true;
+    }
+
+    private cleanupSupportH2(): void {
+        while (this.supportH2Map.size > this.supportH2MaxSize) {
+            let key = this.supportH2Map.entries().next().value[0];
+            this.supportH2Map.delete(key);
+        }
+        const time = new Date().getTime();
+        let keysToDel: Array<string> = [];
+        this.supportH2Map.forEach((val, key) => {
+            if (time - val.time > this.supportH2Expire) keysToDel.push(key);
+        });
+        keysToDel.forEach((key) => this.supportH2Map.delete(key));
+    }
+    private getSupportH2(url: URL): boolean | undefined {
+        if (this.supportH2Map.size > this.supportH2MaxSize) this.cleanupSupportH2();
+        let val = this.supportH2Map.get(url.href);
+        if (val == null) return val;
+        else return val.h2;
+    }
+    private setSupportH2(url: URL, supportH2?: boolean): void {
+        if (this.supportH2Map.size > this.supportH2MaxSize) this.cleanupSupportH2();
+        if (supportH2 == null) this.supportH2Map.delete(url.href);
+        else this.supportH2Map.set(url.href, { h2: supportH2, time: new Date().getTime() });
     }
 }
