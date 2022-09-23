@@ -113,7 +113,8 @@ export class params {
                     }
                     break;
                 case "CACertAndKey":
-                    if (val.cert == null || val.key == null) val = certGenerator.certGen.newCertAndKey(true);
+                    if (val == null || val.cert == null || val.key == null)
+                        val = certGenerator.certGen.newCertAndKey(true);
                     break;
             }
             mapData.set(key, val);
