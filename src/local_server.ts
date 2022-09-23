@@ -19,19 +19,10 @@ export class localServer {
     private readonly http2SecureServer: http2.Http2SecureServer;
     private readonly http1TlsServer: tls.Server;
     private readonly certGen: certGenerator.certGen;
-    private readonly CACerts: Array<string>;
     private readonly openSess: Map<URL, http2.ClientHttp2Session>;
 
     constructor(params: parameters.params) {
         const certGen = new certGenerator.certGen(params.CACertAndKey);
-
-        const CACerts = tls.rootCertificates.slice();
-        CACerts.push(params.CACertPEM);
-        const upstreamProxyCACert = params.upstreamProxyCACert;
-        if (upstreamProxyCACert != null) {
-            CACerts.unshift(upstreamProxyCACert);
-            console.log("added upstreamProxyCACert to CACerts");
-        }
 
         const SNICallback = (servername: string, cb: (err: Error | null, ctx?: tls.SecureContext | undefined) => void) => {
             let certAndKey = this.certGen.getCertAndKey(servername);
@@ -69,7 +60,7 @@ export class localServer {
             console.log(`request accepted, host=[${host}] alpn=[${alpn}] sni=[${sni}]`);
 
             try {
-                let tlsSocket = await this.getH1TlsSocketAsync(new URL(`https://${host}/`), alpn, sni);
+                let tlsSocket = await localServer.getTlsSocketAsync(this.params, new URL(`https://${host}/`), alpn, sni);
                 let svrReq = http.request({
                     createConnection: (options, onCreate) => {
                         return tlsSocket;
@@ -227,7 +218,7 @@ export class localServer {
             let servername: string | undefined = (tlsSocket as any).servername;
             let alpn = tlsSocket.alpnProtocol;
             let options: tls.ConnectionOptions = {
-                ca: this.CACerts,
+                ca: this.params.CACerts,
                 host: http2ListenAddr.host,
                 port: http2ListenAddr.port,
                 ALPNProtocols: [],
@@ -246,7 +237,6 @@ export class localServer {
 
         this.params = params;
         this.certGen = certGen;
-        this.CACerts = CACerts;
         this.http2SecureServer = http2SecureServer;
         this.http1TlsServer = http1TlsServer;
         this.openSess = new Map<URL, http2.ClientHttp2Session>();
@@ -256,19 +246,19 @@ export class localServer {
         this._closed = true;
     }
 
-    private async isHostSelfAsync(host: string | net.Socket): Promise<boolean> {
+    private static async isHostSelfAsync(host: string | net.Socket, listenList: parameters.listenList): Promise<boolean> {
         if (typeof host !== 'string') host = await this.socketRemoteIPAsync(host);
         if (!net.isIPv6(host)) host = host.replace(/:\d+$/, "");//strip port number
         if (!net.isIP(host)) host = await parameters.resolveToIP(host);
         if (["127.0.0.1", "::1",].find((ip) => ip === host)) return true;
-        for (let key in this.params.listenList) {
-            let listenAddr = this.params.listenList[key];
+        for (let key in listenList) {
+            let listenAddr = listenList[key];
             if (listenAddr.host === host) return true;
         }
         return false;
     }
 
-    private socketRemoteIPAsync(socket: net.Socket): Promise<string> {
+    private static socketRemoteIPAsync(socket: net.Socket): Promise<string> {
         return new Promise((resolve, reject) => {
             let lookupListener: (err: Error, address: string, family: string | number, host: string) => void
             = (err, address, family, host) => {
@@ -294,11 +284,11 @@ export class localServer {
         const port = isNaN(parseInt(authorityURL.port)) ? 443 : parseInt(authorityURL.port);
         let socket: net.Socket;
         if (this.params.upstreamProxyEnabled) {
-            if (await this.isHostSelfAsync(host)) throw new Error(constants.IS_SELF_IP);
-            socket = await this.httpTunnelAsync(host, port);
+            if (await localServer.isHostSelfAsync(host, this.params.listenList)) throw new Error(constants.IS_SELF_IP);
+            socket = await localServer.httpTunnelAsync(host, port, this.params.upstreamProxy);
         } else {
-            socket = await this.directConnectAsync(host, port);
-            if (await this.isHostSelfAsync(socket)) throw new Error(constants.IS_SELF_IP);
+            socket = await localServer.directConnectAsync(host, port);
+            if (await localServer.isHostSelfAsync(socket, this.params.listenList)) throw new Error(constants.IS_SELF_IP);
         }
 
         sess = await this.createClientH2SessionAsync(socket, authorityURL, alpn, sni);
@@ -340,27 +330,28 @@ export class localServer {
         return sess;
     }
 
-    private async getH1TlsSocketAsync(authorityURL: URL, alpn?: string | null | boolean, sni?: string | null | boolean
+    static async getTlsSocketAsync(params: parameters.params,
+        authorityURL: URL, alpn?: string | null | boolean, sni?: string | null | boolean
     ): Promise<tls.TLSSocket> {
         let tlsSocket: tls.TLSSocket;
         const host = authorityURL.hostname;
         const port = isNaN(parseInt(authorityURL.port)) ? 443 : parseInt(authorityURL.port);
         let socket: net.Socket;
-        if (this.params.upstreamProxyEnabled) {
-            if (await this.isHostSelfAsync(host)) throw new Error(constants.IS_SELF_IP);
-            socket = await this.httpTunnelAsync(host, port);
+        if (params.upstreamProxyEnabled) {
+            if (await this.isHostSelfAsync(host, params.listenList)) throw new Error(constants.IS_SELF_IP);
+            socket = await this.httpTunnelAsync(host, port, params.upstreamProxy);
         } else {
             socket = await this.directConnectAsync(host, port);
-            if (await this.isHostSelfAsync(socket)) throw new Error(constants.IS_SELF_IP);
+            if (await this.isHostSelfAsync(socket, params.listenList)) throw new Error(constants.IS_SELF_IP);
         }
-        tlsSocket = await this.createH1TlsSocketAsync(socket, authorityURL, alpn, sni);
+        tlsSocket = await this.createTlsSocketAsync(socket, params.CACerts, authorityURL, alpn, sni);
         return tlsSocket;
     }
 
-    private httpTunnelAsync(host: string, port: number): Promise<net.Socket> {
+    private static httpTunnelAsync(host: string, port: number, upstreamProxy: parameters.listenAddr): Promise<net.Socket> {
         return new Promise((resolve, reject) => {
-            const proxyHost = this.params.upstreamProxy.host;
-            const proxyPort = this.params.upstreamProxy.port;
+            const proxyHost = upstreamProxy.host;
+            const proxyPort = upstreamProxy.port;
             let errorListener: (err: Error) => void = (err) => reject(err);
             let req = http
                 .request({
@@ -381,7 +372,7 @@ export class localServer {
         });
     }
 
-    private directConnectAsync(host: string, port: number): Promise<net.Socket> {
+    private static directConnectAsync(host: string, port: number): Promise<net.Socket> {
         return new Promise((resolve, reject) => {
             let errorListener: (err: Error) => void = (err) => reject(err);
             let socket = net.createConnection(port, host)
@@ -393,7 +384,7 @@ export class localServer {
         });
     }
 
-    private createH1TlsSocketAsync(socket: net.Socket,
+    private static createTlsSocketAsync(socket: net.Socket, CACerts: Array<string>,
         authorityURL: URL, alpn?: string | boolean | null, sni?: string | boolean | null
     ): Promise<tls.TLSSocket> {
         return new Promise((resolve, reject) => {
@@ -404,7 +395,7 @@ export class localServer {
             let port = parseInt(authorityURL.port);
             if (isNaN(port)) port = 443;
             let options: tls.ConnectionOptions = {
-                ca: this.CACerts,
+                ca: CACerts,
                 socket: socket,
                 host: host,
                 port: port,
@@ -441,7 +432,7 @@ export class localServer {
                     let port = parseInt(authorityURL.port);
                     if (isNaN(port)) port = 443;
                     let options: tls.ConnectionOptions = {
-                        ca: this.CACerts,
+                        ca: this.params.CACerts,
                         socket: socket,
                         host: host,
                         port: port,

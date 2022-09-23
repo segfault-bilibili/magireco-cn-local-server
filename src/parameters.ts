@@ -2,6 +2,7 @@ import { portFinder } from "./port_finder";
 import * as certGenerator from "./cert_generator";
 import * as net from "net";
 import * as dns from "dns";
+import * as tls from "tls";
 
 export type listenAddr = {
     port: number,
@@ -55,9 +56,18 @@ export class params {
     get CACertAndKey(): certGenerator.certAndKey { return this.mapData.get("CACertAndKey"); }
     get CACertPEM(): string { return this.CACertAndKey.cert; }
     get CACertSubjectHashOld(): string { return "9489bdaf"; }//FIXME
+    readonly CACerts: Array<string>;
 
     private constructor(mapData: Map<string, any>) {
         this.mapData = mapData;
+        const CACerts = tls.rootCertificates.slice();
+        CACerts.push(this.CACertPEM);
+        const upstreamProxyCACert = this.upstreamProxyCACert;
+        if (upstreamProxyCACert != null) {
+            CACerts.unshift(upstreamProxyCACert);
+            console.log("added upstreamProxyCACert to CACerts");
+        }
+        this.CACerts = CACerts;
     }
     static async init(mapJsonData: Map<string, string>): Promise<params> {
         let mapData = new Map<string, any>();
