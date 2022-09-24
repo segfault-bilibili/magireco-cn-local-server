@@ -98,45 +98,15 @@ export class certGen {
         if (!isCA) {
             const dNSName = 2;
             const iPAddress = 7;
-            let altNames = [{
+            let altNames: Array<{type: number, value: string} | {type: number, ip: string}> = [{
                 type: dNSName,
                 value: commonName
             }];
             const ipType = net.isIP(commonName);
             if (ipType == 4 || ipType == 6) {
-                let num: Array<number>;
-                switch (ipType) {
-                    case 4:
-                        num = commonName.split(".").map((s) => parseInt(s));
-                        break;
-                    case 6:
-                        let num16: Array<number>;
-                        if (commonName.match(/::/)) {
-                            let splitted = commonName.split("::");
-                            if (splitted.length != 2) throw new Error("unexpected invalid IPv6 address (double-colon)");
-
-                            let splittedAgain = splitted.map((str) => str.split(":").filter((s) => s.length > 0));
-
-                            num16 = splittedAgain[0].map((s) => parseInt(`0x${s}`));
-
-                            let paddingCount = 8 - num16.length - splittedAgain[1].length;
-                            if (paddingCount < 0) throw new Error("unexpected invalid IPv6 address (paddingCount < 0)");
-                            for (let i = 0; i < paddingCount; i++) num16.push(0);
-
-                            splittedAgain[1].forEach((value) => num16.push(parseInt(`0x${value}`)));
-                        } else {
-                            num16 = commonName.split(":").map((s) => parseInt(`0x${s}`));
-                        }
-                        num = [];
-                        num16.forEach((val) => {
-                            num.push(val >> 8);
-                            num.push(val & 0xFF);
-                        });
-                        break;
-                }
                 altNames.push({
                     type: iPAddress,
-                    value: Buffer.from(new Uint8Array(num)).toString('ascii'),
+                    ip: commonName,
                 });
             }
             exts.push({
