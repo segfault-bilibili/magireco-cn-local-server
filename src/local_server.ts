@@ -4,7 +4,6 @@ import * as http2 from "http2";
 import * as tls from "tls";
 import * as parameters from "./parameters";
 import * as certGenerator from "./cert_generator";
-import * as httpProxy from "./http_proxy";
 
 export enum constants {
     DOWNGRADE_TO_HTTP1 = "DOWNGRADE_TO_HTTP1",
