@@ -3,7 +3,7 @@ import * as http2 from "http2";
 import * as tls from "tls";
 import * as zlib from "zlib";
 import * as parameters from "./parameters";
-import { parseCharset } from "./parseCharset";
+import { parseCharset } from "./parse_charset";
 
 export type bsgamesdkIDs = {
     buvid: string,

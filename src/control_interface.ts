@@ -3,7 +3,7 @@ import * as parameters from "./parameters";
 import { httpProxy } from "./http_proxy";
 import { localServer } from "./local_server";
 import * as bsgamesdkPwdAuthenticate from "./bsgamesdk-pwd-authenticate";
-import { parseCharset } from "./parseCharset";
+import { parseCharset } from "./parse_charset";
 
 export class controlInterface {
     private _closed = false;
