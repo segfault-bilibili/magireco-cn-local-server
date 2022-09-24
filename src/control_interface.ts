@@ -15,8 +15,9 @@ export class controlInterface {
     private readonly serverList: Array<httpProxy | localServer>;
     private readonly bsgamesdkPwdAuth: bsgamesdkPwdAuthenticate.bsgamesdkPwdAuth;
 
-    constructor(params: parameters.params, serverList: Array<httpProxy | localServer>) {
-        const bsgamesdkPwdAuth = new bsgamesdkPwdAuthenticate.bsgamesdkPwdAuth(params);
+    constructor(params: parameters.params, serverList: Array<localServer | httpProxy>) {
+        const bsgamesdkPwdAuth = new bsgamesdkPwdAuthenticate.bsgamesdkPwdAuth(params,
+            serverList.find((s) => s instanceof localServer) as localServer);
 
         const httpServerSelf = http.createServer(async (req, res) => {
             if (req.url == null) {

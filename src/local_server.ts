@@ -385,7 +385,7 @@ export class localServer {
         });
     }
 
-    private async getH2SessionAsync(authorityURL: URL, alpn?: string | null | boolean, sni?: string | null | boolean
+    async getH2SessionAsync(authorityURL: URL, alpn?: string | null | boolean, sni?: string | null | boolean
     ): Promise<http2.ClientHttp2Session> {
         let sess = this.openSess.get(authorityURL.href);
         if (sess != null) {

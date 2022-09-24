@@ -4,6 +4,7 @@ import * as tls from "tls";
 import * as zlib from "zlib";
 import * as parameters from "./parameters";
 import { parseCharset } from "./parse_charset";
+import { localServer } from "./local_server";
 
 export type bsgamesdkIDs = {
     buvid: string,
@@ -40,10 +41,12 @@ export const app_key_Android = "add83765a53c4664944eabc18298731b";
 
 export class bsgamesdkPwdAuth {
     private readonly params: parameters.params;
+    private localServer: localServer;
     get IDs(): bsgamesdkIDs { return this.params.bsgamesdkIDs; }
 
-    constructor(params: parameters.params) {
+    constructor(params: parameters.params, localServer: localServer) {
         this.params = params;
+        this.localServer = localServer;
     }
 
     async login(username: string, password: string): Promise<bsgamesdkResponse> {
@@ -54,26 +57,13 @@ export class bsgamesdkPwdAuth {
         return loginResult;
     }
 
-    private bsgamesdkReq(url: URL, postData?: string): Promise<bsgamesdkResponse> {
+    private async bsgamesdkReq(url: URL, postData?: string): Promise<bsgamesdkResponse> {
+        const host = url.host;
+        const path = url.pathname + url.search;
+        const authorityURL = new URL(`https://${host}/`);
+        let sess = await this.localServer.getH2SessionAsync(authorityURL, "h2", host);
         return new Promise((resolve, reject) => {
-            const host = url.host;
-            const path = url.pathname + url.search;
-            const authorityURL = new URL(`https://${host}/`);
-            let sess = http2.connect(authorityURL, {
-                createConnection: (authorityURL, option) => {
-                    let tlsSocket = tls.connect({
-                        ca: this.params.CACerts,
-                        host: this.params.listenList.localServer.host,
-                        port: this.params.listenList.localServer.port,
-                        servername: host,
-                        ALPNProtocols: ["h2"],
-                    });
-                    tlsSocket.on('error', (err) => reject(err));
-                    return tlsSocket;
-                }
-            });
             sess.on('error', (err) => reject(err));
-
             const method = postData == null ? http2.constants.HTTP2_METHOD_GET : http2.constants.HTTP2_METHOD_POST;
             const reqHeaders = {
                 [http2.constants.HTTP2_HEADER_METHOD]: method,
