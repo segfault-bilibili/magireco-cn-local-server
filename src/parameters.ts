@@ -59,11 +59,6 @@ export class params {
     static readonly defaultPath = path.join(".", "params.json");
     private path: string;
     private mapData: Map<string, any>;
-    private get mapJsonData(): Map<string, string> {
-        let mapJsonData = new Map<string, string>();
-        this.mapData.forEach((val, key) => mapJsonData.set(key, JSON.stringify(val, replacer)));
-        return mapJsonData;
-    }
     static async load(path?: string): Promise<params> {
         if (path == null) path = this.defaultPath;
         let fileContent: string | null;
@@ -81,26 +76,26 @@ export class params {
     static async import(fileContent: string | null, path: string): Promise<params> {
         //path will be used when save() is called without argument
         //WILL NOT WRITE FILE HERE
-        let mapJsonData: Map<string, string>;
-        if (fileContent == null) {
+        let importedMapData: Map<string, any>;
+        if (fileContent == null || fileContent === "") {
             console.log("Creating empty params.json");
-            mapJsonData = new Map<string, string>();
+            importedMapData = new Map<string, any>();
         } else try {
-            mapJsonData = JSON.parse(fileContent, reviver);
+            importedMapData = JSON.parse(fileContent, reviver);
         } catch (e) {
-            console.log("Error reading params.json, creating empty one", e);
-            mapJsonData = new Map<string, string>();
+            console.log("Error reading params.json, creating empty one");
+            importedMapData = new Map<string, any>();
         }
-        const mapData = await this.prepare(mapJsonData, false);
-        return new params(mapData, path);
+        let preparedMapData = await this.prepare(importedMapData, false);
+        return new params(preparedMapData, path);
     }
     stringify(): string {
-        return JSON.stringify(this.mapJsonData, replacer);
+        return JSON.stringify(this.mapData, replacer);
     }
     async save(path?: string): Promise<void> {
         if (path == null) path = this.path;
-        let prepared = await params.prepare(this.mapJsonData, true);
-        let fileContent = JSON.stringify(prepared, replacer);
+        let preparedMapData = await params.prepare(this.mapData, true);
+        let fileContent = JSON.stringify(preparedMapData, replacer);
         fs.writeFileSync(path, fileContent, { encoding: "utf-8" });
         console.log("saved params.json");
     }
@@ -135,16 +130,11 @@ export class params {
         this.supportH2Map = new Map<string, { h2: boolean, time: number }>();
         this.path = path;
     }
-    private static async prepare(mapJsonData: Map<string, string>, isSaving: boolean): Promise<Map<string, any>> {
-        let mapData = new Map<string, any>();
+    private static async prepare(oldMapData: Map<string, any>, isSaving: boolean): Promise<Map<string, any>> {
+        let newMapData = new Map<string, any>();
         for (let key in persistParams) {
             let defaultVal = (persistParams as any)[key];
-            let val: any = mapJsonData.get(key);
-            try {
-                if (val != null) val = JSON.parse(val);
-            } catch (e) {
-                console.error(`cannot parse key=[${key}]`);
-            }
+            let val: any = oldMapData.get(key);
             if (val == null) val = defaultVal;
             switch (key) {
                 case "listenList":
@@ -159,9 +149,9 @@ export class params {
                         val = bsgamesdkPwdAuthenticate.bsgamesdkPwdAuth.newRandomID();
                     break;
             }
-            mapData.set(key, val);
+            newMapData.set(key, val);
         };
-        return mapData;
+        return newMapData;
     }
 
     private cleanupSupportH2(): void {
