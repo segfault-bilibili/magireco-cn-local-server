@@ -11,10 +11,6 @@ export enum constants {
 }
 
 export class localServer {
-    private _closed = false;
-    get closed() {
-        return this._closed;
-    }
     private readonly params: parameters.params;
     private readonly http2SecureServer: http2.Http2SecureServer;
     private readonly http1TlsServer: tls.Server;
@@ -354,10 +350,15 @@ export class localServer {
         this.http1TlsServer = http1TlsServer;
         this.openSess = new Map<string, http2.ClientHttp2Session>();
     }
-    close(): void {
-        this.http2SecureServer.close();
-        this.http1TlsServer.close();
-        this._closed = true;
+    async close(): Promise<void> {
+        this.openSess.forEach((val, key) => val.destroyed || val.destroy());
+        this.openSess.clear();
+        await Promise.allSettled([this.http2SecureServer, this.http1TlsServer].map((server) => {
+            return new Promise<void>((resolve) => {
+                server.on('close', () => resolve());
+                server.close();
+            })
+        }));
     }
 
     private static async isHostSelfAsync(host: string | net.Socket, listenList: parameters.listenList): Promise<boolean> {

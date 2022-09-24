@@ -4,10 +4,6 @@ import * as parameters from "./parameters";
 import * as localServer from "./local_server";
 
 export class httpProxy {
-    private _closed = false;
-    get closed() {
-        return this._closed;
-    }
     private readonly params: parameters.params;
     private readonly httpServer: http.Server;
 
@@ -253,8 +249,11 @@ export class httpProxy {
         this.params = params;
         this.httpServer = httpServer;
     }
-    close(): void {
-        this.httpServer.close();
-        this._closed = true;
+    async close(): Promise<void> {
+        await new Promise<void>((resolve) => {
+            this.httpServer.on('close', () => resolve());
+            this.httpServer.close();
+            this.httpServer.closeAllConnections();
+        });
     }
 }

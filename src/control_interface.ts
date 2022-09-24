@@ -6,10 +6,7 @@ import * as bsgamesdkPwdAuthenticate from "./bsgamesdk-pwd-authenticate";
 import { parseCharset } from "./parse_charset";
 
 export class controlInterface {
-    private _closed = false;
-    get closed() {
-        return this._closed;
-    }
+    private closing = false;
     private readonly params: parameters.params;
     private readonly httpServerSelf: http.Server;
     private readonly serverList: Array<httpProxy | localServer>;
@@ -117,20 +114,25 @@ export class controlInterface {
         this.serverList = serverList;
         this.bsgamesdkPwdAuth = bsgamesdkPwdAuth;
     }
-    private closeAll(): void {
-        while (this.serverList.length > 0) {
-            let server = this.serverList.shift();
-            if (server != null) server.close();
-        }
-        this.httpServerSelf.close();
+    private async closeAll(): Promise<void> {
+        let promises = this.serverList.map((server) => server.close());
+        promises.push(new Promise((resolve) => {
+            this.httpServerSelf.on('close', () => resolve());
+            this.httpServerSelf.close();
+            this.httpServerSelf.closeAllConnections();
+        }));
+        await Promise.allSettled(promises);
     }
-    shutdown(): void {
-        this.closeAll();
-        this._closed = true;
+    async shutdown(): Promise<void> {
+        if (this.closing) return;
+        this.closing = true;
+        await this.closeAll();
     }
-    restart(): void {
-        this.closeAll();
-        controlInterface.launch();
+    async restart(): Promise<void> {
+        if (this.closing) return;
+        this.closing = true;
+        await this.closeAll();
+        await controlInterface.launch();
     }
 
     private homepageHTML(): string {
