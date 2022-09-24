@@ -248,6 +248,7 @@ export class httpProxy {
 
         let listenAddr = params.listenList.httpProxy;
         httpServer.listen(listenAddr.port, listenAddr.host);
+        console.log(`httpProxy listening on [${listenAddr.host}:${listenAddr.port}]`);
 
         this.params = params;
         this.httpServer = httpServer;

@@ -97,6 +97,7 @@ export class controlInterface {
         let port = params.listenList.controlInterface.port;
         let host = params.listenList.controlInterface.host;
         httpServerSelf.listen(port, host);
+        console.log(`controlInterface listening on [${host}:${port}]`);
 
         this.params = params;
         this.httpServerSelf = httpServerSelf;

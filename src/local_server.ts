@@ -315,6 +315,7 @@ export class localServer {
 
         const http2ListenAddr = params.listenList.localServer;
         http2SecureServer.listen(http2ListenAddr.port, http2ListenAddr.host);
+        console.log(`localServer listening on [${http2ListenAddr.host}:${http2ListenAddr.port}]`);
 
         const http1TlsServerOptions: tls.TlsOptions = certGen.getCertAndKey(params.listenList.localHttp1Server.host);
         http1TlsServerOptions.SNICallback = SNICallback;
@@ -346,6 +347,7 @@ export class localServer {
 
         const http1ListenAddr = params.listenList.localHttp1Server;
         http1TlsServer.listen(http1ListenAddr.port, http1ListenAddr.host);
+        console.log(`localHttp1Server listening on [${http1ListenAddr.host}:${http1ListenAddr.port}]`);
 
         this.params = params;
         this.certGen = certGen;
