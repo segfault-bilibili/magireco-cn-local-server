@@ -5,8 +5,8 @@ import { controlInterface } from "./control_interface";
 
 (async () => {
     const params = await parameters.params.load();
+    if (params.checkModified()) await params.save();
     let localserver = new localServer(params);
     let httpproxy = new httpProxy(params);
     let controlinterface = new controlInterface(params, [localserver, httpproxy]);
-    params.save();
 })();

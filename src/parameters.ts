@@ -99,6 +99,16 @@ export class params {
         fs.writeFileSync(path, fileContent, { encoding: "utf-8" });
         console.log("saved params.json");
     }
+    checkModified(): boolean {
+        let last = "";
+        try {
+            last = fs.readFileSync(this.path, { encoding: "utf-8" });
+        } catch (e) {
+            console.error(e);
+        }
+        let cur = this.stringify();
+        return cur !== last;
+    }
 
     get mode(): mode { return this.mapData.get("mode"); }
     get listenList(): listenList { return this.mapData.get("listenList"); }
