@@ -3,6 +3,7 @@ import * as certGenerator from "./cert_generator";
 import * as net from "net";
 import * as dns from "dns";
 import * as tls from "tls";
+import * as bsgamesdkPwdAuthenticate from "./bsgamesdk-pwd-authenticate";
 
 export type listenAddr = {
     port: number,
@@ -38,6 +39,7 @@ const persistParams: Record<string, any> = {
     upstreamProxyEnabled: false,
     upstreamProxyCACert: null,
     CACertAndKey: null,
+    bsgamesdkIDs: null,
 }
 
 export class params {
@@ -54,6 +56,8 @@ export class params {
     get upstreamProxyEnabled(): boolean { return this.mapData.get("upstreamProxyEnabled"); }
     get upstreamProxyCACert(): string | undefined | null { return this.mapData.get("upstreamProxyCACert"); }
     get CACertAndKey(): certGenerator.certAndKey { return this.mapData.get("CACertAndKey"); }
+    get bsgamesdkIDs(): bsgamesdkPwdAuthenticate.bsgamesdkIDs { return this.mapData.get("bsgamesdkIDs"); }
+
     get CACertPEM(): string { return this.CACertAndKey.cert; }
     get CACertSubjectHashOld(): string { return "9489bdaf"; }//FIXME
     readonly CACerts: Array<string>;
@@ -115,6 +119,10 @@ export class params {
                 case "CACertAndKey":
                     if (val == null || val.cert == null || val.key == null)
                         val = certGenerator.certGen.newCertAndKey(true);
+                    break;
+                case "bsgamesdkIDs":
+                    if (val == null || val.buvid == null || val.udid == null || val.bd_id == null)
+                        val = bsgamesdkPwdAuthenticate.bsgamesdkPwdAuth.newRandomID();
                     break;
             }
             mapData.set(key, val);
