@@ -59,6 +59,7 @@ export class params {
     static readonly defaultPath = path.join(".", "params.json");
     private path: string;
     private mapData: Map<string, any>;
+    private lastSaved: string;
     static async load(path?: string): Promise<params> {
         if (path == null) path = this.defaultPath;
         let fileContent: string | null;
@@ -77,9 +78,10 @@ export class params {
         //path will be used when save() is called without argument
         //WILL NOT WRITE FILE HERE
         let importedMapData: Map<string, any>;
-        if (fileContent == null || fileContent === "") {
+        if (fileContent == null) {
             console.log("Creating empty params.json");
             importedMapData = new Map<string, any>();
+            fileContent = "";
         } else try {
             importedMapData = JSON.parse(fileContent, reviver);
         } catch (e) {
@@ -87,7 +89,7 @@ export class params {
             importedMapData = new Map<string, any>();
         }
         let preparedMapData = await this.prepare(importedMapData, false);
-        return new params(preparedMapData, path);
+        return new params(preparedMapData, fileContent, path);
     }
     stringify(): string {
         return JSON.stringify(this.mapData, replacer);
@@ -97,17 +99,11 @@ export class params {
         let preparedMapData = await params.prepare(this.mapData, true);
         let fileContent = JSON.stringify(preparedMapData, replacer);
         fs.writeFileSync(path, fileContent, { encoding: "utf-8" });
+        this.lastSaved = fileContent;
         console.log("saved params.json");
     }
     checkModified(): boolean {
-        let last = "";
-        try {
-            last = fs.readFileSync(this.path, { encoding: "utf-8" });
-        } catch (e) {
-            console.error(e);
-        }
-        let cur = this.stringify();
-        return cur !== last;
+        return this.stringify() !== this.lastSaved;
     }
 
     get mode(): mode { return this.mapData.get("mode"); }
@@ -127,7 +123,7 @@ export class params {
     private supportH2Expire = 3600 * 1000;
     private supportH2MaxSize = 1024;
 
-    private constructor(mapData: Map<string, any>, path: string) {
+    private constructor(mapData: Map<string, any>, lastSaved: string, path: string) {
         this.mapData = mapData;
         const CACerts = tls.rootCertificates.slice();
         CACerts.push(this.CACertPEM);
@@ -138,6 +134,7 @@ export class params {
         }
         this.CACerts = CACerts;
         this.supportH2Map = new Map<string, { h2: boolean, time: number }>();
+        this.lastSaved = lastSaved;
         this.path = path;
     }
     private static async prepare(oldMapData: Map<string, any>, isSaving: boolean): Promise<Map<string, any>> {
