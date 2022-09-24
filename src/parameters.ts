@@ -26,7 +26,16 @@ export enum mode {
     LOCAL_OFFLINE = 3,
 }
 
-const persistParams: Record<string, any> = {
+const persistParams: {
+    mode: mode,
+    listenList: listenList,
+    upstreamProxy: listenAddr,
+    upstreamProxyEnabled: boolean,
+    upstreamProxyCACert?: string,
+    CACertAndKey?: certGenerator.certAndKey,
+    bsgamesdkIDs?: bsgamesdkPwdAuthenticate.bsgamesdkIDs,
+    bsgamesdkResponse?: bsgamesdkPwdAuthenticate.bsgamesdkResponse,
+} = {
     mode: mode.ACCOUNT_DUMP,
     listenList: {
         controlInterface: { port: 10000, host: "127.0.0.1" },
@@ -38,12 +47,12 @@ const persistParams: Record<string, any> = {
         //HTTP
         host: "127.0.0.1",
         port: 8080,
-    },
+    } as listenAddr,
     upstreamProxyEnabled: false,
-    upstreamProxyCACert: null,
-    CACertAndKey: null,
-    bsgamesdkIDs: null,
-    bsgamesdkResponse: null,
+    upstreamProxyCACert: undefined,
+    CACertAndKey: undefined,
+    bsgamesdkIDs: undefined,
+    bsgamesdkResponse: undefined,
 }
 
 export class params {
@@ -74,7 +83,7 @@ export class params {
             console.log("Error reading params.json, creating empty one", e);
             mapJsonData = new Map<string, string>();
         }
-        const mapData = await this.prepare(mapJsonData);
+        const mapData = await this.prepare(mapJsonData, false);
         return new params(mapData, path);
     }
     stringify(): string {
@@ -82,7 +91,7 @@ export class params {
     }
     async save(path?: string): Promise<void> {
         if (path == null) path = this.path;
-        let prepared = await params.prepare(this.mapJsonData);
+        let prepared = await params.prepare(this.mapJsonData, true);
         let fileContent = JSON.stringify(prepared, replacer);
         fs.writeFileSync(path, fileContent, { encoding: "utf-8" });
         console.log("saved params.json");
@@ -118,10 +127,10 @@ export class params {
         this.supportH2Map = new Map<string, { h2: boolean, time: number }>();
         this.path = path;
     }
-    private static async prepare(mapJsonData: Map<string, string>): Promise<Map<string, any>> {
+    private static async prepare(mapJsonData: Map<string, string>, isSaving: boolean): Promise<Map<string, any>> {
         let mapData = new Map<string, any>();
         for (let key in persistParams) {
-            let defaultVal = persistParams[key];
+            let defaultVal = (persistParams as any)[key];
             let val: any = mapJsonData.get(key);
             try {
                 if (val != null) val = JSON.parse(val);
@@ -131,31 +140,7 @@ export class params {
             if (val == null) val = defaultVal;
             switch (key) {
                 case "listenList":
-                    let portInUse = new Map<number, string>();
-                    for (let name in val) {
-                        if (persistParams.listenList[name] == null) {
-                            delete val[name];
-                            continue;
-                        }
-                        if (val[name] == null) val[name] = persistParams.listenList[name];
-                        let host = val[name].host;
-                        if (!net.isIP(host)) try {
-                            let ip = await resolveToIP(host);
-                            console.log(`lookup hostname=[${host}] result ip=${ip}`);
-                            host = ip;
-                        } catch (e) {
-                            console.error(`error lookup hostname=${host}`, e);
-                            throw e;
-                        }
-                        let port = val[name].port;
-                        while (true) {
-                            port = await portFinder.findAfter(port, host);
-                            if (portInUse.get(port) == null) break;
-                            else do { port++; } while (portInUse.get(port) != null);
-                        }
-                        val[name] = { port: port, host: host };
-                        portInUse.set(port, name);
-                    }
+                    if (!isSaving) val = await params.avoidUsedPorts(val);
                     break;
                 case "CACertAndKey":
                     if (val == null || val.cert == null || val.key == null)
@@ -193,6 +178,44 @@ export class params {
         if (this.supportH2Map.size > this.supportH2MaxSize) this.cleanupSupportH2();
         if (supportH2 == null) this.supportH2Map.delete(url.href);
         else this.supportH2Map.set(url.href, { h2: supportH2, time: new Date().getTime() });
+    }
+
+    private static async avoidUsedPorts(list?: listenList): Promise<listenList> {
+        if (list == null) {
+            let newList: Record<string, listenAddr> = {};
+            for (let name in persistParams.listenList) {
+                let def = persistParams.listenList[name];
+                newList[name] = { host: def.host, port: def.port }
+            }
+            list = newList as listenList;
+        }
+        let portInUse = new Map<number, string>();
+        for (let name in list) {
+            if (persistParams.listenList[name] == null) {
+                delete list[name];
+            }
+        }
+        for (let name in persistParams.listenList) {
+            if (list[name] == null) list[name] = persistParams.listenList[name];
+            let host = list[name].host;
+            if (!net.isIP(host)) try {
+                let ip = await resolveToIP(host);
+                console.log(`lookup hostname=[${host}] result ip=${ip}`);
+                host = ip;
+            } catch (e) {
+                console.error(`error lookup hostname=${host}`, e);
+                throw e;
+            }
+            let port = list[name].port;
+            while (true) {
+                port = await portFinder.findAfter(port, host);
+                if (portInUse.get(port) == null) break;
+                else do { port++; } while (portInUse.get(port) != null);
+            }
+            list[name] = { port: port, host: host };
+            portInUse.set(port, name);
+        }
+        return list;
     }
 }
 
