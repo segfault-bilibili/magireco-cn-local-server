@@ -66,8 +66,16 @@ export class params {
     }
     static async load(path?: string): Promise<params> {
         if (path == null) path = this.defaultPath;
-        let fileContent: string | null = null;
-        if ((await fsPromises.stat(path)).isFile()) fileContent = fs.readFileSync(path, { encoding: "utf8" });
+        let fileContent: string | null;
+        if (!fs.existsSync(path)) fileContent = null;
+        else try {
+            if ((await fsPromises.stat(path)).isFile())
+                fileContent = fs.readFileSync(path, { encoding: "utf8" });
+            else fileContent = null;
+        } catch (e) {
+            console.error(e);
+            fileContent = null;
+        }
         return await this.import(fileContent, path);
     }
     static async import(fileContent: string | null, path: string): Promise<params> {
