@@ -4,6 +4,9 @@ import * as net from "net";
 import * as dns from "dns";
 import * as tls from "tls";
 import * as bsgamesdkPwdAuthenticate from "./bsgamesdk-pwd-authenticate";
+import * as path from "path";
+import * as fs from "fs";
+import * as fsPromises from "fs/promises";
 
 export type listenAddr = {
     port: number,
@@ -40,14 +43,34 @@ const persistParams: Record<string, any> = {
     upstreamProxyCACert: null,
     CACertAndKey: null,
     bsgamesdkIDs: null,
+    bsgamesdkResponse: null,
 }
 
 export class params {
+    static readonly defaultPath = path.join(".", "params.json");
     private mapData: Map<string, any>;
+    static async load(path?: string): Promise<params> {
+        if (path == null) path = this.defaultPath;
+        let mapJsonData = new Map<string, string>();
+        try {
+            if ((await fsPromises.stat(path)).isFile()) {
+                let fileContent = fs.readFileSync(path, { encoding: "utf8" });
+                mapJsonData = JSON.parse(fileContent, reviver);
+            } else console.log("Creating empty params.json");
+        } catch (e) {
+            console.log("Error reading params.json, creating empty one", e);
+        }
+        return await this.init(mapJsonData);
+    }
     stringify(): string {
         let mapJsonData = new Map<string, string>();
         this.mapData.forEach((val, key) => mapJsonData.set(key, JSON.stringify(val, replacer)));
         return JSON.stringify(mapJsonData, replacer);
+    }
+    save(path?: string): void {
+        if (path == null) path = params.defaultPath;
+        fs.writeFileSync(path, this.stringify(), {encoding: "utf-8"});
+        console.log("saved params.json");
     }
 
     get mode(): mode { return this.mapData.get("mode"); }
@@ -57,6 +80,8 @@ export class params {
     get upstreamProxyCACert(): string | undefined | null { return this.mapData.get("upstreamProxyCACert"); }
     get CACertAndKey(): certGenerator.certAndKey { return this.mapData.get("CACertAndKey"); }
     get bsgamesdkIDs(): bsgamesdkPwdAuthenticate.bsgamesdkIDs { return this.mapData.get("bsgamesdkIDs"); }
+    get bsgamesdkResponse(): bsgamesdkPwdAuthenticate.bsgamesdkResponse { return this.mapData.get("bsgamesdkResponse"); }
+    set bsgamesdkResponse(data: bsgamesdkPwdAuthenticate.bsgamesdkResponse) { this.mapData.set("bsgamesdkResponse", data); }
 
     get CACertPEM(): string { return this.CACertAndKey.cert; }
     get CACertSubjectHashOld(): string { return "9489bdaf"; }//FIXME
