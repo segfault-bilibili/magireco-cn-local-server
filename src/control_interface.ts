@@ -126,11 +126,13 @@ export class controlInterface {
     async shutdown(): Promise<void> {
         if (this.closing) return;
         this.closing = true;
+        this.params.save();
         await this.closeAll();
     }
     async restart(): Promise<void> {
         if (this.closing) return;
         this.closing = true;
+        this.params.save();
         await this.closeAll();
         await controlInterface.launch();
     }
