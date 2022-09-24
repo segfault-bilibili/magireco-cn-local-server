@@ -15,6 +15,14 @@ export class controlInterface {
     private readonly serverList: Array<httpProxy | localServer>;
     private readonly bsgamesdkPwdAuth: bsgamesdkPwdAuthenticate.bsgamesdkPwdAuth;
 
+    static async launch(): Promise<void> {
+        const params = await parameters.params.load();
+        if (params.checkModified()) await params.save();
+        let localserver = new localServer(params);
+        let httpproxy = new httpProxy(params);
+        new controlInterface(params, [localserver, httpproxy]);
+    }
+
     constructor(params: parameters.params, serverList: Array<localServer | httpProxy>) {
         const bsgamesdkPwdAuth = new bsgamesdkPwdAuthenticate.bsgamesdkPwdAuth(params,
             serverList.find((s) => s instanceof localServer) as localServer);
@@ -27,12 +35,16 @@ export class controlInterface {
             }
 
             if (req.url.startsWith("/api/")) {
-                let apiName = req.url.replace(/(^\/api\/)|(\/$)/g, "");
+                let apiName = req.url.replace(/(^\/api\/)|(\?.*$)/g, "");
                 console.log(`controlInterface received api request [${apiName}]`);
                 switch (apiName) {
-                    case "close":
-                        this.sendResultAsync(res, 200, "closing");
-                        this.close();
+                    case "shutdown":
+                        this.sendResultAsync(res, 200, "shutting down");
+                        this.shutdown();
+                        return;
+                    case "restart":
+                        this.sendResultAsync(res, 200, "restarting");
+                        this.restart();
                         return;
                     case "pwdlogin":
                         let charset = parseCharset.get(req.headers);
@@ -105,20 +117,39 @@ export class controlInterface {
         this.serverList = serverList;
         this.bsgamesdkPwdAuth = bsgamesdkPwdAuth;
     }
-    close(): void {
-        this.serverList.forEach((server) => server.close());
+    private closeAll(): void {
+        while (this.serverList.length > 0) {
+            let server = this.serverList.shift();
+            if (server != null) server.close();
+        }
         this.httpServerSelf.close();
+    }
+    shutdown(): void {
+        this.closeAll();
         this._closed = true;
+    }
+    restart(): void {
+        this.closeAll();
+        controlInterface.launch();
     }
 
     private homepageHTML(): string {
         return "<!doctype html>"
             + `\n<html>`
             + `\n<head>`
+            + `\n  <meta charset =\"utf-8\">`
             + `\n  <title>Magireco CN Local Server</title>`
             + `\n</head>`
             + `\n<body>`
             + `\n  <h1>Magireco CN Local Server</h1>`
+            + `\n  <hr>`
+            + `\n  <h2>Control</h2>`
+            + `\n  <form action=\"/api/shutdown\" method=\"get\">`
+            + `\n    <button>Shutdown</button>`
+            + `\n  </form>`
+            + `\n  <form action=\"/api/restart\" method=\"get\">`
+            + `\n    <button>Restart</button>`
+            + `\n  </form>`
             + `\n  <hr>`
             + `\n  <h2>Bilibili Login</h2>`
             + `\n  <form action=\"/api/pwdlogin\" method=\"post\">`
