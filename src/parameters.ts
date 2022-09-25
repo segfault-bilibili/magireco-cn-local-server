@@ -114,7 +114,6 @@ export class params {
     get CACertAndKey(): certGenerator.certAndKey { return this.mapData.get("CACertAndKey"); }
     get bsgamesdkIDs(): bsgamesdkPwdAuthenticate.bsgamesdkIDs { return this.mapData.get("bsgamesdkIDs"); }
     get bsgamesdkResponse(): bsgamesdkPwdAuthenticate.bsgamesdkResponse { return this.mapData.get("bsgamesdkResponse"); }
-    set bsgamesdkResponse(data: bsgamesdkPwdAuthenticate.bsgamesdkResponse) { this.mapData.set("bsgamesdkResponse", data); }
 
     get CACertPEM(): string { return this.CACertAndKey.cert; }
     get CACertSubjectHashOld(): string { return "9489bdaf"; }//FIXME

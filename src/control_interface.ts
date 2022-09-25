@@ -63,8 +63,6 @@ export class controlInterface {
                         }
                         try {
                             let result = await this.bsgamesdkPwdAuth.login(username, password);
-                            this.params.bsgamesdkResponse = result;
-                            this.params.save();
                             let resultText = JSON.stringify(result);
                             this.sendResultAsync(res, 200, resultText);
                         } catch (e) {
