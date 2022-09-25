@@ -4,6 +4,7 @@ import * as net from "net";
 import * as dns from "dns";
 import * as tls from "tls";
 import * as bsgamesdkPwdAuthenticate from "./bsgamesdk-pwd-authenticate";
+import * as userdataDump from "./userdata_dump";
 import * as path from "path";
 import * as fs from "fs";
 import * as fsPromises from "fs/promises";
@@ -35,7 +36,8 @@ const persistParams: {
     CACertAndKey?: certGenerator.certAndKey,
     bsgamesdkIDs?: bsgamesdkPwdAuthenticate.bsgamesdkIDs,
     bsgamesdkResponse?: bsgamesdkPwdAuthenticate.bsgamesdkResponse,
-    openIdTicket?: bsgamesdkPwdAuthenticate.openIdTicket,
+    openIdTicket?: userdataDump.openIdTicket,
+    magirecoIDs?: userdataDump.magirecoIDs,
 } = {
     mode: mode.ACCOUNT_DUMP,
     listenList: {
@@ -55,6 +57,7 @@ const persistParams: {
     bsgamesdkIDs: undefined,
     bsgamesdkResponse: undefined,
     openIdTicket: undefined,
+    magirecoIDs: undefined,
 }
 
 export class params {
@@ -135,6 +138,8 @@ export class params {
     get CACertAndKey(): certGenerator.certAndKey { return this.mapData.get("CACertAndKey"); }
     get bsgamesdkIDs(): bsgamesdkPwdAuthenticate.bsgamesdkIDs { return this.mapData.get("bsgamesdkIDs"); }
     get bsgamesdkResponse(): bsgamesdkPwdAuthenticate.bsgamesdkResponse { return this.mapData.get("bsgamesdkResponse"); }
+    get openIdTicket(): userdataDump.openIdTicket { return this.mapData.get("openIdTicket"); }
+    get magirecoIDs(): userdataDump.magirecoIDs { return this.mapData.get("magirecoIDs"); }
 
     get CACertPEM(): string { return this.CACertAndKey.cert; }
     get CACertSubjectHashOld(): string { return "9489bdaf"; }//FIXME
@@ -175,6 +180,10 @@ export class params {
                 case "bsgamesdkIDs":
                     if (val == null || val.buvid == null || val.udid == null || val.bd_id == null)
                         val = bsgamesdkPwdAuthenticate.bsgamesdkPwdAuth.newRandomID();
+                    break;
+                case "magirecoIDs":
+                    if (val == null || val.device_id == null)
+                        val = userdataDump.userdataDmp.newRandomID();
                     break;
             }
             newMapData.set(key, val);

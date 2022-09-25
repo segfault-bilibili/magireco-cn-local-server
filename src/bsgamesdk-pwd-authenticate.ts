@@ -1,7 +1,6 @@
 import * as crypto from "crypto";
 import * as http2 from "http2";
 import * as parameters from "./parameters";
-import { parseCharset } from "./parse_charset";
 import { localServer } from "./local_server";
 
 export type bsgamesdkIDs = {
@@ -35,11 +34,6 @@ export type bsgamesdkResponse = {
     server_message: string,
 }
 
-export type openIdTicket = {
-    open_id: string,
-    ticket: string,
-}
-
 export const app_key_Android = "add83765a53c4664944eabc18298731b";
 
 export class bsgamesdkPwdAuth {
@@ -60,13 +54,10 @@ export class bsgamesdkPwdAuth {
         return loginResult;
     }
 
-    private async bsgamesdkReq(url: URL, postData?: string): Promise<bsgamesdkResponse> {
-        const host = url.host;
-        const path = url.pathname + url.search;
-        const authorityURL = new URL(`https://${host}/`);
-        let sess = await this.localServer.getH2SessionAsync(authorityURL, "h2", host);
+    private bsgamesdkReq(url: URL, postData?: string): Promise<bsgamesdkResponse> {
         return new Promise((resolve, reject) => {
-            sess.on('error', (err) => reject(err));
+            const host = url.host;
+            const path = url.pathname + url.search;
             const method = postData == null ? http2.constants.HTTP2_METHOD_GET : http2.constants.HTTP2_METHOD_POST;
             const reqHeaders = {
                 [http2.constants.HTTP2_HEADER_METHOD]: method,
@@ -77,31 +68,16 @@ export class bsgamesdkPwdAuth {
                 [http2.constants.HTTP2_HEADER_CONTENT_TYPE]: "application/x-www-form-urlencoded",
                 [http2.constants.HTTP2_HEADER_ACCEPT_ENCODING]: "gzip, deflate",
             }
-            let req = sess.request(reqHeaders);
-            req.on('error', (err) => reject(err));
-            req.on('response', (respHeaders, flags) => {
-                let status = respHeaders[":status"];
-                if (status == http2.constants.HTTP_STATUS_OK) {
-                    let respBuf = Buffer.from(new Uint8Array(0));
-                    req.on('data', (chunk) => { respBuf = Buffer.concat([respBuf, chunk]); });
-                    req.on('end', () => {
-                        if (respBuf.byteLength == 0) reject(new Error("empty respBody"));
-                        else try {
-                            const encoding = respHeaders["content-encoding"];
-                            respBuf = localServer.decompress(respBuf, encoding);
-                            const charset = parseCharset.get(respHeaders);
-                            let respBody = respBuf.toString(charset);
-                            let respBodyParsed = JSON.parse(respBody);
-                            if (respBodyParsed == null) reject(new Error("respBodyParsed == null"));
-                            else resolve(respBodyParsed);
-                        } catch (e) {
-                            reject(e);
-                        }
-                    });
-                } else reject(new Error(`status=[${status}]`));//respBody is discarded
-            });
-            if (postData != null) req.write(postData, 'utf8');
-            req.end();
+            this.localServer.http2RequestAsync(url, reqHeaders, postData).then((result) => {
+                if (typeof result.respBody !== 'string') reject(new Error("cannot parse binary data"));
+                else try {
+                    let respBodyParsed = JSON.parse(result.respBody);
+                    if (respBodyParsed == null) reject(new Error("respBodyParsed == null"));
+                    else resolve(respBodyParsed);
+                } catch (e) {
+                    reject(e);
+                }
+            }).catch((e) => reject(e));
         });
     }
 

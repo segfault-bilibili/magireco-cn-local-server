@@ -774,6 +774,49 @@ export class localServer {
         });
     }
 
+    http2RequestAsync(url: URL, reqHeaders: http2.OutgoingHttpHeaders, reqBody?: string | Buffer
+    ): Promise<{ headers: http2.IncomingHttpHeaders & http2.IncomingHttpStatusHeader, respBody: string | Buffer }> {
+        return new Promise((resolve, reject) => {
+            let tlsSocket = tls.connect({
+                ca: this.params.CACerts,
+                host: this.params.listenList.localServer.host,
+                port: this.params.listenList.localServer.port,
+                servername: url.hostname,
+                ALPNProtocols: ["h2"],
+            });
+            tlsSocket.on('error', (err) => reject(err));
+            tlsSocket.on('secureConnect', () => {
+                const authority = `https://${url.hostname}/`;
+                let session = http2.connect(authority, { createConnection: () => tlsSocket });
+                session.on('error', (err) => reject(err));
+                session.on('connect', (session) => {
+                    let request = session.request(reqHeaders);
+                    request.on('error', (err) => reject(err));
+                    request.on('response', (headers, flags) => {
+                        let respHeaders = headers;
+                        let respBodyBuf = Buffer.from(new ArrayBuffer(0)), respBodyStr: string | undefined;
+                        request.on('data', (chunk) => { respBodyBuf = Buffer.concat([respBodyBuf, chunk as Buffer]); });
+                        request.on('end', () => {
+                            try {
+                                const encoding = respHeaders["content-encoding"];
+                                respBodyBuf = localServer.decompress(respBodyBuf, encoding);
+                                const charset = parseCharset.get(respHeaders);
+                                respBodyStr = respBodyBuf.toString(charset);
+                            } catch (e) { // not rejecting
+                                console.error(`http2RequestAsync authority=[${authority}] decompressing or decoding respBodyBuf to string error`, e);
+                            }
+                            let respBody = respBodyStr != null ? respBodyStr : respBodyBuf;
+                            resolve({ headers: respHeaders, respBody: respBody });
+                        });
+                    });
+                    if (typeof reqBody === 'string') request.end(Buffer.from(reqBody, 'utf-8'));
+                    else if (reqBody instanceof Buffer) request.end(reqBody);
+                    else request.end();
+                });
+            });
+        });
+    }
+
     static decompress(data: Buffer, encoding?: string): Buffer {
         if (encoding == null) return data = Buffer.concat([data]);
         let decompressed: Buffer;
