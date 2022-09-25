@@ -147,14 +147,6 @@ export class controlInterface {
             + `\n<body>`
             + `\n  <h1>Magireco CN Local Server</h1>`
             + `\n  <hr>`
-            + `\n  <h2>Control</h2>`
-            + `\n  <form action=\"/api/shutdown\" method=\"get\">`
-            + `\n    <button>Shutdown</button>`
-            + `\n  </form>`
-            + `\n  <form action=\"/api/restart\" method=\"get\">`
-            + `\n    <button>Restart</button>`
-            + `\n  </form>`
-            + `\n  <hr>`
             + `\n  <h2>Bilibili Login</h2>`
             + `\n  <form action=\"/api/pwdlogin\" method=\"post\">`
             + `\n    <div>`
@@ -168,6 +160,14 @@ export class controlInterface {
             + `\n    <div>`
             + `\n      <button>Login</button>`
             + `\n    </div>`
+            + `\n  </form>`
+            + `\n  <hr>`
+            + `\n  <h2>Control</h2>`
+            + `\n  <form action=\"/api/shutdown\" method=\"get\">`
+            + `\n    <button>Shutdown</button>`
+            + `\n  </form>`
+            + `\n  <form action=\"/api/restart\" method=\"get\">`
+            + `\n    <button>Restart</button>`
             + `\n  </form>`
             + `\n  <hr>`
             + `\n</body>`
