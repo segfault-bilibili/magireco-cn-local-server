@@ -35,6 +35,7 @@ const persistParams: {
     CACertAndKey?: certGenerator.certAndKey,
     bsgamesdkIDs?: bsgamesdkPwdAuthenticate.bsgamesdkIDs,
     bsgamesdkResponse?: bsgamesdkPwdAuthenticate.bsgamesdkResponse,
+    openIdTicket?: bsgamesdkPwdAuthenticate.openIdTicket,
 } = {
     mode: mode.ACCOUNT_DUMP,
     listenList: {
@@ -53,6 +54,7 @@ const persistParams: {
     CACertAndKey: undefined,
     bsgamesdkIDs: undefined,
     bsgamesdkResponse: undefined,
+    openIdTicket: undefined,
 }
 
 export class params {

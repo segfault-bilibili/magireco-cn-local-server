@@ -1,6 +1,5 @@
 import * as crypto from "crypto";
 import * as http2 from "http2";
-import * as zlib from "zlib";
 import * as parameters from "./parameters";
 import { parseCharset } from "./parse_charset";
 import { localServer } from "./local_server";
@@ -34,6 +33,11 @@ export type bsgamesdkResponse = {
     expires?: number,
 
     server_message: string,
+}
+
+export type openIdTicket = {
+    open_id: string,
+    ticket: string,
 }
 
 export const app_key_Android = "add83765a53c4664944eabc18298731b";
@@ -78,21 +82,14 @@ export class bsgamesdkPwdAuth {
             req.on('response', (respHeaders, flags) => {
                 let status = respHeaders[":status"];
                 if (status == http2.constants.HTTP_STATUS_OK) {
-                    let encoding = respHeaders["content-encoding"];
-                    let charset = parseCharset.get(respHeaders);
                     let respBuf = Buffer.from(new Uint8Array(0));
                     req.on('data', (chunk) => { respBuf = Buffer.concat([respBuf, chunk]); });
                     req.on('end', () => {
                         if (respBuf.byteLength == 0) reject(new Error("empty respBody"));
                         else try {
-                            switch (encoding) {
-                                case 'gzip':
-                                    respBuf = zlib.gunzipSync(respBuf);
-                                    break;
-                                case 'deflate':
-                                    respBuf = zlib.inflateSync(respBuf);
-                                    break;
-                            }
+                            const encoding = respHeaders["content-encoding"];
+                            respBuf = localServer.decompress(respBuf, encoding);
+                            const charset = parseCharset.get(respHeaders);
                             let respBody = respBuf.toString(charset);
                             let respBodyParsed = JSON.parse(respBody);
                             if (respBodyParsed == null) reject(new Error("respBodyParsed == null"));
