@@ -128,6 +128,7 @@ export class controlInterface {
         await this.closeAll();
     }
     async restart(): Promise<void> {
+        //FIXME
         if (this.closing) return;
         this.closing = true;
         this.params.save();
@@ -164,9 +165,11 @@ export class controlInterface {
             + `\n  <form action=\"/api/shutdown\" method=\"get\">`
             + `\n    <button>Shutdown</button>`
             + `\n  </form>`
+            /* //FIXME
             + `\n  <form action=\"/api/restart\" method=\"get\">`
             + `\n    <button>Restart</button>`
             + `\n  </form>`
+            */
             + `\n  <hr>`
             + `\n</body>`
             + `\n</html>`
