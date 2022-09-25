@@ -96,6 +96,11 @@ export class controlInterface {
                     res.writeHead(200, { ["Content-Type"]: "text/plain" });
                     res.end(ca_subject_hash_old);
                     return;
+                case "/params.json":
+                    console.log(`servering params.json`);
+                    res.writeHead(200, { ["Content-Type"]: "application/json; charset=utf-8" });
+                    res.end(this.params.stringify());
+                    return;
             }
 
             res.writeHead(403, { 'Content-Type': 'text/plain' });
@@ -145,6 +150,7 @@ export class controlInterface {
             + `\n</head>`
             + `\n<body>`
             + `\n  <h1>Magireco CN Local Server</h1>`
+            + `\n  <a href=\"/params.json\">params.json</a><br>`
             + `\n  <hr>`
             + `\n  <h2>Bilibili Login</h2>`
             + `\n  <form action=\"/api/pwdlogin\" method=\"post\">`
