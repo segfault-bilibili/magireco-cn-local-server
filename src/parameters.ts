@@ -60,6 +60,7 @@ export class params {
     private path: string;
     private mapData: Map<string, any>;
     private lastSaved: string;
+    private unfinishedSave: Array<Promise<void>>;
     static async load(path?: string): Promise<params> {
         if (path == null) path = this.defaultPath;
         let fileContent: string | null;
@@ -83,7 +84,9 @@ export class params {
             importedMapData = new Map<string, any>();
             fileContent = "";
         } else try {
-            importedMapData = JSON.parse(fileContent, reviver);
+            let parsed = JSON.parse(fileContent, reviver);
+            if (parsed instanceof Map) importedMapData = parsed;
+            else throw new Error("not a Map");
         } catch (e) {
             console.log("Error reading params.json, creating empty one");
             importedMapData = new Map<string, any>();
@@ -94,13 +97,29 @@ export class params {
     stringify(): string {
         return JSON.stringify(this.mapData, replacer);
     }
-    async save(path?: string): Promise<void> {
-        if (path == null) path = this.path;
-        let preparedMapData = await params.prepare(this.mapData, true);
-        let fileContent = JSON.stringify(preparedMapData, replacer);
-        fs.writeFileSync(path, fileContent, { encoding: "utf-8" });
-        this.lastSaved = fileContent;
-        console.log("saved params.json");
+    save(param?: { key: string, val: any }, path?: string): Promise<void> {
+        let lastPromise = this.unfinishedSave.shift();
+        let promise = new Promise<void>((resolve, reject) => {
+            let doSave = () => {
+                if (param != null) this.mapData.set(param.key, param.val);
+                params.prepare(this.mapData, true).then((preparedMapData) => {
+                    try {
+                        let fileContent = JSON.stringify(preparedMapData, replacer);
+                        if (path == null) path = this.path;
+                        fs.writeFileSync(path, fileContent, { encoding: "utf-8" });
+                        this.lastSaved = fileContent;
+                        console.log("saved params.json");
+                        resolve();
+                    } catch (e) {
+                        reject(e);
+                    }
+                });
+            }
+            if (lastPromise != null) lastPromise.then(() => doSave());
+            else doSave();
+        });
+        this.unfinishedSave.push(promise);
+        return promise;
     }
     checkModified(): boolean {
         return this.stringify() !== this.lastSaved;
@@ -134,6 +153,7 @@ export class params {
         this.CACerts = CACerts;
         this.supportH2Map = new Map<string, { h2: boolean, time: number }>();
         this.lastSaved = lastSaved;
+        this.unfinishedSave = [];
         this.path = path;
     }
     private static async prepare(oldMapData: Map<string, any>, isSaving: boolean): Promise<Map<string, any>> {
