@@ -224,21 +224,49 @@ export class params {
     }
 }
 
-//https://stackoverflow.com/questions/29085197/how-do-you-json-stringify-an-es6-map
+// Author: Stefnotch
+// https://stackoverflow.com/questions/29085197/how-do-you-json-stringify-an-es6-map/73155667#73155667
 export function replacer(key: any, value: any) {
-    if (value instanceof Map) {
-        return {
-            dataType: 'Map',
-            value: Array.from(value.entries()), // or with spread: value: [...value]
-        };
-    } else {
-        return value;
+    if (typeof value === "object" && value !== null) {
+        if (value instanceof Map) {
+            return {
+                _meta: { type: "map" },
+                value: Array.from(value.entries()),
+            };
+        } else if (value instanceof Set) { // bonus feature!
+            return {
+                _meta: { type: "set" },
+                value: Array.from(value.values()),
+            };
+        } else if ("_meta" in value) {
+            // Escape "_meta" properties
+            return {
+                ...value,
+                _meta: {
+                    type: "escaped-meta",
+                    value: value["_meta"],
+                },
+            };
+        }
     }
+    return value;
 }
 export function reviver(key: any, value: any) {
-    if (typeof value === 'object' && value !== null) {
-        if (value.dataType === 'Map') {
-            return new Map(value.value);
+    if (typeof value === "object" && value !== null) {
+        if ("_meta" in value) {
+            if (value._meta.type === "map") {
+                return new Map(value.value);
+            } else if (value._meta.type === "set") {
+                return new Set(value.value);
+            } else if (value._meta.type === "escaped-meta") {
+                // Un-escape the "_meta" property
+                return {
+                    ...value,
+                    _meta: value._meta.value,
+                };
+            } else {
+                console.warn("Unexpected meta", value._meta);
+            }
         }
     }
     return value;
