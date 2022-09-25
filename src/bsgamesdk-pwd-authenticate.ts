@@ -95,7 +95,8 @@ export class bsgamesdkPwdAuth {
                             }
                             let respBody = respBuf.toString(charset);
                             let respBodyParsed = JSON.parse(respBody);
-                            resolve(respBodyParsed);
+                            if (respBodyParsed == null) reject(new Error("respBodyParsed == null"));
+                            else resolve(respBodyParsed);
                         } catch (e) {
                             reject(e);
                         }
