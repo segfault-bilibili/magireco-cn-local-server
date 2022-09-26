@@ -36,6 +36,7 @@ export class controlInterface {
                 let apiName = req.url.replace(/(^\/api\/)|(\?.*$)/g, "");
                 console.log(`controlInterface received api request [${apiName}]`);
                 switch (apiName) {
+                    /*
                     case "shutdown":
                         this.sendResultAsync(res, 200, "shutting down");
                         this.shutdown();
@@ -44,6 +45,7 @@ export class controlInterface {
                         this.sendResultAsync(res, 200, "restarting");
                         this.restart();
                         return;
+                    */
                     case "pwdlogin":
                         let charset = parseCharset.get(req.headers);
                         let postData = await new Promise((resolve, reject) => {
@@ -201,11 +203,11 @@ export class controlInterface {
             + `\n    </div>`
             + `\n  </form>`
             + `\n  <hr>`
+            /* //FIXME
             + `\n  <h2>Control</h2>`
             + `\n  <form action=\"/api/shutdown\" method=\"get\">`
             + `\n    <button>Shutdown</button>`
             + `\n  </form>`
-            /* //FIXME
             + `\n  <form action=\"/api/restart\" method=\"get\">`
             + `\n    <button>Restart</button>`
             + `\n  </form>`
