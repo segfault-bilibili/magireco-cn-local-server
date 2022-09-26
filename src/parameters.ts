@@ -132,6 +132,17 @@ export class params {
 
     get mode(): mode { return this.mapData.get("mode"); }
     get listenList(): listenList { return this.mapData.get("listenList"); }
+    get clashYaml(): string {
+        const host = this.listenList.httpProxy.host;
+        const port = this.listenList.httpProxy.port;
+        return `mode: global`
+            + `\n`
+            + `\nproxies:`
+            + `\n - name: "magirecolocal"`
+            + `\n   type: http`
+            + `\n   server: ${host}`
+            + `\n   port: ${port}"`
+    }
     get upstreamProxy(): listenAddr { return this.mapData.get("upstreamProxy"); }
     get upstreamProxyEnabled(): boolean { return this.mapData.get("upstreamProxyEnabled"); }
     get upstreamProxyCACert(): string | undefined | null { return this.mapData.get("upstreamProxyCACert"); }
