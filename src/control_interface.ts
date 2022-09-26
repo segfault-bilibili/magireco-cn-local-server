@@ -4,6 +4,7 @@ import { httpProxy } from "./http_proxy";
 import { localServer } from "./local_server";
 import * as bsgamesdkPwdAuthenticate from "./bsgamesdk-pwd-authenticate";
 import { parseCharset } from "./parse_charset";
+import { getStrRep } from "./getStrRep";
 
 export class controlInterface {
     private closing = false;
@@ -142,6 +143,21 @@ export class controlInterface {
     }
 
     private homepageHTML(): string {
+        let loginStatus = `Not logged in`, loginStatusStyle = "color: red";
+        const bsgamesdkResponse = this.params.bsgamesdkResponse;
+        if (bsgamesdkResponse != null && bsgamesdkResponse.access_key != null) {
+            let since: number | string | undefined = bsgamesdkResponse.timestamp;
+            if (since != null) {
+                since = Number(since);
+                since = `${new Date(since).toLocaleDateString()} ${new Date(since).toLocaleTimeString()}`;
+            }
+            let expires: number | string | undefined = bsgamesdkResponse.expires;
+            if (expires != null) expires = `${new Date(expires).toLocaleDateString()} ${new Date(expires).toLocaleTimeString()}`;
+            loginStatus = getStrRep(`Logged in as uname=[${bsgamesdkResponse.uname}] uid=[${bsgamesdkResponse.uid}]`
+                + ` auth_name=[${bsgamesdkResponse.auth_name}] realname_verified=${bsgamesdkResponse.realname_verified}`
+                + ` since [${since}] expires at [${expires}]`);
+            loginStatusStyle = "color: green";
+        }
         return "<!doctype html>"
             + `\n<html>`
             + `\n<head>`
@@ -153,11 +169,21 @@ export class controlInterface {
             + `\n        window.location.reload(true);/*refresh on back or forward*/`
             + `\n      }`
             + `\n    });`
+            + `\n    setTimeout(() => {`
+            + `\n      document.getElementById(\"loginstatus\").textContent = \"${loginStatus}\";`
+            + `\n    });`
             + `\n  </script>`
+            + `\n  <style>`
+            + `\n    label,input,button{`
+            + `\n      display:flex;`
+            + `\n      flex-direction:column;`
+            + `\n    }`
+            + `\n  </style>`
             + `\n</head>`
             + `\n<body>`
             + `\n  <h1>Magireco CN Local Server</h1>`
-            + `\n  <a href=\"/params.json\">params.json</a><br>`
+            + `\n  <label for=\"paramsjson\">Download full backup:</label>`
+            + `\n  <a id=\"paramsjson\" href=\"/params.json\">params.json</a><br>`
             + `\n  <hr>`
             + `\n  <h2>Bilibili Login</h2>`
             + `\n  <form action=\"/api/pwdlogin\" method=\"post\">`
@@ -170,7 +196,8 @@ export class controlInterface {
             + `\n      <input name=\"password\" id=\"password\" type=\"password\" value=\"\">`
             + `\n    </div>`
             + `\n    <div>`
-            + `\n      <button>Login</button>`
+            + `\n      <label style=\"${loginStatusStyle}\" id=\"loginstatus\" for=\"loginbtn\">TO_BE_FILLED_BY_JAVASCRIPT</label>`
+            + `\n      <button id=\"loginbtn\">Login</button>`
             + `\n    </div>`
             + `\n  </form>`
             + `\n  <hr>`
@@ -191,8 +218,7 @@ export class controlInterface {
         statusCode: number, result: string
     ): Promise<void> {
         return new Promise((resolve, reject) => {
-            let strRep = Buffer.from(result, 'utf16le').swap16().toString('hex')
-                .replace(/([\da-f]{4})/g, "\\u$1").replace(/\\u00/g, "\\x");
+            let strRep = getStrRep(result);
             let html = `<!doctype html>`
                 + `\n<html>`
                 + `\n<head>`
