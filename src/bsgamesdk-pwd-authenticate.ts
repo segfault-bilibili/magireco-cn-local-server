@@ -39,7 +39,7 @@ export const app_key_Android = "add83765a53c4664944eabc18298731b";
 export class bsgamesdkPwdAuth {
     private readonly params: parameters.params;
     private localServer: localServer;
-    get IDs(): bsgamesdkIDs { return this.params.bsgamesdkIDs; }
+    private get IDs(): bsgamesdkIDs { return this.params.bsgamesdkIDs; }
 
     constructor(params: parameters.params, localServer: localServer) {
         this.params = params;
