@@ -43,9 +43,13 @@ export class certGen {
         cert.serialNumber = crypto.randomBytes(32).toString("hex");
         cert.validity.notBefore = new Date();
         cert.validity.notAfter = new Date();
-        if (isCA) cert.validity.notAfter.setFullYear(cert.validity.notBefore.getFullYear() + 10);
-        else cert.validity.notAfter.setTime(cert.validity.notBefore.getTime() + 90 * 24 * 60 * 60 * 1000);
-        cert.validity.notBefore.setTime(cert.validity.notBefore.getTime() - 5 * 24 * 60 * 60 * 1000);
+        if (isCA) {
+            cert.validity.notBefore.setFullYear(cert.validity.notBefore.getFullYear() - 1);
+            cert.validity.notAfter.setFullYear(cert.validity.notBefore.getFullYear() + 29);
+        } else {
+            cert.validity.notBefore.setTime(cert.validity.notBefore.getTime() - 5 * 24 * 60 * 60 * 1000);
+            cert.validity.notAfter.setTime(cert.validity.notBefore.getTime() + 85 * 24 * 60 * 60 * 1000);
+        }
         let attrs: Array<any> = [{
             name: 'commonName',
             value: commonName
@@ -71,34 +75,11 @@ export class certGen {
         let exts: Array<any> = [{
             name: 'basicConstraints',
             cA: isCA
-        }, {
-            name: 'keyUsage',
-            keyCertSign: true,
-            digitalSignature: true,
-            nonRepudiation: true,
-            keyEncipherment: true,
-            dataEncipherment: true
-        }, {
-            name: 'extKeyUsage',
-            serverAuth: true,
-            clientAuth: true,
-            codeSigning: true,
-            emailProtection: true,
-            timeStamping: true
-        }, {
-            name: 'nsCertType',
-            client: true,
-            server: true,
-            email: true,
-            objsign: true,
-            sslCA: isCA,
-            emailCA: isCA,
-            objCA: isCA
         }];
         if (!isCA) {
             const dNSName = 2;
             const iPAddress = 7;
-            let altNames: Array<{type: number, value: string} | {type: number, ip: string}> = [{
+            let altNames: Array<{ type: number, value: string } | { type: number, ip: string }> = [{
                 type: dNSName,
                 value: commonName
             }];
