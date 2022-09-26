@@ -473,6 +473,13 @@ export class localServer {
         const http2ListenAddr = params.listenList.localServer;
         http2SecureServer.listen(http2ListenAddr.port, http2ListenAddr.host);
         console.log(`localServer listening on [${http2ListenAddr.host}:${http2ListenAddr.port}]`);
+        if (params.upstreamProxyEnabled) {
+            let proxy = params.upstreamProxy;
+            console.log(`localServer upstream proxy enabled [${proxy.host}:${proxy.port}]`
+                + ` cacert [${params.upstreamProxyCACert != null}]`);
+        } else {
+            console.log(`localServer upstream proxy disabled`);
+        }
 
         const http1TlsServerOptions: tls.TlsOptions = certGen.getCertAndKey(params.listenList.localHttp1Server.host);
         http1TlsServerOptions.SNICallback = SNICallback;

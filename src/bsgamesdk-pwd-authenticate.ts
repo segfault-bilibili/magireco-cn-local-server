@@ -69,7 +69,9 @@ export class bsgamesdkPwdAuth {
                 [http2.constants.HTTP2_HEADER_ACCEPT_ENCODING]: "gzip, deflate",
             }
             this.localServer.http2RequestAsync(url, reqHeaders, postData).then((result) => {
-                if (typeof result.respBody !== 'string') reject(new Error("cannot parse binary data"));
+                const statusCode = result.headers[":status"];
+                if (statusCode != 200) reject(new Error(`status=[${statusCode}]`));
+                else if (typeof result.respBody !== 'string') reject(new Error("cannot parse binary data"));
                 else try {
                     let respBodyParsed = JSON.parse(result.respBody);
                     if (respBodyParsed == null) reject(new Error("respBodyParsed == null"));

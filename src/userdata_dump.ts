@@ -25,6 +25,18 @@ export class userdataDmp {
     private readonly params: parameters.params;
     private localServer: localServer;
     private get magirecoIDs(): magirecoIDs { return this.params.magirecoIDs; }
+    get lastSnapshot(): snapshot | undefined {
+        return this._lastSnapshot;
+    }
+    private _lastSnapshot?: snapshot;
+    get isDownloading(): boolean {
+        return this._isDownloading;
+    }
+    private _isDownloading = false;
+    get lastError(): any {
+        return this._lastError;
+    }
+    private _lastError?: any;
 
     private get timeStamp(): string {
         return String(new Date().getTime());
@@ -89,7 +101,17 @@ export class userdataDmp {
         this.clientSessionId = 100 + Math.floor(Math.random() * 899);
     }
 
-    async getSnapshot(): Promise<snapshot> {
+    getSnapshotAsync(): Promise<snapshot> {
+        return new Promise((resolve, reject) =>
+            this.getSnapshotPromise()
+                .then((result) => resolve(result))
+                .catch((err) => reject(this._lastError = err))
+        );
+    }
+    private async getSnapshotPromise(): Promise<snapshot> {
+        if (this.isDownloading) throw new Error("previous download has not finished");
+        this._isDownloading = true;
+
         const timestamp = new Date().getTime();
         const httpGetRespMap = new Map<string, any>(), httpPostRespMap = new Map<string, Map<string, any>>();
 
@@ -103,7 +125,7 @@ export class userdataDmp {
         const reap = async (crops: Array<Promise<{ url: string, respBody: any }>>, map: Map<string, any>) => {
             await Promise.all(crops.map((promise) => promise.then((result) => {
                 const key = result.url, val = result.respBody;
-                if (map.has(key)) throw new Error(`key=[${key}] already exists`);
+                if (map.has(key)) throw this._lastError = new Error(`key=[${key}] already exists`);
                 map.set(key, val);
             })));
         }
@@ -114,7 +136,7 @@ export class userdataDmp {
             if (!(await this.testLogin())) throw new Error("login test failed, cannot login");
         }
 
-        const fetchPromises1 = this.httpGetApiList.map((url) => this.execHttpGetApi(url));
+        const fetchPromises1 = this.httpGetApiList.map((url) => this.execHttpGetApi(url, 2));
         console.log(`userdataDmp.getSnapshot() 1st round fetching...`);
         await grow(fetchPromises1);
         console.log(`userdataDmp.getSnapshot() 1st round collecting...`);
@@ -123,13 +145,15 @@ export class userdataDmp {
 
         //TODO 获得履历翻页、左上角个人头像、好友等等
 
-        return {
+        this._lastSnapshot = {
             timestamp: timestamp,
             httpResp: {
                 get: httpGetRespMap,
                 post: httpPostRespMap,
             }
         };
+        this._isDownloading = false;
+        return this._lastSnapshot;
     }
 
     private async testLogin(): Promise<boolean> {
@@ -188,7 +212,9 @@ export class userdataDmp {
                     reqHeaders["Webview-Session-Id"] = this.webSessionId;
                 }
                 this.localServer.http2RequestAsync(url, reqHeaders, postData).then((result) => {
-                    if (typeof result.respBody !== 'string') reject(new Error("cannot parse binary data"));
+                    const statusCode = result.headers[":status"];
+                    if (statusCode != 200) reject(new Error(`statusCode=[${statusCode}]`));
+                    else if (typeof result.respBody !== 'string') reject(new Error("cannot parse binary data"));
                     else try {
                         if (result.respBody === "") reject(new Error("respBody is empty"));
                         const respBodyParsed = JSON.parse(result.respBody);
@@ -229,6 +255,7 @@ export class userdataDmp {
             console.error(`gameLogin unsuccessful resultCode=${resp.resultCode} errorTxt=${resp.errorTxt}`);
             throw new Error(JSON.stringify(resp));
         }
+        this._flag = 1;
         return resp;
     }
 
@@ -364,10 +391,6 @@ export class userdataDmp {
             new URL(
                 `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/friend/follower/list/1`
             ),
-            //好友（玩家推荐）
-            new URL(
-                `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/search/friend_search/_search`
-            ),
             //设定
             new URL(
                 `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/ConfigTop?value=`
@@ -433,13 +456,23 @@ export class userdataDmp {
         ];
     }
 
-    private async execHttpGetApi(url: URL): Promise<{ url: string, respBody: any }> {
-        const resp = await this.magirecoJsonRequst(url);
-        if (resp.resultCode === "error") {
-            console.error(`execHttpGetApi unsuccessful resultCode=${resp.resultCode} errorTxt=${resp.errorTxt}`);
-            throw new Error(JSON.stringify(resp));
+    private async execHttpGetApi(url: URL, retries = 0, retryAfterSec = 4): Promise<{ url: string, respBody: any }> {
+        let lastError: any = new Error("execHttpGetApi max retries exceeded");
+        for (let i = 0, resp; i <= retries && resp == null; i++) {
+            try {
+                resp = await this.magirecoJsonRequst(url);
+                if (resp.resultCode === "error") {
+                    console.error(`execHttpGetApi unsuccessful resultCode=${resp.resultCode} errorTxt=${resp.errorTxt}`);
+                    throw new Error(JSON.stringify(resp));
+                }
+                return { url: url.href, respBody: resp };
+            } catch (e) {
+                this._lastError = lastError = e;
+                console.error(`execHttpGetApi error`, e, `will retry after ${retryAfterSec}s...`);
+                await new Promise<void>((resolve) => setTimeout(() => resolve(), retryAfterSec * 1000));
+            }
         }
-        return { url: url.href, respBody: resp };
+        throw this._lastError = lastError;
     }
 
     static newRandomID(): magirecoIDs {

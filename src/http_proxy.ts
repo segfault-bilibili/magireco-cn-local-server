@@ -245,6 +245,13 @@ export class httpProxy {
         let listenAddr = params.listenList.httpProxy;
         httpServer.listen(listenAddr.port, listenAddr.host);
         console.log(`httpProxy listening on [${listenAddr.host}:${listenAddr.port}]`);
+        if (params.upstreamProxyEnabled) {
+            let proxy = params.upstreamProxy;
+            console.log(`localServer upstream proxy enabled [${proxy.host}:${proxy.port}]`
+                + ` cacert [${params.upstreamProxyCACert != null}]`);
+        } else {
+            console.log(`httpProxy upstream proxy disabled`);
+        }
 
         this.params = params;
         this.httpServer = httpServer;

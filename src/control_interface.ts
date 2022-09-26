@@ -1,3 +1,4 @@
+import * as net from "net";
 import * as http from "http";
 import * as parameters from "./parameters";
 import { httpProxy } from "./http_proxy";
@@ -5,6 +6,8 @@ import { localServer } from "./local_server";
 import * as bsgamesdkPwdAuthenticate from "./bsgamesdk-pwd-authenticate";
 import { parseCharset } from "./parse_charset";
 import { getStrRep } from "./getStrRep";
+import * as userdataDump from "./userdata_dump";
+import * as multipart from "parse-multipart-data";
 
 export class controlInterface {
     private closing = false;
@@ -12,6 +15,8 @@ export class controlInterface {
     private readonly httpServerSelf: http.Server;
     private readonly serverList: Array<httpProxy | localServer>;
     private readonly bsgamesdkPwdAuth: bsgamesdkPwdAuthenticate.bsgamesdkPwdAuth;
+    private readonly userdataDmp: userdataDump.userdataDmp;
+    private readonly userdataDumpFileName = "userdataDump.json";
 
     static async launch(): Promise<void> {
         const params = await parameters.params.load();
@@ -22,8 +27,9 @@ export class controlInterface {
     }
 
     constructor(params: parameters.params, serverList: Array<localServer | httpProxy>) {
-        const bsgamesdkPwdAuth = new bsgamesdkPwdAuthenticate.bsgamesdkPwdAuth(params,
-            serverList.find((s) => s instanceof localServer) as localServer);
+        const localsvr = serverList.find((s) => s instanceof localServer) as localServer;
+        const bsgamesdkPwdAuth = new bsgamesdkPwdAuthenticate.bsgamesdkPwdAuth(params, localsvr);
+        const userdataDmp = new userdataDump.userdataDmp(params, localsvr);
 
         const httpServerSelf = http.createServer(async (req, res) => {
             if (req.url == null) {
@@ -46,31 +52,78 @@ export class controlInterface {
                         this.restart();
                         return;
                     */
-                    case "pwdlogin":
-                        let charset = parseCharset.get(req.headers);
-                        let postData = await new Promise((resolve, reject) => {
-                            req.on('error', (err) => reject(err));
-                            req.setEncoding(charset);
-                            let postData = "";
-                            req.on('data', (chunk) => postData += chunk);
-                            req.on('end', () => resolve(postData));
-                        });
-                        let bogusURL = new URL(`http://bogus/query?${postData}`);
-                        let username = bogusURL.searchParams.get("username");
-                        let password = bogusURL.searchParams.get("password");
-                        if (username == null || password == null || username === "" || password === "") {
-                            let result = "username or password is empty";
-                            console.error(result);
-                            this.sendResultAsync(res, 400, result);
-                            return;
-                        }
+                    case "upload_upstream_proxy_cacert":
                         try {
+                            let postData = await this.getPostData(req);
+                            if (typeof postData === 'string') throw new Error("postData is string");
+                            let cacert = postData.find((item) => item.filename?.match(/(pem|crt)$/i))?.data.toString();
+                            await this.params.save({ key: "upstreamProxyCACert", val: cacert });
+                            let msg = cacert != null ? "saved upstreamProxyCACert" : "cleared upstreamProxyCACert";
+                            console.log(msg);
+                            this.sendResultAsync(res, 200, msg);
+                        } catch (e) {
+                            console.error("upload_upstream_proxy_cacert error", e);
+                            this.sendResultAsync(res, 500, e instanceof Error ? e.message : `upload_upstream_proxy_cacert error`);
+                        }
+                        return;
+                    case "set_upstream_proxy":
+                        try {
+                            let newUpstreamProxyParams = await this.getParsedPostData(req);
+                            let host = newUpstreamProxyParams.get("upstream_proxy_host");
+                            let port = Number(newUpstreamProxyParams.get("upstream_proxy_port"));
+                            let enabled = newUpstreamProxyParams.get("upstream_proxy_enabled") != null;
+                            if (host == null || !net.isIP(host))
+                                throw new Error("upstream proxy host is not an IP address");
+                            if (isNaN(port) || port < 1 || port > 65535)
+                                throw new Error("upstream proxy port must be an integer between 1 and 65535");
+                            await this.params.save({ key: "upstreamProxy", val: { host: host, port: port } });
+                            await this.params.save({ key: "upstreamProxyEnabled", val: enabled });
+                            let resultText = "sucessfully updated upstream proxy settings";
+                            console.log(resultText);
+                            this.sendResultAsync(res, 200, resultText);
+                        } catch (e) {
+                            console.error(`set_upstream_proxy error`, e);
+                            this.sendResultAsync(res, 500, e instanceof Error ? e.message : `set_upstream_proxy error`);
+                        }
+                        return;
+                    case "pwdlogin":
+                        try {
+                            let pwdLoginParams = await this.getParsedPostData(req);
+                            let username = pwdLoginParams.get("username");
+                            let password = pwdLoginParams.get("password");
+                            if (username == null || password == null || username === "" || password === "") {
+                                let result = "username or password is empty";
+                                console.error(result);
+                                this.sendResultAsync(res, 400, result);
+                                return;
+                            }
                             let result = await this.bsgamesdkPwdAuth.login(username, password);
                             let resultText = JSON.stringify(result);
                             this.sendResultAsync(res, 200, resultText);
                         } catch (e) {
                             console.error(`bsgamesdkPwdAuth error`, e);
                             this.sendResultAsync(res, 500, e instanceof Error ? e.message : `bsgamesdkPwdAuth error`);
+                        }
+                        return;
+                    case "dump_userdata":
+                        try {
+                            let dumpDataParams = await this.getParsedPostData(req);
+                            if (this.userdataDmp.lastSnapshot != null && dumpDataParams.get("new") == null) {
+                                this.sendResultAsync(res, 200, "download has completed");
+                            } else if (this.userdataDmp.isDownloading) {
+                                this.sendResultAsync(res, 429, "have not yet finished downloading, please be patient...");
+                            } else {
+                                const lastError = this.userdataDmp.lastError;
+                                if (lastError == null) {
+                                    this.userdataDmp.getSnapshotAsync();
+                                    this.sendResultAsync(res, 200, "downloading, pleses wait...");
+                                } else {
+                                    this.sendResultAsync(res, 500, `error ${lastError instanceof Error ? lastError.message : ""}`);
+                                }
+                            }
+                        } catch (e) {
+                            console.error(`dump_userdata error`, e);
+                            this.sendResultAsync(res, 500, e instanceof Error ? e.message : `dump_userdata error`);
                         }
                         return;
                     default:
@@ -109,6 +162,21 @@ export class controlInterface {
                     res.writeHead(200, { ["Content-Type"]: "application/json; charset=utf-8" });
                     res.end(this.params.stringify());
                     return;
+                case `/${this.userdataDumpFileName}`:
+                    let snapshot = this.userdataDmp.lastSnapshot;
+                    if (snapshot != null) {
+                        let stringified = JSON.stringify(snapshot, parameters.replacer);
+                        res.writeHead(200, {
+                            ["Content-Type"]: "application/json; charset=utf-8",
+                            ["Content-Disposition"]: `attachment; filename=\"${this.userdataDumpFileName}\"`,
+                        });
+                        res.end(stringified);
+                        return;
+                    } else {
+                        this.sendResultAsync(res, 404, "has not yet downloaded");
+                        return;
+                    }
+                    return;
             }
 
             res.writeHead(403, { 'Content-Type': 'text/plain' });
@@ -124,6 +192,7 @@ export class controlInterface {
         this.httpServerSelf = httpServerSelf;
         this.serverList = serverList;
         this.bsgamesdkPwdAuth = bsgamesdkPwdAuth;
+        this.userdataDmp = userdataDmp;
     }
     private async closeAll(): Promise<void> {
         let promises = this.serverList.map((server) => server.close());
@@ -149,6 +218,42 @@ export class controlInterface {
         await controlInterface.launch();
     }
 
+    private async getParsedPostData(req: http.IncomingMessage): Promise<URLSearchParams> {
+        let postData = await this.getPostData(req);
+        if (typeof postData !== 'string') throw new Error("typeof postData !== 'string'");
+        let bogusURL = new URL(`http://bogus/query?${postData}`);
+        return bogusURL.searchParams;
+    }
+    private getPostData(req: http.IncomingMessage): Promise<string | Array<{ filename?: string, type?: string, data: Buffer }>> {
+        return new Promise((resolve, reject) => {
+            const method = req.method;
+            if (!method?.match(/^POST$/i)) reject(Error(`method=${method} is not POST`));
+            else {
+                req.on('error', (err) => reject(err));
+                let postData = Buffer.from(new ArrayBuffer(0));
+                req.on('data', (chunk) => postData = Buffer.concat([postData, chunk]));
+                req.on('end', () => {
+                    try {
+                        const contentType = req.headers["content-type"];
+                        if (contentType == null) throw new Error();
+                        let boundary = multipart.getBoundary(contentType);
+                        if (typeof boundary !== 'string' || boundary === "") throw new Error();
+                        let parts = multipart.parse(postData, boundary);
+                        resolve(parts);
+                    } catch (e) {
+                        try {
+                            let charset = parseCharset.get(req.headers);
+                            let str = postData.toString(charset);
+                            resolve(str);
+                        } catch (e) {
+                            reject(e);
+                        }
+                    }
+                });
+            }
+        });
+    }
+
     private homepageHTML(): string {
         const officialURL = new URL("https://game.bilibili.com/magireco/");
         const gsxnjURL = new URL("https://www.gsxnj.cn/");
@@ -164,8 +269,12 @@ export class controlInterface {
             httpProxyAddr = proxy.host;
             httpProxyPort = String(proxy.port);
         }
+        const upstreamProxy = this.params.upstreamProxy;
+        const upstreamProxyHost = upstreamProxy.host;
+        const upstreamProxyPort = upstreamProxy.port;
+        const upstreamProxyEnabled = this.params.upstreamProxyEnabled;
 
-        let loginStatus = `未登录`, loginStatusStyle = "color: red";
+        let loginStatus = `未登录`, loginStatusStyle = "color: red", loginBtnText = "登录";
         const bsgamesdkResponse = this.params.bsgamesdkResponse;
         if (bsgamesdkResponse != null && bsgamesdkResponse.access_key != null) {
             let since: number | string | undefined = bsgamesdkResponse.timestamp;
@@ -179,7 +288,19 @@ export class controlInterface {
                 + ` 实名=[${bsgamesdkResponse.auth_name}] 实名认证状态=[${bsgamesdkResponse.realname_verified}]`
                 + ` 登录时间=[${since}] 登录过期时间=[${expires}]`);
             loginStatusStyle = "color: green";
+            loginBtnText = "重新登录"
         }
+
+        let upstreamProxyCACertStatus = "未上传", upstreamProxyCACertStyle = "color: red";
+        if (this.params.upstreamProxyCACert != null) {
+            upstreamProxyCACertStatus = "已上传";
+            upstreamProxyCACertStyle = "color: green";
+        }
+
+        let userdataDumpStatus = "尚未开始准备数据", userdataDumpStatusStyle = "color: red";;
+        if (this.userdataDmp.isDownloading) userdataDumpStatus = "数据准备中...", userdataDumpStatusStyle = "color: blue";
+        else if (this.userdataDmp.lastSnapshot != null) userdataDumpStatus = "数据已准备好", userdataDumpStatusStyle = "color: green";
+        else if (this.userdataDmp.lastError != null) userdataDumpStatus = "准备数据过程中出错", userdataDumpStatusStyle = "color: red";
 
         const html = "<!doctype html>"
             + `\n<html>`
@@ -223,49 +344,53 @@ export class controlInterface {
             + `\n  <label for=\"paramsjson\">下载备份所有配置数据：</label>`
             + `\n  ${aHref("params.json", "/params.json")}`
             + `\n  <hr>`
+            + `\n  <form action=\"/api/set_upstream_proxy\" method=\"post\">`
+            + `\n    <div>`
+            + `\n      <label for=\"upstream_proxy_host\">上游代理地址</label>`
+            + `\n      <input id=\"upstream_proxy_host\" name=\"upstream_proxy_host\" value=\"${upstreamProxyHost}\">`
+            + `\n    </div>`
+            + `\n    <div>`
+            + `\n      <label for=\"upstream_proxy_port\">上游代理端口</label>`
+            + `\n      <input id=\"upstream_proxy_port\" name=\"upstream_proxy_port\" value=\"${upstreamProxyPort}\">`
+            + `\n    </div>`
+            + `\n    <div>`
+            + `\n      <label for=\"upstream_proxy_enabled\">启用上游代理</label>`
+            + `\n      <input id=\"upstream_proxy_enabled\" name=\"upstream_proxy_enabled\" value=\"true\" type=\"checkbox\" ${upstreamProxyEnabled ? "checked" : ""}>`
+            + `\n    </div>`
+            + `\n    <div>`
+            + `\n      <input type=\"submit\" value=\"修改上游代理设置\" id=\"set_upstream_proxy_btn\">`
+            + `\n    </div>`
+            + `\n  </form>`
+            + `\n  <hr>`
+            + `\n  <form enctype=\"multipart/form-data\" action=\"/api/upload_upstream_proxy_cacert\" method=\"post\">`
+            + `\n    <div>`
+            + `\n      <input type=\"file\" name=\"upstream_proxy_cacert\" id=\"upstream_proxy_cacert\">`
+            + `\n    </div>`
+            + `\n    <div>`
+            + `\n      <label style=\"${upstreamProxyCACertStyle}\" id=\"upstream_proxy_ca_status\" for=\"upload_upstream_proxy_cacert_btn\">${upstreamProxyCACertStatus}</label>`
+            + `\n      <input type=\"submit\" value=\"上传上游代理CA证书\" id=\"upload_upstream_proxy_cacert_btn\">`
+            + `\n    </div>`
+            + `\n  </form>`
+            + `\n  <hr>`
             + `\n  <h2>说明</h2>`
-            /*
-            //FIXME MuMu上Clash不能正常按应用分流，而访问官服时必须由Clash区分是游戏客户端还是本地服务器发出了请求，前者走代理回到本地服务器、后者不走代理直连
             + `\n  <ol>`
             + `\n  <li>`
-            + `\n  在国服尚未关服的情况下，这里提供的${aHref("Bilibili登录", "#bilibilipwdauth", false)}界面可以在无需游戏客户端的情况下，登录并下载游戏账号内的个人数据，也就是你拥有的魔法少女、记忆结晶列表、以及最近的获得履历等等。`
-            + `\n  <br>但这只是快捷省事的途径，不一定可靠。（虽然通过下述折腾途径登录游戏也同样麻烦且可能失败）`
+            + `\n  在国服尚未关服的情况下，这里提供的${aHref("Bilibili登录", "#bilibilipwdauth", false)}界面可以在无需游戏客户端的情况下登录游戏账号。`
+            + `\n  <br>但这只是快捷省事的途径，不一定可靠。`
             + `\n  </li>`
             + `\n  <li>`
-            + `\n  下载并安装${aHref("魔法纪录国服Android客户端", officialURL.href)}（不支持iOS，iOS用户请尝试这里提供的${aHref("Bilibili登录", "#bilibilipwdauth", false)}界面，或者考虑模拟器、云手机等替代方案）。`
-            + `\n  <br>一般无root权限的Android真机，如果你正在真机上跑本地服务器（换言之，没条件在电脑上跑本地服务器），请务必把游戏客户端安装在<b>内部可以开启root的虚拟机</b>中，比如${aHref("光速虚拟机", gsxnjURL.href)}。`
-            + `\n  <br>运行游戏客户端的模拟器/虚拟机/云手机请务必<b>开启root权限</b>。`
+            + `\n  登录后即可下载保存个人游戏账号数据，包括你拥有的魔法少女列表、记忆结晶列表、好友列表、以及最近的获得履历等等。`
             + `\n  </li>`
             + `\n  <li>`
-            + `\n  下载${aHref("Clash for Android", clashURL.href)}（不知道选哪个，就试试foss-universal版）并安装。`
-            + `\n  <br>然后下载上面提供的Clash配置文件，并导入Clash中。`
-            + `\n  <br>（比如，真机上跑虚拟机（虚拟机内跑游戏），本地服务器直接跑在真机上，于是Clash也直接跑在真机上（而且虚拟机可能也不支持在其内部跑Clash））`
-            + `\n  <br>（又比如，电脑直接跑本地服务器，而游戏和Clash跑在电脑上的模拟器里，那么，因为本地服务器在模拟器外边、而Clash却在模拟器里面，所以就需要通过<code>adb reverse tcp:${httpProxyPort} tcp:${httpProxyPort}</code>命令来手工设置端口映射，才能让模拟器内的Clash通过端口映射连接到外边本地服务器的HTTP代理端口）`
-            + `\n  <br>（跑本地服务器的电脑如果同时连接了多个设备（比如真机也像模拟器一样用来跑游戏客户端和Clash），可用<code>adb devices -l</code>命令列出transport_id，比如2，然后用类似<code>adb reverse -t 2 tcp:${httpProxyPort} tcp:${httpProxyPort}</code>这样来分别给每一个设备设置端口映射）`
-            + `\n  </li>`
-            + `\n  <li>`
-            + `\n  导入Clash配置后，在Clash的[设置]=>[网络]中依次开启[自动路由系统流量]（这个默认应该就是开启的）、[绕过私有网络]和[DNS劫持]。`
-            + `\n  </li>`
-            + `\n  <li>`
-            + `\n  回到Clash主界面，点击[已停止 点此启动]按钮，然后点击新出现的按钮[代理 全局模式]，在里面选择[magirecolocal]，然后点击右下角的[闪电图标按钮]应用生效。`
-            + `\n  <br>（另外，推荐把[访问控制模式]设为[仅允许已选择的应用]，然后在[访问控制应用包列表]中只勾选上浏览器、魔纪客户端和虚拟机。不过实测安卓6的MuMu模拟器等环境下该项设置似乎无效）`
-            + `\n  </li>`
-            + `\n  <li>`
-            + `\n  下载上面提供的CA证书，并利用root权限，将其安装为<b>系统CA证书</b>，然后<b>重启系统</b>。`
-            + `\n  <br><b>注意：</b>你需要给<b>游戏所在的运行环境</b>安装CA证书、然后重启刚刚安装好CA证书的这个系统。比如，如果你是在电脑上跑模拟器（游戏客户端在模拟器里）、而且本地服务器直接跑在电脑上；或者是在真机上跑虚拟机（游戏客户端在虚拟机里）、本地服务器直接跑在真机上，那么你就需要在<b>模拟器或虚拟机内</b>安装CA证书，然后把<b>模拟器或虚拟机</b>给重启了（而不需要重启外边的真机或电脑）。又比如，如果游戏客户端、Clash、本地服务器这三者都跑在一台有root的真机上，那么就只能重启真机了。`
-            + `\n  <br>这一步可以用${aHref("autoBattle脚本", autoBattleURL.href)}（安装后请先下拉在线更新到最新版）选择运行[安装CA证书]这个脚本即可自动完成；也可以参照网上的相关教程手动完成。`
-            + `\n  </li>`
-            + `\n  <li>`
-            + `\n  既然刚刚重启系统了，那么跑在里面的Clash和本地服务器也会因为刚刚系统重启而停止运行（取决于你的具体环境），那么，现在就把停止运行的它们也重新启动。`
-            + `\n  </li>`
-            + `\n  <li>`
-            + `\n  如果一切顺利，那么就可以按往常一样启动、登录游戏；然后刷新这个页面，应该就可以在下面看到绿色的“已登录”状态了。`
+            + `\n  另外，让游戏客户端通过上述HTTP代理设置连接服务器时（也就是通过这个本地服务器进行中转），即会自动从游戏通信内容中抓取到登录信息，然后刷新这个页面即可看到登录状态变为绿色“已登录”。`
+            + `\n  <br>然后就可以利用抓取到的登录信息来下载保存个人账号数据。`
+            + `\n  <br>但这很显然要求你有一定的动手能力，尤其是CA证书必须安装为Android的系统证书。`
+            + `\n  <br><b>警告：安卓6的MuMu模拟器等环境下，Clash for Android似乎不能正常分流，可能导致网络通信在本地“死循环”：由这个本地服务器发出、本该直连出去的请求，被Clash拦截后又送回给了这个本地服务器，即死循环。</b>`
             + `\n  </li>`
             + `\n  </ol>`
-            */
             + `\n  <hr>`
             + `\n  <h2 id=\"bilibilipwdauth\">Bilibili登录</h2>`
-            + `\n  <i>下面这个登录界面只是快捷省事的途径，不一定可靠。如果你有条件折腾，还是推荐用上述方式照常登录游戏。</i><br>`
+            + `\n  <i>下面这个登录界面只是快捷省事的途径，不一定可靠。</i><br>`
             + `\n  <form action=\"/api/pwdlogin\" method=\"post\">`
             + `\n    <div>`
             + `\n      <label for=\"username\">用户名</label>`
@@ -277,9 +402,18 @@ export class controlInterface {
             + `\n    </div>`
             + `\n    <div>`
             + `\n      <label style=\"${loginStatusStyle}\" id=\"loginstatus\" for=\"loginbtn\">TO_BE_FILLED_BY_JAVASCRIPT</label>`
-            + `\n      <button id=\"loginbtn\">登录</button>`
+            + `\n      <button id=\"loginbtn\">${loginBtnText}</button>`
             + `\n    </div>`
             + `\n  </form>`
+            + `\n  <hr>`
+            + `\n  <h2 id=\"dumpuserdata\">下载个人账号数据</h2>`
+            + `\n  <form action=\"/api/dump_userdata\" method=\"post\">`
+            + `\n    <div>`
+            + `\n      <label style=\"${userdataDumpStatusStyle}\" for=\"prepare_download_btn\">${userdataDumpStatus}</label>`
+            + `\n      <input type=\"submit\" value=\"${this.userdataDmp.lastSnapshot == null ? "" : "重新"}准备数据\" id=\"prepare_download_btn\">`
+            + `\n    </div>`
+            + `\n  </form>`
+            + `\n    ${this.userdataDmp.lastSnapshot == null ? "" : aHref(this.userdataDumpFileName, `/${this.userdataDumpFileName}`)}`
             + `\n  <hr>`
             /* //FIXME
             + `\n  <h2>Control</h2>`
@@ -289,8 +423,8 @@ export class controlInterface {
             + `\n  <form action=\"/api/restart\" method=\"get\">`
             + `\n    <button>Restart</button>`
             + `\n  </form>`
-            */
             + `\n  <hr>`
+            */
             + `\n</body>`
             + `\n</html>`
         return html;

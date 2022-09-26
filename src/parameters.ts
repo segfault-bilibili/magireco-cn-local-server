@@ -108,7 +108,10 @@ export class params {
         let lastPromise = this.unfinishedSave.shift();
         let promise = new Promise<void>((resolve, reject) => {
             let doSave = () => {
-                if (param != null) this.mapData.set(param.key, param.val);
+                if (param != null) {
+                    this.mapData.set(param.key, param.val);
+                    if (param.key === "upstreamProxyCACert") this.refreshCACert();
+                }
                 params.prepare(this.mapData, true).then((preparedMapData) => {
                     try {
                         let fileContent = JSON.stringify(preparedMapData, replacer);
@@ -176,6 +179,17 @@ export class params {
         this.lastSaved = lastSaved;
         this.unfinishedSave = [];
         this.path = path;
+    }
+    private refreshCACert(): void {
+        const CACerts = tls.rootCertificates.slice();
+        CACerts.push(this.CACertPEM);
+        const upstreamProxyCACert = this.upstreamProxyCACert;
+        if (upstreamProxyCACert != null) {
+            CACerts.unshift(upstreamProxyCACert);
+            console.log("added upstreamProxyCACert to CACerts");
+        }
+        while (this.CACerts.length > 0) this.CACerts.pop();
+        CACerts.forEach((cert) => this.CACerts.push(cert));
     }
     private static async prepare(oldMapData: Map<string, any>, isSaving: boolean): Promise<Map<string, any>> {
         let newMapData = new Map<string, any>();
