@@ -367,8 +367,9 @@ export class controlInterface {
             + `\n      <input type=\"file\" name=\"upstream_proxy_cacert\" id=\"upstream_proxy_cacert\">`
             + `\n    </div>`
             + `\n    <div>`
-            + `\n      <label style=\"${upstreamProxyCACertStyle}\" id=\"upstream_proxy_ca_status\" for=\"upload_upstream_proxy_cacert_btn\">${upstreamProxyCACertStatus}</label>`
-            + `\n      <input type=\"submit\" value=\"上传上游代理CA证书\" id=\"upload_upstream_proxy_cacert_btn\">`
+            + `\n      <label style=\"${upstreamProxyCACertStyle}\" id=\"upstream_proxy_ca_status\" for=\"refreshbtn1\">${upstreamProxyCACertStatus}</label>`
+            + `\n      <button id=\"refreshbtn1\" onclick=\"window.location.reload(true);\">刷新</button>`
+            + `\n      <input type=\"submit\" value=\"上传/清除上游代理CA证书\" id=\"upload_upstream_proxy_cacert_btn\">`
             + `\n    </div>`
             + `\n  </form>`
             + `\n  <hr>`
@@ -401,7 +402,8 @@ export class controlInterface {
             + `\n      <input name=\"password\" id=\"password\" type=\"password\" value=\"\">`
             + `\n    </div>`
             + `\n    <div>`
-            + `\n      <label style=\"${loginStatusStyle}\" id=\"loginstatus\" for=\"loginbtn\">TO_BE_FILLED_BY_JAVASCRIPT</label>`
+            + `\n      <label style=\"${loginStatusStyle}\" id=\"loginstatus\" for=\"refreshbtn2\">TO_BE_FILLED_BY_JAVASCRIPT</label>`
+            + `\n      <button id=\"refreshbtn2\" onclick=\"window.location.reload(true);\">刷新</button>`
             + `\n      <button id=\"loginbtn\">${loginBtnText}</button>`
             + `\n    </div>`
             + `\n  </form>`
@@ -409,7 +411,8 @@ export class controlInterface {
             + `\n  <h2 id=\"dumpuserdata\">下载个人账号数据</h2>`
             + `\n  <form action=\"/api/dump_userdata\" method=\"post\">`
             + `\n    <div>`
-            + `\n      <label style=\"${userdataDumpStatusStyle}\" for=\"prepare_download_btn\">${userdataDumpStatus}</label>`
+            + `\n      <label style=\"${userdataDumpStatusStyle}\" for=\"refreshbtn3\">${userdataDumpStatus}</label>`
+            + `\n      <button id=\"refreshbtn3\" onclick=\"window.location.reload(true);\">刷新</button>`
             + `\n      <input type=\"submit\" value=\"${this.userdataDmp.lastSnapshot == null ? "" : "重新"}准备数据\" id=\"prepare_download_btn\">`
             + `\n    </div>`
             + `\n  </form>`
