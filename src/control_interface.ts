@@ -147,6 +147,13 @@ export class controlInterface {
             + `\n<head>`
             + `\n  <meta charset =\"utf-8\">`
             + `\n  <title>Magireco CN Local Server</title>`
+            + `\n  <script>`
+            + `\n    window.addEventListener('pageshow', (ev) => {`
+            + `\n      if (ev.persisted||(window.performance!=null&&window.performance.navigation.type===2)) {`
+            + `\n        window.location.reload(true);/*refresh on back or forward*/`
+            + `\n      }`
+            + `\n    });`
+            + `\n  </script>`
             + `\n</head>`
             + `\n<body>`
             + `\n  <h1>Magireco CN Local Server</h1>`
