@@ -61,6 +61,8 @@ const persistParams: {
 }
 
 export class params {
+    static DEBUG = false;
+
     static readonly defaultPath = path.join(".", "params.json");
     private path: string;
     private mapData: Map<string, any>;

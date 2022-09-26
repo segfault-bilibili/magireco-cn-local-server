@@ -109,7 +109,7 @@ export class httpProxy {
                 logMsg = `proxified ${req.socket.remoteAddress}:${req.socket.remotePort} => ${host}:${port} => ${path}`;
             else
                 logMsg = `direct ${req.socket.remoteAddress}:${req.socket.remotePort} => http://${host}:${port}${path}`;
-            console.log(logMsg);
+            if (parameters.params.DEBUG) console.log(logMsg);
 
             let proxyReq = http.request({
                 host: host,
@@ -160,7 +160,7 @@ export class httpProxy {
             });
 
             let logMsg = `HTTP CONNECT ${socket.remoteAddress}:${socket.remotePort} => ${req.url}`;
-            console.log(logMsg);
+            if (parameters.params.DEBUG) console.log(logMsg);
 
             let matched = req.url.match(/:\d+$/);
             if (matched == null) {
@@ -188,7 +188,7 @@ export class httpProxy {
                 else {
                     supportH2 = this.params.getSupportH2(authorityURL);
                     if (supportH2 == null) try {
-                        console.log(`probe supportH2: [${authorityURL}] ...`);
+                        if (parameters.params.DEBUG) console.log(`probe supportH2: [${authorityURL}] ...`);
                         const alpn = "h2";
                         let probeTlsSocket = await localServer.localServer.getTlsSocketAsync(this.params, false,
                             authorityURL, alpn, host);
@@ -196,7 +196,7 @@ export class httpProxy {
                             console.error(`probeTlsSocket error ${logMsg}`, e);
                         });
                         supportH2 = probeTlsSocket.alpnProtocol === alpn;
-                        console.log(`probe result: [${authorityURL}] supportH2=${supportH2}`);
+                        if (parameters.params.DEBUG) console.log(`probe result: [${authorityURL}] supportH2=${supportH2}`);
                         this.params.setSupportH2(authorityURL, supportH2);
                         probeTlsSocket.destroy();
                     } catch (e) {
