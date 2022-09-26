@@ -224,6 +224,8 @@ export class controlInterface {
             + `\n  ${aHref("params.json", "/params.json")}`
             + `\n  <hr>`
             + `\n  <h2>说明</h2>`
+            /*
+            //FIXME MuMu上Clash不能正常按应用分流，而访问官服时必须由Clash区分是游戏客户端还是本地服务器发出了请求，前者走代理回到本地服务器、后者不走代理直连
             + `\n  <ol>`
             + `\n  <li>`
             + `\n  在国服尚未关服的情况下，这里提供的${aHref("Bilibili登录", "#bilibilipwdauth", false)}界面可以在无需游戏客户端的情况下，登录并下载游戏账号内的个人数据，也就是你拥有的魔法少女、记忆结晶列表、以及最近的获得履历等等。`
@@ -260,6 +262,7 @@ export class controlInterface {
             + `\n  如果一切顺利，那么就可以按往常一样启动、登录游戏；然后刷新这个页面，应该就可以在下面看到绿色的“已登录”状态了。`
             + `\n  </li>`
             + `\n  </ol>`
+            */
             + `\n  <hr>`
             + `\n  <h2 id=\"bilibilipwdauth\">Bilibili登录</h2>`
             + `\n  <i>下面这个登录界面只是快捷省事的途径，不一定可靠。如果你有条件折腾，还是推荐用上述方式照常登录游戏。</i><br>`
