@@ -148,9 +148,10 @@ export class params {
     get upstreamProxyCACert(): string | undefined | null { return this.mapData.get("upstreamProxyCACert"); }
     get CACertAndKey(): certGenerator.certAndKey { return this.mapData.get("CACertAndKey"); }
     get bsgamesdkIDs(): bsgamesdkPwdAuthenticate.bsgamesdkIDs { return this.mapData.get("bsgamesdkIDs"); }
-    get bsgamesdkResponse(): bsgamesdkPwdAuthenticate.bsgamesdkResponse { return this.mapData.get("bsgamesdkResponse"); }
-    get openIdTicket(): userdataDump.openIdTicket { return this.mapData.get("openIdTicket"); }
     get magirecoIDs(): userdataDump.magirecoIDs { return this.mapData.get("magirecoIDs"); }
+
+    get bsgamesdkResponse(): bsgamesdkPwdAuthenticate.bsgamesdkResponse | undefined { return this.mapData.get("bsgamesdkResponse"); }
+    get openIdTicket(): userdataDump.openIdTicket | undefined { return this.mapData.get("openIdTicket"); }
 
     get CACertPEM(): string { return this.CACertAndKey.cert; }
     get CACertSubjectHashOld(): string { return "9489bdaf"; }//FIXME

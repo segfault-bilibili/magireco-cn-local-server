@@ -16,9 +16,10 @@ export type openIdTicket = {
 export class userdataDmp {
     private readonly params: parameters.params;
     private localServer: localServer;
-    get bsgamesdkResponse(): bsgamesdkPwdAuthenticate.bsgamesdkResponse { return this.params.bsgamesdkResponse; }
     get magirecoIDs(): magirecoIDs { return this.params.magirecoIDs; }
-    get openIdTicket(): openIdTicket { return this.params.openIdTicket; }
+
+    get bsgamesdkResponse(): bsgamesdkPwdAuthenticate.bsgamesdkResponse | undefined { return this.params.bsgamesdkResponse; }
+    get openIdTicket(): openIdTicket | undefined { return this.params.openIdTicket; }
 
     constructor(params: parameters.params, localServer: localServer) {
         this.params = params;
