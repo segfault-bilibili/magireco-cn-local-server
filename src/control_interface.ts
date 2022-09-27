@@ -243,9 +243,11 @@ export class controlInterface {
                     }
                     if (algo != null) headers["Content-Encoding"] = algo;
                     res.writeHead(200, headers);
-                    let lastSnapshotBr = this.userdataDmp.lastSnapshotBr;
+                    let lastSnapshotBr = this.userdataDmp.lastSnapshotBr, lastSnapshotGzip = this.userdataDmp.lastSnapshotGzip;
                     if (algo === 'br' && lastSnapshotBr != null) {
                         res.end(lastSnapshotBr);
+                    } else if (algo === 'gzip' && lastSnapshotGzip != null) {
+                        res.end(lastSnapshotGzip);
                     } else if (algo != null) {
                         res.end(localServer.compress(Buffer.from(stringified, 'utf-8'), algo));
                     } else {
