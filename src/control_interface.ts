@@ -228,7 +228,6 @@ export class controlInterface {
             if (req.url.match(this.userdataDmp.userdataDumpFileNameRegEx)) {
                 let snapshot = this.userdataDmp.lastSnapshot;
                 if (snapshot != null) {
-                    let stringified = JSON.stringify(snapshot, parameters.replacer);
                     let algo: string | null | undefined;
                     let acceptEncodings = req.headers["accept-encoding"];
                     if (acceptEncodings != null && acceptEncodings.length > 0) {
@@ -248,10 +247,13 @@ export class controlInterface {
                         res.end(lastSnapshotBr);
                     } else if (algo === 'gzip' && lastSnapshotGzip != null) {
                         res.end(lastSnapshotGzip);
-                    } else if (algo != null) {
-                        res.end(localServer.compress(Buffer.from(stringified, 'utf-8'), algo));
                     } else {
-                        res.end(stringified);
+                        let stringified = JSON.stringify(snapshot, parameters.replacer);
+                        if (algo != null) {
+                            res.end(localServer.compress(Buffer.from(stringified, 'utf-8'), algo));
+                        } else {
+                            res.end(stringified);
+                        }
                     }
                     return;
                 } else {
