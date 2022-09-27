@@ -16,7 +16,6 @@ export class controlInterface {
     private readonly serverList: Array<httpProxy | localServer>;
     private readonly bsgamesdkPwdAuth: bsgamesdkPwdAuthenticate.bsgamesdkPwdAuth;
     private readonly userdataDmp: userdataDump.userdataDmp;
-    private readonly userdataDumpFileName = "userdataDump.json";
 
     static async launch(): Promise<void> {
         const params = await parameters.params.load();
@@ -168,33 +167,34 @@ export class controlInterface {
                     res.writeHead(200, { ["Content-Type"]: "application/json; charset=utf-8" });
                     res.end(this.params.stringify());
                     return;
-                case `/${this.userdataDumpFileName}`:
-                    let snapshot = this.userdataDmp.lastSnapshot;
-                    if (snapshot != null) {
-                        let stringified = JSON.stringify(snapshot, parameters.replacer);
-                        let algo: string | null | undefined;
-                        let acceptEncodings = req.headers["accept-encoding"];
-                        if (acceptEncodings != null && acceptEncodings.length > 0) {
-                            acceptEncodings = typeof acceptEncodings === 'string' ? acceptEncodings.split(",") : acceptEncodings;
-                            let algos = acceptEncodings.map((item) => item.match(/(?<=^\s*)(br|gzip)(?=(\s|;|$))/))
-                                .map((item) => item && item[0]).filter((item) => item != null).sort();
-                            algo = algos.find((item) => item != null);
-                        }
-                        let headers: http.OutgoingHttpHeaders = {
-                            ["Content-Type"]: "application/json; charset=utf-8",
-                            ["Content-Disposition"]: `attachment; filename=\"${this.userdataDumpFileName}\"`,
-                        }
-                        if (algo != null) headers["Content-Encoding"] = algo;
-                        res.writeHead(200, headers);
-                        let body = algo != null ? localServer.compress(Buffer.from(stringified, 'utf-8'), algo)
-                            : stringified;
-                        res.end(body);
-                        return;
-                    } else {
-                        this.sendResultAsync(res, 404, "has not yet downloaded");
-                        return;
+            }
+
+            if (req.url.match(this.userdataDmp.userdataDumpFileNameRegEx)) {
+                let snapshot = this.userdataDmp.lastSnapshot;
+                if (snapshot != null) {
+                    let stringified = JSON.stringify(snapshot, parameters.replacer);
+                    let algo: string | null | undefined;
+                    let acceptEncodings = req.headers["accept-encoding"];
+                    if (acceptEncodings != null && acceptEncodings.length > 0) {
+                        acceptEncodings = typeof acceptEncodings === 'string' ? acceptEncodings.split(",") : acceptEncodings;
+                        let algos = acceptEncodings.map((item) => item.match(/(?<=^\s*)(br|gzip)(?=(\s|;|$))/))
+                            .map((item) => item && item[0]).filter((item) => item != null).sort();
+                        algo = algos.find((item) => item != null);
                     }
+                    let headers: http.OutgoingHttpHeaders = {
+                        ["Content-Type"]: "application/json; charset=utf-8",
+                        ["Content-Disposition"]: `attachment; filename=\"${this.userdataDmp.userdataDumpFileName}\"`,
+                    }
+                    if (algo != null) headers["Content-Encoding"] = algo;
+                    res.writeHead(200, headers);
+                    let body = algo != null ? localServer.compress(Buffer.from(stringified, 'utf-8'), algo)
+                        : stringified;
+                    res.end(body);
                     return;
+                } else {
+                    this.sendResultAsync(res, 404, "has not yet downloaded");
+                    return;
+                }
             }
 
             res.writeHead(403, { 'Content-Type': 'text/plain' });
@@ -442,7 +442,7 @@ export class controlInterface {
             + `\n      <input type=\"submit\" value=\"从官服下载\" id=\"prepare_download_btn\">`
             + `\n    </div>`
             + `\n  </form>`
-            + `\n    ${this.userdataDmp.lastSnapshot == null ? "" : aHref(this.userdataDumpFileName, `/${this.userdataDumpFileName}`)}`
+            + `\n    ${this.userdataDmp.lastSnapshot == null ? "" : aHref(this.userdataDmp.userdataDumpFileName, `/${this.userdataDmp.userdataDumpFileName}`)}`
             + `\n  <hr>`
             /* //FIXME
             + `\n  <h2>Control</h2>`

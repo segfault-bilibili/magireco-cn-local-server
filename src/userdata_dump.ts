@@ -103,6 +103,16 @@ export class userdataDmp {
         return true;
     }
 
+    get userdataDumpFileName(): string {
+        try {
+            return `magireco_cn_dump_uid_${this.uid}.json`;
+        } catch (e) {
+            console.error(`get userdataDumpFileName error`, e);
+            return "magireco_cn_dump.json"
+        }
+    }
+    readonly userdataDumpFileNameRegEx = /^\/magireco_cn_dump[^\/\\]*\.json$/;
+
     constructor(params: parameters.params, localServer: localServer) {
         this.params = params;
         this.localServer = localServer;
