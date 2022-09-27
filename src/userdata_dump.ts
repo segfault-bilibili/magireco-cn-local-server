@@ -338,7 +338,7 @@ export class userdataDmp {
 
     private get firstRoundUrlList(): Array<URL> {
         const ts = this.timeStamp;
-        return [
+        const list = [
             //登录页
             new URL(`https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/TopPage?value=`
                 + `user`
@@ -468,6 +468,12 @@ export class userdataDmp {
             new URL(
                 `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/friend/follower/list/1`
             ),
+            //长按好友打开支援详情
+            new URL(
+                `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/ProfileFormationSupport?value=`
+                + `userFormationSheetList`
+                + `&timeStamp=${ts}`
+            ),
             //设定
             new URL(
                 `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/ConfigTop?value=`
@@ -531,6 +537,16 @@ export class userdataDmp {
                 + `&timeStamp=${ts}`
             ),
         ];
+        if (this.params.fetchCharaEnhancementTree) {
+            //长按好友打开支援详情时出现，可能与精神强化有关
+            list.push(new URL(
+                `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/ProfileFormationSupport?value=`
+                + `userFormationSheetList`
+                + `%2CuserCharaEnhancementCellList`
+                + `&timeStamp=${ts}`
+            ));
+        }
+        return list;
     }
     private getSecondRoundRequests(map: Map<string, snapshotRespEntry>): Array<httpApiRequest> {
         const requests: Array<httpApiRequest> = [];
@@ -578,11 +594,12 @@ export class userdataDmp {
         //左上角个人头像
         const userLive2dList = myPage["userLive2dList"];
         if (userLive2dList == null || !Array.isArray(userLive2dList)) throw new Error("unable to read userLive2dList");
-        const charaIds = userLive2dList.map((item) => {
+        const allCharaIds = userLive2dList.map((item) => {
             let charaId = item["charaId"];
             if (typeof charaId !== 'number' || isNaN(charaId)) throw new Error("invalid charaId");
             return charaId;
         });
+        console.log(`allCharaIds.length=[${allCharaIds.length}]`);
         const gameUser = topPage["gameUser"];
         const myUserId = gameUser["userId"];
         if (typeof myUserId !== 'string') throw new Error("myUserId must be string");
@@ -693,6 +710,20 @@ export class userdataDmp {
         }
         //精神强化（未开放）
         if (this.params.fetchCharaEnhancementTree) {
+            const userFormationSheetList = map.get(
+                `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/ProfileFormationSupport?value=`
+                + `userFormationSheetList`
+                + `%2CuserCharaEnhancementCellList`
+                + `&timeStamp=`
+            )?.body;
+            const userCharaEnhancementCellList = userFormationSheetList["userCharaEnhancementCellList"];
+            if (userCharaEnhancementCellList == null || !Array.isArray(userCharaEnhancementCellList))
+                throw new Error("unable to read userCharaEnhancementCellList");
+            const charaIds = userCharaEnhancementCellList.map((item) => {
+                let charaId = item["charaId"];
+                if (typeof charaId !== 'number' || isNaN(charaId)) throw new Error("unable to read charaId");
+                return charaId;
+            });
             charaIds.forEach((charaId) => {
                 requests.push({
                     url: new URL(`https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/CharaEnhancementTree`),
