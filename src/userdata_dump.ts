@@ -713,6 +713,11 @@ export class userdataDmp {
                     console.error(`execHttpGetApi unsuccessful resultCode=${resp.resultCode} errorTxt=${resp.errorTxt}`);
                     throw new Error(JSON.stringify(resp));
                 }
+                if (resp.interrupt != null) {
+                    let interruptStr = JSON.stringify(resp.interrupt);
+                    console.error(`execHttpGetApi unsuccessful interrupt=${interruptStr}`);
+                    throw new Error(interruptStr);
+                }
                 let ret: httpGetApiResult = { url: url.href, respBody: resp };
                 const urlTs = url.href.match(this.tsRegEx);
                 if (urlTs != null && !isNaN(Number(urlTs[0]))) {
