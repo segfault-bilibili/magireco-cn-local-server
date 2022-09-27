@@ -128,10 +128,7 @@ export class params {
                     }
                 }
                 // may be modified, but still not taking effect now
-                if (!modified) {
-                    console.error(`params not modified`);
-                    resolve();
-                }else params.prepare(unmodifiedMap, true).then((preparedMapData) => {
+                params.prepare(unmodifiedMap, true).then((preparedMapData) => {
                     try {
                         let fileContent = JSON.stringify(preparedMapData, replacer);
                         if (path == null) path = this.path;
