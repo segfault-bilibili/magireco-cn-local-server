@@ -476,7 +476,7 @@ export class controlInterface {
             + `\n      <input name=\"password\" id=\"password\" type=\"password\" value=\"\">`
             + `\n    </div>`
             + `\n    <div>`
-            + `\n      <button id=\"loginbtn\">${loginBtnText}</button>`
+            + `\n      <input type=\"submit\" id=\"loginbtn\" value=\"${loginBtnText}\">`
             + `\n    </div>`
             + `\n    <div>`
             + `\n      <button id=\"refreshbtn2\" onclick=\"window.location.reload(true);\">刷新</button>`
