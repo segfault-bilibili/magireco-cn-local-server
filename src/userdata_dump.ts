@@ -146,10 +146,12 @@ export class userdataDmp {
                 })
         );
     }
-    private async getSnapshotPromise(): Promise<snapshot> {
+    private async getSnapshotPromise(concurrent = 8): Promise<snapshot> {
         if (this.isDownloading) throw new Error("previous download has not finished");
         this._isDownloading = true;
         this._lastError = undefined;
+
+        if (!this.params.concurrentFetch) concurrent = 1;
 
         const timestamp = new Date().getTime();
         const httpGetRespMap = new Map<string, snapshotRespEntry>(),
@@ -159,13 +161,20 @@ export class userdataDmp {
 
         const grow = async (seeds: Array<httpApiRequest>) => {
             let results: Array<httpApiResult> = [];
-            for (let i = 0, total = seeds.length; i < total; i++) {
-                let request = seeds.shift() as httpApiRequest;
-                let promise = request.postData == null ? this.execHttpGetApi(request.url)
-                    : this.execHttpPostApi(request.url, request.postData);
-                let response = await promise;
-                console.log(this._fetchStatus = `stage [${stage}/3]: fetched/total [${i + 1}/${total}]`);
-                results.push(response);
+            for (let start = 0, total = seeds.length; start < total; start += concurrent) {
+                let end = Math.min(start + concurrent, total);
+                let requests = seeds.slice(start, end);
+                let promises = requests.map((request) => request.postData == null ? this.execHttpGetApi(request.url)
+                    : this.execHttpPostApi(request.url, request.postData));
+                let settleStatus = await Promise.allSettled(promises);
+                let failed = settleStatus.filter((s) => s.status !== 'fulfilled').length;
+                if (failed > 0) {
+                    this._fetchStatus = `stage [${stage}/3]: ${failed} of ${settleStatus.length} failed, total [${total}]`;
+                    throw this._lastError = new Error(this._fetchStatus);
+                }
+                console.log(this._fetchStatus = `stage [${stage}/3]: fetched/total [${end}/${total}]`);
+                let responses = await Promise.all(promises);
+                responses.forEach((response) => results.push(response));
             }
             return results;
         }

@@ -39,6 +39,7 @@ const persistParams: {
     openIdTicket?: userdataDump.openIdTicket,
     magirecoIDs?: userdataDump.magirecoIDs,
     fetchCharaEnhancementTree: boolean,
+    concurrentFetch: boolean,
 } = {
     mode: mode.ACCOUNT_DUMP,
     listenList: {
@@ -60,6 +61,7 @@ const persistParams: {
     openIdTicket: undefined,
     magirecoIDs: undefined,
     fetchCharaEnhancementTree: false,
+    concurrentFetch: true,
 }
 
 export class params {
@@ -106,14 +108,17 @@ export class params {
     stringify(): string {
         return JSON.stringify(this.mapData, replacer);
     }
-    save(param?: { key: string, val: any } | string, path?: string): Promise<void> {
+    save(param?: { key: string, val: any } | Array<{ key: string, val: any }> | string, path?: string): Promise<void> {
         let lastPromise = this.unfinishedSave.shift();
         let promise = new Promise<void>((resolve, reject) => {
             let doSave = () => {
                 let unmodifiedMap = JSON.parse(this.stringify(), reviver);
                 let modified = false;
                 if (param != null) {
-                    if (typeof param !== 'string') {
+                    if (Array.isArray(param)) {
+                        param.forEach((p) => unmodifiedMap.set(p.key, p.val));
+                        modified = true;
+                    } else if (typeof param !== 'string') {
                         unmodifiedMap.set(param.key, param.val);
                         if (param.key === "upstreamProxyCACert") this.refreshCACert();
                         modified = true;
@@ -178,6 +183,7 @@ export class params {
     get openIdTicket(): userdataDump.openIdTicket | undefined { return this.mapData.get("openIdTicket"); }
 
     get fetchCharaEnhancementTree(): boolean { return this.mapData.get("fetchCharaEnhancementTree"); }
+    get concurrentFetch(): boolean { return this.mapData.get("concurrentFetch"); }
 
     get CACertPEM(): string { return this.CACertAndKey.cert; }
     get CACertSubjectHashOld(): string { return "9489bdaf"; }//FIXME

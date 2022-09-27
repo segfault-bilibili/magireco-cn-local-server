@@ -133,7 +133,11 @@ export class controlInterface {
                             const dumpDataParams = await this.getParsedPostData(req); // finish receiving first
                             const requestingNewDownload = dumpDataParams.get("new") != null;
                             const fetchCharaEnhancementTree = dumpDataParams.get("fetch_chara_enhance_tree") != null;
-                            await this.params.save({ key: "fetchCharaEnhancementTree", val: fetchCharaEnhancementTree });
+                            const concurrent = dumpDataParams.get("concurrent") != null;
+                            await this.params.save([
+                                { key: "fetchCharaEnhancementTree", val: fetchCharaEnhancementTree },
+                                { key: "concurrent", val: concurrent }
+                            ]);
 
                             const lastSnapshot = this.userdataDmp.lastSnapshot;
                             const alreadyDownloaded = lastSnapshot != null;
@@ -558,6 +562,10 @@ export class controlInterface {
             + `\n    <div>`
             + `\n      <input id=\"fetch_chara_enhance_tree_checkbox\" name=\"fetch_chara_enhance_tree\" value=\"true\" type=\"checkbox\" ${this.params.fetchCharaEnhancementTree ? "checked" : ""}>`
             + `\n      <label for=\"fetch_chara_enhance_tree_checkbox\">下载（官方未开放的）精神强化数据</label>`
+            + `\n    </div>`
+            + `\n    <div>`
+            + `\n      <input id=\"concurrent_checkbox\" name=\"concurrent\" value=\"true\" type=\"checkbox\" ${this.params.concurrentFetch ? "checked" : ""}>`
+            + `\n      <label for=\"concurrent_checkbox\">开启并行下载</label>`
             + `\n    </div>`
             + `\n    <div>`
             + `\n      <input id=\"new_download_checkbox\" name=\"new\" value=\"true\" type=\"checkbox\" ${this.userdataDmp.lastError != null ? "checked" : ""}>`
