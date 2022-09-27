@@ -38,6 +38,7 @@ const persistParams: {
     bsgamesdkResponse?: bsgamesdkPwdAuthenticate.bsgamesdkResponse,
     openIdTicket?: userdataDump.openIdTicket,
     magirecoIDs?: userdataDump.magirecoIDs,
+    fetchCharaEnhancementTree: boolean,
 } = {
     mode: mode.ACCOUNT_DUMP,
     listenList: {
@@ -58,6 +59,7 @@ const persistParams: {
     bsgamesdkResponse: undefined,
     openIdTicket: undefined,
     magirecoIDs: undefined,
+    fetchCharaEnhancementTree: true,
 }
 
 export class params {
@@ -82,7 +84,7 @@ export class params {
         }
         return await this.import(fileContent, path);
     }
-    static async import(fileContent: string | null, path: string): Promise<params> {
+    private static async import(fileContent: string | null, path: string): Promise<params> {
         //path will be used when save() is called without argument
         //WILL NOT WRITE FILE HERE
         let importedMapData: Map<string, any>;
@@ -104,20 +106,38 @@ export class params {
     stringify(): string {
         return JSON.stringify(this.mapData, replacer);
     }
-    save(param?: { key: string, val: any }, path?: string): Promise<void> {
+    save(param?: { key: string, val: any } | string, path?: string): Promise<void> {
         let lastPromise = this.unfinishedSave.shift();
         let promise = new Promise<void>((resolve, reject) => {
             let doSave = () => {
+                let unmodifiedMap = JSON.parse(this.stringify(), reviver);
+                let modified = false;
                 if (param != null) {
-                    this.mapData.set(param.key, param.val);
-                    if (param.key === "upstreamProxyCACert") this.refreshCACert();
+                    if (typeof param !== 'string') {
+                        unmodifiedMap.set(param.key, param.val);
+                        if (param.key === "upstreamProxyCACert") this.refreshCACert();
+                        modified = true;
+                    } else try {
+                        let parsed = JSON.parse(param, reviver);
+                        if (!(parsed instanceof Map)) throw new Error("not a Map");
+                        unmodifiedMap.clear();
+                        parsed.forEach((val, key) => unmodifiedMap.set(key, val));
+                        modified = true;
+                    } catch (e) {
+                        console.error(`cannot save whole params.json from string`, e);
+                    }
                 }
-                params.prepare(this.mapData, true).then((preparedMapData) => {
+                // may be modified, but still not taking effect now
+                if (!modified) console.error(`params not modified`);
+                else params.prepare(unmodifiedMap, true).then((preparedMapData) => {
                     try {
                         let fileContent = JSON.stringify(preparedMapData, replacer);
                         if (path == null) path = this.path;
                         fs.writeFileSync(path, fileContent, { encoding: "utf-8" });
                         this.lastSaved = fileContent;
+                        this.mapData.clear();
+                        preparedMapData.forEach((val, key) => this.mapData.set(key, val));
+                        // saved and taking effect now
                         console.log("saved params.json");
                         resolve();
                     } catch (e) {
@@ -157,6 +177,8 @@ export class params {
 
     get bsgamesdkResponse(): bsgamesdkPwdAuthenticate.bsgamesdkResponse | undefined { return this.mapData.get("bsgamesdkResponse"); }
     get openIdTicket(): userdataDump.openIdTicket | undefined { return this.mapData.get("openIdTicket"); }
+
+    get fetchCharaEnhancementTree(): boolean { return this.mapData.get("fetchCharaEnhancementTree"); }
 
     get CACertPEM(): string { return this.CACertAndKey.cert; }
     get CACertSubjectHashOld(): string { return "9489bdaf"; }//FIXME

@@ -51,13 +51,37 @@ export class controlInterface {
                         this.restart();
                         return;
                     */
+                    case "upload_params":
+                        try {
+                            let postData = await this.getPostData(req);
+                            if (typeof postData === 'string') throw new Error("postData is string");
+                            let uploaded_params = postData.find((item) => item.name === "uploaded_params");
+                            if (!uploaded_params?.filename?.match(/\.json$/i)) throw new Error("filename not ended with .json");
+                            let newParamStr: string | undefined = uploaded_params.data.toString();
+                            if (newParamStr === "") newParamStr = undefined;
+                            if (newParamStr == null) throw new Error("nothing uploaded");
+                            await this.params.save(newParamStr);
+                            this.sendResultAsync(res, 200, "saved new params");
+                        } catch (e) {
+                            console.error("upload_upstream_proxy_cacert error", e);
+                            this.sendResultAsync(res, 500, e instanceof Error ? e.message : `upload_upstream_proxy_cacert error`);
+                        }
+                        return;
                     case "upload_upstream_proxy_cacert":
                         try {
                             let postData = await this.getPostData(req);
                             if (typeof postData === 'string') throw new Error("postData is string");
-                            let cacert = postData.find((item) => item.filename?.match(/(pem|crt)$/i))?.data.toString();
-                            await this.params.save({ key: "upstreamProxyCACert", val: cacert });
-                            let msg = cacert != null ? "saved upstreamProxyCACert" : "cleared upstreamProxyCACert";
+                            let upstream_proxy_cacert = postData.find((item) => item.name === "upstream_proxy_cacert");
+                            if (
+                                upstream_proxy_cacert != null
+                                && upstream_proxy_cacert.filename != null
+                                && upstream_proxy_cacert.filename !== ""
+                                && !upstream_proxy_cacert.filename.match(/\.(pem|crt)$/i)
+                            ) throw new Error("filename not ended with .pem or .crt");
+                            let newCACert: string | undefined = upstream_proxy_cacert?.data.toString();
+                            if (newCACert === "") newCACert = undefined;
+                            await this.params.save({ key: "upstreamProxyCACert", val: newCACert });
+                            let msg = newCACert != null ? "saved upstreamProxyCACert" : "cleared upstreamProxyCACert";
                             console.log(msg);
                             this.sendResultAsync(res, 200, msg);
                         } catch (e) {
@@ -108,6 +132,9 @@ export class controlInterface {
                         try {
                             const dumpDataParams = await this.getParsedPostData(req); // finish receiving first
                             const requestingNewDownload = dumpDataParams.get("new") != null;
+                            const fetchCharaEnhancementTree = dumpDataParams.get("fetch_chara_enhance_tree") != null;
+                            await this.params.save({ key: "fetchCharaEnhancementTree", val: fetchCharaEnhancementTree });
+
                             const lastSnapshot = this.userdataDmp.lastSnapshot;
                             const alreadyDownloaded = lastSnapshot != null;
                             const lastError = this.userdataDmp.lastError;
@@ -148,7 +175,10 @@ export class controlInterface {
                     return;
                 case "/ca.crt":
                     console.log("serving ca.crt");
-                    res.writeHead(200, { ["Content-Type"]: "application/x-x509-ca-cert" });
+                    res.writeHead(200, {
+                        ["Content-Type"]: "application/x-x509-ca-cert",
+                        ["Content-Disposition"]: `attachment; filename=\"${req.url.replace(/^\//, "")}\"`,
+                    });
                     res.end(this.params.CACertPEM);
                     return;
                 case "/ca_subject_hash_old.txt":
@@ -159,12 +189,18 @@ export class controlInterface {
                     return;
                 case "/magirecolocal.yaml":
                     console.log(`servering magirecolocal.yaml`);
-                    res.writeHead(200, { ["Content-Type"]: "application/x-yaml" });
+                    res.writeHead(200, {
+                        ["Content-Type"]: "application/x-yaml",
+                        ["Content-Disposition"]: `attachment; filename=\"${req.url.replace(/^\//, "")}\"`,
+                    });
                     res.end(this.params.clashYaml);
                     return;
                 case "/params.json":
                     console.log(`servering params.json`);
-                    res.writeHead(200, { ["Content-Type"]: "application/json; charset=utf-8" });
+                    res.writeHead(200, {
+                        ["Content-Type"]: "application/json; charset=utf-8",
+                        ["Content-Disposition"]: `attachment; filename=\"${req.url.replace(/^\//, "")}\"`,
+                    });
                     res.end(this.params.stringify());
                     return;
             }
@@ -242,7 +278,7 @@ export class controlInterface {
         let bogusURL = new URL(`http://bogus/query?${postData}`);
         return bogusURL.searchParams;
     }
-    private getPostData(req: http.IncomingMessage): Promise<string | Array<{ filename?: string, type?: string, data: Buffer }>> {
+    private getPostData(req: http.IncomingMessage): Promise<string | Array<{ filename?: string, name?: string, type?: string, data: Buffer }>> {
         return new Promise((resolve, reject) => {
             const method = req.method;
             if (!method?.match(/^POST$/i)) reject(Error(`method=${method} is not POST`));
@@ -302,7 +338,7 @@ export class controlInterface {
             }
             let expires: number | string | undefined = bsgamesdkResponse.expires;
             if (expires != null) expires = `${new Date(expires).toLocaleDateString()} ${new Date(expires).toLocaleTimeString()}`;
-            loginStatus = getStrRep(`已登录 用户名=[${bsgamesdkResponse.uname}] uid=[${bsgamesdkResponse.uid}]`
+            loginStatus = getStrRep(`已登录 账户=[${bsgamesdkResponse.uname}] uid=[${bsgamesdkResponse.uid}]`
                 + ` 实名=[${bsgamesdkResponse.auth_name}] 实名认证状态=[${bsgamesdkResponse.realname_verified}]`
                 + ` 登录时间=[${since}] 登录过期时间=[${expires}]`);
             loginStatusStyle = "color: green";
@@ -336,10 +372,6 @@ export class controlInterface {
             + `\n    });`
             + `\n  </script>`
             + `\n  <style>`
-            + `\n    label,input,button {`
-            + `\n      display:flex;`
-            + `\n      flex-direction:column;`
-            + `\n    }`
             + `\n    code {`
             + `\n      color:black;`
             + `\n      background-color:#e0e0e0;`
@@ -351,16 +383,34 @@ export class controlInterface {
             + `\n</head>`
             + `\n<body>`
             + `\n  <h1>魔法纪录国服本地服务器</h1>`
-            + `\n  <label for=\"httpproxyaddr\">HTTP代理监听地址</label>`
-            + `\n  <input readonly id=\"httpproxyaddr\" value=\"${httpProxyAddr}\">`
-            + `\n  <label for=\"httpproxyport\">HTTP代理监听端口</label>`
-            + `\n  <input readonly id=\"httpproxyport\" value=\"${httpProxyPort}\">`
-            + `\n  <label for=\"cacrt\">下载CA证书：</label>`
-            + `\n  ${aHref("ca.crt", "/ca.crt")}`
-            + `\n  <label for=\"cacrt\">下载Clash配置文件：</label>`
-            + `\n  ${aHref("magirecolocal.yaml", "/magirecolocal.yaml")}`
-            + `\n  <label for=\"paramsjson\">下载备份所有配置数据：</label>`
-            + `\n  ${aHref("params.json", "/params.json")}`
+            + `\n  <div>`
+            + `\n    <label for=\"httpproxyaddr\">HTTP代理监听地址</label>`
+            + `\n    <input readonly id=\"httpproxyaddr\" value=\"${httpProxyAddr}\">`
+            + `\n  </div>`
+            + `\n  <div>`
+            + `\n    <label for=\"httpproxyport\">HTTP代理监听端口</label>`
+            + `\n    <input readonly id=\"httpproxyport\" value=\"${httpProxyPort}\">`
+            + `\n  </div>`
+            + `\n  <div>`
+            + `\n    <label for=\"cacrt\">下载CA证书：</label>`
+            + `\n    ${aHref("ca.crt", "/ca.crt")}`
+            + `\n  </div>`
+            + `\n  <div>`
+            + `\n    <label for=\"cacrt\">下载Clash配置文件：</label>`
+            + `\n    ${aHref("magirecolocal.yaml", "/magirecolocal.yaml")}`
+            + `\n  </div>`
+            + `\n  <div>`
+            + `\n    <label for=\"paramsjson\">下载备份所有配置数据：</label>`
+            + `\n    ${aHref("params.json", "/params.json")}`
+            + `\n  </div>`
+            + `\n  <form enctype=\"multipart/form-data\" action=\"/api/upload_params\" method=\"post\">`
+            + `\n    <div>`
+            + `\n      <input type=\"file\" name=\"uploaded_params\" id=\"params_file\">`
+            + `\n    </div>`
+            + `\n    <div>`
+            + `\n      <input type=\"submit\" value=\"上传配置数据\" id=\"upload_params_btn\">`
+            + `\n    </div>`
+            + `\n  </form>`
             + `\n  <hr>`
             + `\n  <form action=\"/api/set_upstream_proxy\" method=\"post\">`
             + `\n    <div>`
@@ -372,8 +422,8 @@ export class controlInterface {
             + `\n      <input id=\"upstream_proxy_port\" name=\"upstream_proxy_port\" value=\"${upstreamProxyPort}\">`
             + `\n    </div>`
             + `\n    <div>`
-            + `\n      <label for=\"upstream_proxy_enabled\">启用上游代理</label>`
             + `\n      <input id=\"upstream_proxy_enabled\" name=\"upstream_proxy_enabled\" value=\"true\" type=\"checkbox\" ${upstreamProxyEnabled ? "checked" : ""}>`
+            + `\n      <label for=\"upstream_proxy_enabled\">启用上游代理</label>`
             + `\n    </div>`
             + `\n    <div>`
             + `\n      <input type=\"submit\" value=\"修改上游代理设置\" id=\"set_upstream_proxy_btn\">`
@@ -385,9 +435,11 @@ export class controlInterface {
             + `\n      <input type=\"file\" name=\"upstream_proxy_cacert\" id=\"upstream_proxy_cacert\">`
             + `\n    </div>`
             + `\n    <div>`
-            + `\n      <label style=\"${upstreamProxyCACertStyle}\" id=\"upstream_proxy_ca_status\" for=\"refreshbtn1\">${upstreamProxyCACertStatus}</label>`
             + `\n      <button id=\"refreshbtn1\" onclick=\"window.location.reload(true);\">刷新</button>`
-            + `\n      <input type=\"submit\" value=\"上传/清除上游代理CA证书\" id=\"upload_upstream_proxy_cacert_btn\">`
+            + `\n      <label style=\"${upstreamProxyCACertStyle}\" id=\"upstream_proxy_ca_status\" for=\"refreshbtn1\">${upstreamProxyCACertStatus}</label>`
+            + `\n    </div>`
+            + `\n    <div>`
+            + `\n      <input type=\"submit\" value=\"上传/清除上游代理CA证书(PEM格式)\" id=\"upload_upstream_proxy_cacert_btn\">`
             + `\n    </div>`
             + `\n  </form>`
             + `\n  <hr>`
@@ -416,7 +468,7 @@ export class controlInterface {
             + `\n  <i>下面这个登录界面只是快捷省事的途径，不一定可靠。</i><br>`
             + `\n  <form action=\"/api/pwdlogin\" method=\"post\">`
             + `\n    <div>`
-            + `\n      <label for=\"username\">用户名</label>`
+            + `\n      <label for=\"username\">账户</label>`
             + `\n      <input name=\"username\" id=\"username\" value=\"\">`
             + `\n    </div>`
             + `\n    <div>`
@@ -424,8 +476,10 @@ export class controlInterface {
             + `\n      <input name=\"password\" id=\"password\" type=\"password\" value=\"\">`
             + `\n    </div>`
             + `\n    <div>`
-            + `\n      <label style=\"${loginStatusStyle}\" id=\"loginstatus\" for=\"refreshbtn2\">TO_BE_FILLED_BY_JAVASCRIPT</label>`
             + `\n      <button id=\"refreshbtn2\" onclick=\"window.location.reload(true);\">刷新</button>`
+            + `\n      <label style=\"${loginStatusStyle}\" id=\"loginstatus\" for=\"refreshbtn2\">TO_BE_FILLED_BY_JAVASCRIPT</label>`
+            + `\n    </div>`
+            + `\n    <div>`
             + `\n      <button id=\"loginbtn\">${loginBtnText}</button>`
             + `\n    </div>`
             + `\n  </form>`
@@ -433,12 +487,18 @@ export class controlInterface {
             + `\n  <h2 id=\"dumpuserdata\">下载个人账号数据</h2>`
             + `\n  <form action=\"/api/dump_userdata\" method=\"post\">`
             + `\n    <div>`
-            + `\n      <label for=\"new_download_checkbox\">重新从官服下载</label>`
-            + `\n      <input id=\"new_download_checkbox\" name=\"new\" value=\"true\" type=\"checkbox\" ${this.userdataDmp.lastError != null ? "checked" : ""}>`
+            + `\n      <input id=\"fetch_chara_enhance_tree_checkbox\" name=\"fetch_chara_enhance_tree\" value=\"true\" type=\"checkbox\" ${this.params.fetchCharaEnhancementTree ? "checked" : ""}>`
+            + `\n      <label for=\"fetch_chara_enhance_tree_checkbox\">下载（官方未开放的）精神强化数据</label>`
             + `\n    </div>`
             + `\n    <div>`
-            + `\n      <label style=\"${userdataDumpStatusStyle}\" for=\"refreshbtn3\">${userdataDumpStatus}</label>`
+            + `\n      <input id=\"new_download_checkbox\" name=\"new\" value=\"true\" type=\"checkbox\" ${this.userdataDmp.lastError != null ? "checked" : ""}>`
+            + `\n      <label for=\"new_download_checkbox\">重新从官服下载</label>`
+            + `\n    </div>`
+            + `\n    <div>`
             + `\n      <button id=\"refreshbtn3\" onclick=\"window.location.reload(true);\">刷新</button>`
+            + `\n      <label style=\"${userdataDumpStatusStyle}\" for=\"refreshbtn3\">${userdataDumpStatus}</label>`
+            + `\n    </div>`
+            + `\n    <div>`
             + `\n      <input type=\"submit\" value=\"从官服下载\" id=\"prepare_download_btn\">`
             + `\n    </div>`
             + `\n  </form>`

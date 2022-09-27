@@ -15,6 +15,7 @@ export type openIdTicket = {
 }
 
 type postData = { obj: any }
+type httpApiRequest = { url: URL, postData?: postData }
 type httpGetApiResult = { url: string, ts?: number, respBody: any }
 type httpPostApiResult = { url: string, ts?: number, postData: postData, respBody: any }
 type httpApiResult = { url: string, ts?: number, postData?: postData, respBody: any }
@@ -28,6 +29,8 @@ export type snapshot = {
         post: Map<string, Map<string, snapshotRespEntry>>
     }
 }
+
+export const guidRegEx = /^[\da-f]{8}-([\da-f]{4}-){3}[\da-f]{12}$/i;
 
 export class userdataDmp {
     private readonly params: parameters.params;
@@ -187,7 +190,25 @@ export class userdataDmp {
         await reap(fetchPromises1, httpGetRespMap, httpPostRespMap);
         console.log(`userdataDmp.getSnapshot() 1st round completed`);
 
-        //TODO 获得履历翻页、左上角个人头像、好友等等
+        const fetchPromises2 = this.getSecondRoundRequests(httpGetRespMap).map((item) =>
+            item.postData != null ? this.execHttpPostApi(item.url, item.postData, retries)
+                : this.execHttpGetApi(item.url, 2)
+        );
+        console.log(`userdataDmp.getSnapshot() 2nd round fetching...`);
+        await grow(fetchPromises2);
+        console.log(`userdataDmp.getSnapshot() 2nd round collecting...`);
+        await reap(fetchPromises2, httpGetRespMap, httpPostRespMap);
+        console.log(`userdataDmp.getSnapshot() 2nd round completed`);
+
+        const fetchPromises3 = this.getThirdRoundRequests(httpGetRespMap, httpPostRespMap).map((item) =>
+            item.postData != null ? this.execHttpPostApi(item.url, item.postData, retries)
+                : this.execHttpGetApi(item.url, 2)
+        );
+        console.log(`userdataDmp.getSnapshot() 3rd round fetching...`);
+        await grow(fetchPromises3);
+        console.log(`userdataDmp.getSnapshot() 3rd round collecting...`);
+        await reap(fetchPromises3, httpGetRespMap, httpPostRespMap);
+        console.log(`userdataDmp.getSnapshot() 3rd round completed`);
 
         this._lastSnapshot = {
             timestamp: timestamp,
@@ -375,7 +396,7 @@ export class userdataDmp {
                 + `userFormationSheetList`
                 + `&timeStamp=${ts}`
             ),
-            //礼物奖励箱
+            //礼物奖励箱（只有第一页）
             new URL(
                 `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/PresentList?value=`
                 + `&timeStamp=${ts}`
@@ -498,6 +519,179 @@ export class userdataDmp {
                 + `&timeStamp=${ts}`
             ),
         ];
+    }
+    private getSecondRoundRequests(map: Map<string, snapshotRespEntry>): Array<httpApiRequest> {
+        const requests: Array<httpApiRequest> = [];
+
+        const getPageCount = (total: number, perPage: number) => {
+            let remainder = total % perPage;
+            let floored = total - remainder;
+            let pageCount = floored / perPage;
+            if (remainder > 0) pageCount += 1;
+            return pageCount;
+        }
+
+        const topPage = map.get(`https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/TopPage?value=`
+            + `user`
+            + `%2CgameUser`
+            + `%2CitemList`
+            + `%2CgiftList`
+            + `%2CpieceList`
+            + `%2CuserQuestAdventureList`
+            + `&timeStamp=`
+        )?.body;
+        const myPage = map.get(`https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/MyPage?value=`
+            + `user`
+            + `%2CgameUser`
+            + `%2CuserStatusList`
+            + `%2CuserCharaList`
+            + `%2CuserCardList`
+            + `%2CuserDoppelList`
+            + `%2CuserItemList`
+            + `%2CuserGiftList`
+            + `%2CuserDoppelChallengeList`
+            + `%2CuserDailyChallengeList`
+            + `%2CuserTotalChallengeList`
+            + `%2CuserNormalAchievementList`
+            + `%2CuserMoneyAchievementList`
+            + `%2CuserLimitedChallengeList`
+            + `%2CuserGiftList`
+            + `%2CuserPieceList`
+            + `%2CuserPieceSetList`
+            + `%2CuserDeckList`
+            + `%2CuserLive2dList`
+            + `&timeStamp=`
+        )?.body;
+
+        //左上角个人头像
+        const userLive2dList = myPage["userLive2dList"];
+        if (userLive2dList == null || !Array.isArray(userLive2dList)) throw new Error("unable to read userLive2dList");
+        const charaIds = userLive2dList.map((item) => {
+            let charaId = item["charaId"];
+            if (typeof charaId !== 'number' || isNaN(charaId)) throw new Error("invalid charaId");
+            return charaId;
+        });
+        const gameUser = topPage["gameUser"];
+        const myUserId = gameUser["userId"];
+        if (typeof myUserId !== 'string') throw new Error("myUserId must be string");
+        if (myUserId.match(guidRegEx) == null) throw new Error("myUserId is not guid");
+        requests.push({
+            url: new URL(`https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/friend/user/${myUserId}`),
+        });
+        //好友推荐
+        requests.push({
+            url: new URL(`https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/search/friend_search/_search`),
+            postData: { obj: { type: 0 } }
+        });
+        //助战选择
+        //看上去来自这里：https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/json/friend_search/_search.json?72e447c0eff8c6a7
+        const fakeFriends = [
+            "87a24321-6c49-11e7-a958-0600870902db",
+            "2979c9c3-6c45-11e7-a337-0671507456ff",
+            "399b7919-6c85-11e7-8d60-0600870902db",
+            "825a7c41-6c49-11e7-a337-0671507456ff",
+            "f333fb92-6c46-11e7-a958-0600870902db",
+            "319e4655-6c4c-11e7-a958-0600870902db",
+            "0092c036-6c45-11e7-a958-0600870902db",
+            "6ddce439-6c47-11e7-a337-0671507456ff",
+            "3cc2ec68-6c45-11e7-a958-0600870902db",
+            "056a8707-6c45-11e7-a958-0600870902db"
+        ]
+        requests.push({
+            url: new URL(`https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/SupportSelect`),
+            postData: {
+                obj: {
+                    strUserIds: fakeFriends.join(","),
+                    strNpcHelpIds: "102",//214水波的NPC桃子
+                }
+            }
+        });
+        //扭蛋获得履历（仅GUID）
+        const gachasPerPage = 50;
+        const gachaHistory = map.get(`https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/GachaHistory?value=`
+            + `&timeStamp=`
+        )?.body;
+        const gachaHistoryCount = gachaHistory["gachaHistoryCount"];
+        if (typeof gachaHistoryCount !== 'number' || isNaN(gachaHistoryCount)) throw new Error("gachaHistoryCount must be number");
+        const gachaPageCount = getPageCount(gachaHistoryCount, gachasPerPage);
+        for (let i = 2; i <= gachaPageCount; i++) {
+            requests.push({
+                url: new URL(`https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/GachaHistory`),
+                postData: { obj: { page: `${i}` } }
+            });
+        }
+        //礼物奖励箱
+        const presentPerPage = 50;
+        const presentList = map.get(`https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/PresentList?value=`
+            + `&timeStamp=`
+        )?.body;
+        const presentCount = presentList["presentCount"];
+        if (typeof presentCount !== 'number' || isNaN(presentCount)) throw new Error("presentCount must be number");
+        const presentPageCount = getPageCount(presentCount, presentPerPage);
+        for (let i = 2; i <= presentPageCount; i++) {
+            requests.push({
+                url: new URL(`https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/PresentList`),
+                postData: { obj: { page: `${i}` } }
+            })
+        }
+        //获得履历
+        const presentHistoryPerPage = 100;
+        const presentHistory = map.get(`https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/PresentHistory?value=`
+            + `&timeStamp=`
+        )?.body;
+        const presentHistoryCount = presentHistory["presentHistoryCount"];
+        if (typeof presentHistoryCount !== 'number' || isNaN(presentHistoryCount)) throw new Error("presentHistoryCount must be number");
+        const presentHistoryPageCount = getPageCount(presentHistoryCount, presentHistoryPerPage);
+        for (let i = 2; i <= presentHistoryPageCount; i++) {
+            requests.push({
+                url: new URL(`https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/PresentHistory`),
+                postData: { obj: { page: `${i}` } }
+            })
+        }
+        //精神强化（未开放）
+        if (this.params.fetchCharaEnhancementTree) {
+            charaIds.forEach((charaId) => {
+                requests.push({
+                    url: new URL(`https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/CharaEnhancementTree`),
+                    postData: { obj: { charaId: `${charaId}` } }
+                });
+            });
+        }
+
+        return requests;
+    }
+    private getThirdRoundRequests(
+        httpGetMap: Map<string, snapshotRespEntry>,
+        httpPostMap: Map<string, Map<string, snapshotRespEntry>>
+    ): Array<httpApiRequest> {
+        //扭蛋获得履历
+        const gachaHistoryPages: Array<{ gachaHistoryList: Array<{ id: string }> }> = [];
+        const gachaIds: Array<string> = [];
+
+        const gachaHistoryFirstPage = httpGetMap.get(`https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/GachaHistory?value=`
+            + `&timeStamp=`
+        )?.body;
+        gachaHistoryPages.push(gachaHistoryFirstPage);
+
+        const gachaHistoryMap = httpPostMap.get(`https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/GachaHistory`);
+        gachaHistoryMap?.forEach((resp) => gachaHistoryPages.push(resp.body));
+        gachaHistoryPages.map((item) => {
+            let gachaHistoryList = item["gachaHistoryList"];
+            if (gachaHistoryList == null || !Array.isArray(gachaHistoryList)) throw new Error("unable to read gachaHistoryList");
+            gachaHistoryList.forEach((item) => {
+                let id = item["id"];
+                if (typeof id !== 'string' || id.match(guidRegEx) == null) throw new Error("unable to read gacha id");
+                gachaIds.push(id);
+            });
+        });
+
+        const requests = gachaIds.map((id) => {
+            return {
+                url: new URL(`https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/gacha/result/${id}`),
+            };
+        });
+
+        return requests;
     }
 
     private readonly tsRegEx = /(?<=timeStamp\=)\d+/;
