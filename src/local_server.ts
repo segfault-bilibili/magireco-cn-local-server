@@ -92,7 +92,7 @@ export class localServer {
                 return;
             }
 
-            if (parameters.params.DEBUG) console.log(`request accepted, host=[${host}] alpn=[${alpn}] sni=[${sni}]`);
+            if (parameters.params.VERBOSE) console.log(`request accepted, host=[${host}] alpn=[${alpn}] sni=[${sni}]`);
 
             try {
                 // hook
@@ -175,7 +175,7 @@ export class localServer {
                                         item.onMatchedResponse(statusCode, statusMessage, respHttpVer, respHeaders, body));
                                 }
 
-                                if (parameters.params.DEBUG) console.log(`ending cliRes downlink: host=[${host}] alpn=[${alpn}] sni=[${sni}]`);
+                                if (parameters.params.VERBOSE) console.log(`ending cliRes downlink: host=[${host}] alpn=[${alpn}] sni=[${sni}]`);
                                 try {
                                     cliRes.end();
                                 } catch (e) {
@@ -190,7 +190,7 @@ export class localServer {
                     }
                 });
                 svrReq.on('end', () => {
-                    if (parameters.params.DEBUG) console.log(`ending cliRes downlink: host=[${host}] alpn=[${alpn}] sni=[${sni}]`);
+                    if (parameters.params.VERBOSE) console.log(`ending cliRes downlink: host=[${host}] alpn=[${alpn}] sni=[${sni}]`);
                     try {
                         cliRes.end();
                     } catch (e) {
@@ -221,7 +221,7 @@ export class localServer {
                     }
                 });
                 cliReq.on('end', () => {
-                    if (parameters.params.DEBUG) console.log(`cliReq uplink ended: host=[${host}] alpn=[${alpn}] sni=[${sni}]`);
+                    if (parameters.params.VERBOSE) console.log(`cliReq uplink ended: host=[${host}] alpn=[${alpn}] sni=[${sni}]`);
 
                     // hook
                     if (matchedHooks.length > 0) {
@@ -270,7 +270,7 @@ export class localServer {
             const sni = (cliReqStream.session.socket as any).servername;
 
             cliReqStream.on('error', (err) => {
-                if (parameters.params.DEBUG) console.log(`cliReqStream error: authority=[${authority}] alpn=[${alpn}] sni=[${sni}]`, err);
+                if (parameters.params.VERBOSE) console.log(`cliReqStream error: authority=[${authority}] alpn=[${alpn}] sni=[${sni}]`, err);
                 try {
                     cliReqStream.respond({
                         [http2.constants.HTTP2_HEADER_STATUS]: http2.constants.HTTP_STATUS_BAD_GATEWAY,
@@ -297,7 +297,7 @@ export class localServer {
                 return;
             }
 
-            if (parameters.params.DEBUG) console.log(`http2 cliReqStream accepted, authority=[${authority}] alpn=[${alpn}] sni=[${sni}]`);
+            if (parameters.params.VERBOSE) console.log(`http2 cliReqStream accepted, authority=[${authority}] alpn=[${alpn}] sni=[${sni}]`);
 
             try {
                 // hook
@@ -352,7 +352,7 @@ export class localServer {
                     }
                 });
                 svrReq.on('end', () => {
-                    if (parameters.params.DEBUG) console.log(`ending cliReqStream downlink: authority=[${authority}] alpn=[${alpn}] sni=[${sni}]`);
+                    if (parameters.params.VERBOSE) console.log(`ending cliReqStream downlink: authority=[${authority}] alpn=[${alpn}] sni=[${sni}]`);
 
                     // hook
                     if (matchedHooks.length > 0) {
@@ -401,7 +401,7 @@ export class localServer {
                     }
                 });
                 cliReqStream.on('end', () => {
-                    if (parameters.params.DEBUG) console.log(`cliReqStream uplink ended: authority=[${authority}] alpn=[${alpn}] sni=[${sni}]`);
+                    if (parameters.params.VERBOSE) console.log(`cliReqStream uplink ended: authority=[${authority}] alpn=[${alpn}] sni=[${sni}]`);
 
                     // hook
                     if (matchedHooks.length > 0) {
@@ -441,8 +441,8 @@ export class localServer {
                     case constants.DOWNGRADE_TO_HTTP1:
                         //FIXME
                         this.params.setSupportH2(authorityURL, false);//FIXME not working when IP addr used in HTTP CONNECT
-                        if (parameters.params.DEBUG) console.log(`marked [${authorityURL}] supportHTTP2=false`);
-                        if (parameters.params.DEBUG) console.log("sending status code 505 and goaway");
+                        if (parameters.params.VERBOSE) console.log(`marked [${authorityURL}] supportHTTP2=false`);
+                        if (parameters.params.VERBOSE) console.log("sending status code 505 and goaway");
                         try {
                             cliReqStream.respond({
                                 [http2.constants.HTTP2_HEADER_STATUS]: http2.constants.HTTP_STATUS_HTTP_VERSION_NOT_SUPPORTED,
@@ -501,7 +501,7 @@ export class localServer {
             if (typeof servername === 'string') options.servername = servername;
             if (typeof alpn === 'string') (options.ALPNProtocols as Array<string>).push(alpn);
             let h1CompatH2TlsSocket = tls.connect(options, () => {
-                if (parameters.params.DEBUG) console.log(`sni=[${servername}] alpn=[${alpn}] piped to h1-compatible h2 local server`);
+                if (parameters.params.VERBOSE) console.log(`sni=[${servername}] alpn=[${alpn}] piped to h1-compatible h2 local server`);
                 tlsSocket.pipe(h1CompatH2TlsSocket);
                 h1CompatH2TlsSocket.pipe(tlsSocket);
             }).on('error', (err) => {
@@ -717,10 +717,10 @@ export class localServer {
                 if (!array.find((existing) => existing === alpn)) array.push(alpn);
             }
             if (typeof sni === 'string' && !net.isIP(sni)) options.servername = sni;//mute warning about RFC6066 disallowing IP SNI
-            if (parameters.params.DEBUG) console.log(`creating tlsSocket [${host}:${port}] alpn=[${alpn}] sni=[${sni}]`);
+            if (parameters.params.VERBOSE) console.log(`creating tlsSocket [${host}:${port}] alpn=[${alpn}] sni=[${sni}]`);
             let tlsSocket = tls.connect(options, () => {
                 let actualAlpn = tlsSocket.alpnProtocol;
-                if (parameters.params.DEBUG) console.log(`tlsSocket [${host}:${port}]`
+                if (parameters.params.VERBOSE) console.log(`tlsSocket [${host}:${port}]`
                     + ` alpn=[${actualAlpn}]${alpn === actualAlpn ? "" : "(requested=[" + alpn + "])"}`
                     + ` sni=[${sni}] created`);
 
@@ -757,10 +757,10 @@ export class localServer {
                         if (!array.find((existing) => existing === alpn)) array.push(alpn);
                     }
                     if (typeof sni === 'string' && !net.isIP(sni)) options.servername = sni;//mute warning about RFC6066 disallowing IP SNI
-                    if (parameters.params.DEBUG) console.log(`creating http2 session [${host}:${port}] alpn=[${alpn}] sni=[${sni}]`);
+                    if (parameters.params.VERBOSE) console.log(`creating http2 session [${host}:${port}] alpn=[${alpn}] sni=[${sni}]`);
                     let tlsSocket = tls.connect(options, () => {
                         let actualAlpn = tlsSocket.alpnProtocol;
-                        if (parameters.params.DEBUG) console.log(`http2 session [${host}:${port}]`
+                        if (parameters.params.VERBOSE) console.log(`http2 session [${host}:${port}]`
                             + ` alpn=[${actualAlpn}]${alpn === actualAlpn ? "" : "(requested=[" + alpn + "])"}`
                             + ` sni=[${sni}] created`);
 

@@ -61,7 +61,7 @@ const persistParams: {
 }
 
 export class params {
-    static DEBUG = false;
+    static VERBOSE = false;
 
     static readonly defaultPath = path.join(".", "params.json");
     private path: string;
