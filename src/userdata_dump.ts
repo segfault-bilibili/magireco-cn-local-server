@@ -155,7 +155,9 @@ export class userdataDmp {
             if (!(await this.testLogin())) throw new Error("login test failed, cannot login");
         }
 
-        const fetchPromises1 = this.firstRoundUrlList.map((url) => this.execHttpGetApi(url, 2));
+        const retries = 4;
+
+        const fetchPromises1 = this.firstRoundUrlList.map((url) => this.execHttpGetApi(url, retries));
         console.log(`userdataDmp.getSnapshot() 1st round fetching...`);
         await grow(fetchPromises1);
         console.log(`userdataDmp.getSnapshot() 1st round collecting...`);
@@ -476,6 +478,7 @@ export class userdataDmp {
     }
 
     private async execHttpGetApi(url: URL, retries = 0, retryAfterSec = 4): Promise<{ url: string, respBody: any }> {
+        const retryAfter = Math.trunc((retryAfterSec + Math.random() * 2) * 1000);
         let lastError: any = new Error("execHttpGetApi max retries exceeded");
         for (let i = 0, resp; i <= retries && resp == null; i++) {
             try {
@@ -487,14 +490,15 @@ export class userdataDmp {
                 return { url: url.href, respBody: resp };
             } catch (e) {
                 lastError = e;
-                console.error(`execHttpGetApi error`, e, `will retry after ${retryAfterSec}s...`);
-                await new Promise<void>((resolve) => setTimeout(() => resolve(), retryAfterSec * 1000));
+                console.error(`execHttpGetApi error`, e, `will retry after ${retryAfter}ms...`);
+                await new Promise<void>((resolve) => setTimeout(() => resolve(), retryAfter));
             }
         }
         throw lastError;
     }
     private async execHttpPostApi(url: URL, postData: { obj: any }, retries = 0, retryAfterSec = 4
     ): Promise<{ url: string, postData: { obj: any }, respBody: any }> {
+        const retryAfter = Math.trunc((retryAfterSec + Math.random() * 2) * 1000);
         let lastError: any = new Error("execHttpPostApi max retries exceeded");
         for (let i = 0, resp; i <= retries && resp == null; i++) {
             try {
@@ -506,8 +510,8 @@ export class userdataDmp {
                 return { url: url.href, postData: postData, respBody: resp };
             } catch (e) {
                 lastError = e;
-                console.error(`execHttpPostApi error`, e, `will retry after ${retryAfterSec}s...`);
-                await new Promise<void>((resolve) => setTimeout(() => resolve(), retryAfterSec * 1000));
+                console.error(`execHttpPostApi error`, e, `will retry after ${retryAfter}ms...`);
+                await new Promise<void>((resolve) => setTimeout(() => resolve(), retryAfter));
             }
         }
         throw lastError;
