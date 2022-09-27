@@ -400,9 +400,9 @@ export class controlInterface {
             else openIdTicketStatus += ` 账户=[${uname}]`;
             openIdTicketStatus += ` uid=[${uid}]`;
             openIdTicketStatus += ` 登录时间=[${since}]`;
-            openIdTicketStatus = getStrRep(openIdTicketStatus);
             openIdTicketStatusStyle = `color: ${inconsistent ? "red" : "green"}`;
         }
+        openIdTicketStatus = getStrRep(openIdTicketStatus);
 
         let upstreamProxyCACertStatus = "未上传", upstreamProxyCACertStyle = "color: red";
         if (this.params.upstreamProxyCACert != null) {
@@ -413,7 +413,8 @@ export class controlInterface {
         let userdataDumpStatus = "尚未开始从官服下载", userdataDumpStatusStyle = "color: red";;
         if (this.userdataDmp.isDownloading) userdataDumpStatus = `从官服下载中 ${this.userdataDmp.fetchStatus}`, userdataDumpStatusStyle = "color: blue";
         else if (this.userdataDmp.lastSnapshot != null) userdataDumpStatus = "从官服下载数据完毕", userdataDumpStatusStyle = "color: green";
-        else if (this.userdataDmp.lastError != null) userdataDumpStatus = "从官服下载数据过程中出错", userdataDumpStatusStyle = "color: red";
+        else if (this.userdataDmp.lastError != null) userdataDumpStatus = `从官服下载数据过程中出错  ${this.userdataDmp.fetchStatus}`, userdataDumpStatusStyle = "color: red";
+        userdataDumpStatus = getStrRep(userdataDumpStatus);
 
         const html = "<!doctype html>"
             + `\n<html>`

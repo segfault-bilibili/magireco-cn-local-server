@@ -150,6 +150,7 @@ export class userdataDmp {
         if (this.isDownloading) throw new Error("previous download has not finished");
         this._isDownloading = true;
         this._lastError = undefined;
+        this._fetchStatus = "";
 
         if (!this.params.concurrentFetch) concurrent = 1;
 
@@ -170,7 +171,16 @@ export class userdataDmp {
                 let failed = settleStatus.filter((s) => s.status !== 'fulfilled').length;
                 if (failed > 0) {
                     this._fetchStatus = `stage [${stage}/3]: ${failed} of ${settleStatus.length} failed, total [${total}]`;
-                    throw this._lastError = new Error(this._fetchStatus);
+                    let err: any = new Error(this._fetchStatus);
+                    try {
+                        let firstFailedIndex = settleStatus.findIndex((s) => s.status !== 'fulfilled');
+                        let firstFailedPromise = promises[firstFailedIndex];
+                        await firstFailedPromise;
+                    } catch (e) {
+                        console.error(this._fetchStatus, err = e);
+                        if (err instanceof Error) this._fetchStatus += `\n${err.message}`;
+                    }
+                    throw this._lastError = err;
                 }
                 console.log(this._fetchStatus = `stage [${stage}/3]: fetched/total [${end}/${total}]`);
                 let responses = await Promise.all(promises);
