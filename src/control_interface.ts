@@ -115,7 +115,8 @@ export class controlInterface {
                             } else {
                                 const lastError = this.userdataDmp.lastError;
                                 if (lastError == null) {
-                                    this.userdataDmp.getSnapshotAsync();
+                                    this.userdataDmp.getSnapshotAsync()
+                                        .catch((e) => console.error(`dump_userdata error`, e)); // prevent crash
                                     this.sendResultAsync(res, 200, "downloading, pleses wait...");
                                 } else {
                                     this.sendResultAsync(res, 500, `error ${lastError instanceof Error ? lastError.message : ""}`);
@@ -469,7 +470,7 @@ export class controlInterface {
                 + `\n  <textarea id=\"result\" readonly rows=\"20\" cols=\"64\">TO_BE_FILLED_BY_JAVASCRIPT</textarea>`
                 + `\n</body>`
                 + `\n</html>`
-            res.on('error', (err) => reject(err));
+            res.on('error', (err) => { console.error(err); resolve(); }); // prevent crash
             res.writeHead(statusCode, { 'Content-Type': 'text/html' });
             res.end(html, () => resolve());
         });

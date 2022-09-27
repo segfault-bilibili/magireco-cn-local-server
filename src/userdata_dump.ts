@@ -105,7 +105,10 @@ export class userdataDmp {
         return new Promise((resolve, reject) =>
             this.getSnapshotPromise()
                 .then((result) => resolve(result))
-                .catch((err) => reject(this._lastError = err))
+                .catch((err) => {
+                    this._isDownloading = false;
+                    reject(this._lastError = err);
+                })
         );
     }
     private async getSnapshotPromise(): Promise<snapshot> {
@@ -125,7 +128,7 @@ export class userdataDmp {
         const reap = async (crops: Array<Promise<{ url: string, respBody: any }>>, map: Map<string, any>) => {
             await Promise.all(crops.map((promise) => promise.then((result) => {
                 const key = result.url, val = result.respBody;
-                if (map.has(key)) throw this._lastError = new Error(`key=[${key}] already exists`);
+                if (map.has(key)) throw new Error(`key=[${key}] already exists`);
                 map.set(key, val);
             })));
         }
@@ -467,12 +470,12 @@ export class userdataDmp {
                 }
                 return { url: url.href, respBody: resp };
             } catch (e) {
-                this._lastError = lastError = e;
+                lastError = e;
                 console.error(`execHttpGetApi error`, e, `will retry after ${retryAfterSec}s...`);
                 await new Promise<void>((resolve) => setTimeout(() => resolve(), retryAfterSec * 1000));
             }
         }
-        throw this._lastError = lastError;
+        throw lastError;
     }
 
     static newRandomID(): magirecoIDs {
