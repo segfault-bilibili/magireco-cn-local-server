@@ -134,7 +134,7 @@ export class userdataDmp {
                 })
         );
     }
-    private async getSnapshotPromise(concurrencyLimit = 1): Promise<snapshot> {
+    private async getSnapshotPromise(): Promise<snapshot> {
         if (this.isDownloading) throw new Error("previous download has not finished");
         this._isDownloading = true;
         this._lastError = undefined;
@@ -143,26 +143,22 @@ export class userdataDmp {
         const httpGetRespMap = new Map<string, snapshotRespEntry>(),
             httpPostRespMap = new Map<string, Map<string, snapshotRespEntry>>();
 
-        const grow = async (allSeeds: Array<Promise<httpApiResult>>) => {
-            let growed: Array<Promise<httpApiResult>> = [];
-            for (let start = 0; start < allSeeds.length; start += concurrencyLimit) {
-                let end = Math.min(start + concurrencyLimit, allSeeds.length);
-                let seeds = allSeeds.slice(start, end);
-                const fetchResult = await Promise.allSettled(seeds);
-                const succCount = fetchResult.filter((promise) => promise.status === 'fulfilled').length;
-                const failCount = fetchResult.filter((promise) => promise.status !== 'fulfilled').length;
-                console.log(`settled/total:${end}/${allSeeds.length} succCount=${succCount} failCount=${failCount}`);
-                if (failCount != 0) throw new Error(`failCount != 0`);
-                seeds.forEach((seed) => growed.push(seed));
+        const grow = async (seeds: Array<httpApiRequest>) => {
+            let results: Array<httpApiResult> = [];
+            for (let i = 0; i < seeds.length; i++) {
+                let request = seeds.shift() as httpApiRequest;
+                let promise = request.postData == null ? this.execHttpGetApi(request.url)
+                    : this.execHttpPostApi(request.url, request.postData);
+                let response = await promise;
+                results.push(response);
             }
-            for (let i = 0, total = allSeeds.length; i < total; i++) allSeeds.shift();
-            growed.forEach((seed) => allSeeds.push(seed));
+            return results;
         }
-        const reap = async (
-            crops: Array<Promise<httpApiResult>>,
+        const reap = (
+            crops: Array<httpApiResult>,
             httpGetMap: Map<string, snapshotRespEntry>, httpPostMap: Map<string, Map<string, snapshotRespEntry>>
         ) => {
-            await Promise.all(crops.map((promise) => promise.then((result) => {
+            crops.map((result) => {
                 if (result.postData == null) {
                     const map = httpGetMap;
                     const key = result.url, body = result.respBody, ts = result.ts;
@@ -182,7 +178,7 @@ export class userdataDmp {
                     valMap.set(valMapKey, valMapVal);
                     map.set(key, valMap);
                 }
-            })));
+            });
         }
 
         if (!this.isGameLoggedIn || !(await this.testLogin())) {
@@ -191,31 +187,23 @@ export class userdataDmp {
             if (!(await this.testLogin())) throw new Error("login test failed, cannot login");
         }
 
-        const fetchPromises1 = this.firstRoundUrlList.map((url) => this.execHttpGetApi(url));
+        const requests1 = this.firstRoundUrlList.map((url) => { return { url: url }; });
         console.log(`userdataDmp.getSnapshot() 1st round fetching...`);
-        await grow(fetchPromises1);
+        const responses1 = await grow(requests1);
         console.log(`userdataDmp.getSnapshot() 1st round collecting...`);
-        await reap(fetchPromises1, httpGetRespMap, httpPostRespMap);
+        reap(responses1, httpGetRespMap, httpPostRespMap);
         console.log(`userdataDmp.getSnapshot() 1st round completed`);
 
-        const fetchPromises2 = this.getSecondRoundRequests(httpGetRespMap).map((item) =>
-            item.postData != null ? this.execHttpPostApi(item.url, item.postData)
-                : this.execHttpGetApi(item.url)
-        );
         console.log(`userdataDmp.getSnapshot() 2nd round fetching...`);
-        await grow(fetchPromises2);
+        const responses2 = await grow(this.getSecondRoundRequests(httpGetRespMap));
         console.log(`userdataDmp.getSnapshot() 2nd round collecting...`);
-        await reap(fetchPromises2, httpGetRespMap, httpPostRespMap);
+        reap(responses2, httpGetRespMap, httpPostRespMap);
         console.log(`userdataDmp.getSnapshot() 2nd round completed`);
 
-        const fetchPromises3 = this.getThirdRoundRequests(httpGetRespMap, httpPostRespMap).map((item) =>
-            item.postData != null ? this.execHttpPostApi(item.url, item.postData)
-                : this.execHttpGetApi(item.url)
-        );
         console.log(`userdataDmp.getSnapshot() 3rd round fetching...`);
-        await grow(fetchPromises3);
+        const responses3 = await grow(this.getThirdRoundRequests(httpGetRespMap, httpPostRespMap));
         console.log(`userdataDmp.getSnapshot() 3rd round collecting...`);
-        await reap(fetchPromises3, httpGetRespMap, httpPostRespMap);
+        reap(responses3, httpGetRespMap, httpPostRespMap);
         console.log(`userdataDmp.getSnapshot() 3rd round completed`);
 
         this._lastSnapshot = {
