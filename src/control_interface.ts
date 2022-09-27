@@ -378,10 +378,14 @@ export class controlInterface {
                 since = `${new Date(since).toLocaleDateString()} ${new Date(since).toLocaleTimeString()}`;
             }
             const uname = openIdTicket.uname;
-            let inconsistent = bsgamesdkResponse?.uname !== uname;
+            const open_id = openIdTicket.open_id;
+            const uidMatched = open_id.match(/\d+$/);
+            const uid = uidMatched != null && !isNaN(Number(uidMatched[0])) ? (Number(uidMatched[0])) : undefined;
+            let inconsistent = bsgamesdkResponse?.uid !== uid;
             openIdTicketStatus = `${inconsistent ? "游戏账户与B站不一致" : "游戏已登录"}`;
             if (uname == null) openIdTicketStatus += " 账户未知";
             else openIdTicketStatus += ` 账户=[${uname}]`;
+            openIdTicketStatus += ` uid=[${uid}]`;
             openIdTicketStatus += ` 登录时间=[${since}]`;
             openIdTicketStatus = getStrRep(openIdTicketStatus);
             openIdTicketStatusStyle = `color: ${inconsistent ? "red" : "green"}`;
