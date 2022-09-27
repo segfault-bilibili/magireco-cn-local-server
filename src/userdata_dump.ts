@@ -14,11 +14,18 @@ export type openIdTicket = {
     uname?: string,
 }
 
+type postData = { obj: any }
+type httpGetApiResult = { url: string, ts?: number, respBody: any }
+type httpPostApiResult = { url: string, ts?: number, postData: postData, respBody: any }
+type httpApiResult = { url: string, ts?: number, postData?: postData, respBody: any }
+
+type snapshotRespEntry = { ts?: number, body: any }
+
 export type snapshot = {
     timestamp: number,
     httpResp: {
-        get: Map<string, { ts?: number, body: any }>,
-        post: Map<string, Map<string, { ts?: number, body: any }>>
+        get: Map<string, snapshotRespEntry>,
+        post: Map<string, Map<string, snapshotRespEntry>>
     }
 }
 
@@ -118,10 +125,10 @@ export class userdataDmp {
         this._lastError = undefined;
 
         const timestamp = new Date().getTime();
-        const httpGetRespMap = new Map<string, { ts?: number, body: any }>(),
-            httpPostRespMap = new Map<string, Map<string, { ts?: number, body: any }>>();
+        const httpGetRespMap = new Map<string, snapshotRespEntry>(),
+            httpPostRespMap = new Map<string, Map<string, snapshotRespEntry>>();
 
-        const grow = async (seeds: Array<Promise<{ url: string, respBody: any }>>) => {
+        const grow = async (seeds: Array<Promise<httpApiResult>>) => {
             const fetchResult = await Promise.allSettled(seeds);
             const succCount = fetchResult.filter((promise) => promise.status === 'fulfilled').length;
             const failCount = fetchResult.filter((promise) => promise.status !== 'fulfilled').length;
@@ -129,25 +136,25 @@ export class userdataDmp {
             if (failCount != 0) throw new Error(`failCount != 0`);
         }
         const reap = async (
-            crops: Array<Promise<{ url: string, ts?: number, postData?: { obj: any }, respBody: any }>>,
-            httpGetMap: Map<string, { ts?: number, body: any }>, httpPostMap: Map<string, Map<string, { ts?: number, body: any }>>
+            crops: Array<Promise<httpApiResult>>,
+            httpGetMap: Map<string, snapshotRespEntry>, httpPostMap: Map<string, Map<string, snapshotRespEntry>>
         ) => {
             await Promise.all(crops.map((promise) => promise.then((result) => {
                 if (result.postData == null) {
                     const map = httpGetMap;
                     const key = result.url, body = result.respBody, ts = result.ts;
                     if (map.has(key)) throw new Error(`key=[${key}] already exists`);
-                    let val: { ts?: number, body: any } = { body: body };
+                    let val: snapshotRespEntry = { body: body };
                     if (ts != null) val.ts = ts;
                     map.set(key, val);
                 } else {
                     const map = httpPostMap;
                     const key = result.url, body = result.respBody, ts = result.ts;
                     const existingValMap = map.get(key);
-                    const valMap = existingValMap != null ? existingValMap : new Map<string, { ts?: number, body: any }>();
+                    const valMap = existingValMap != null ? existingValMap : new Map<string, snapshotRespEntry>();
                     const valMapKey = JSON.stringify(result.postData.obj);
                     if (valMap.has(valMapKey)) throw new Error(`key=[${key}] already exists`);
-                    let valMapVal: { ts?: number, body: any } = { body: body };
+                    let valMapVal: snapshotRespEntry = { body: body };
                     if (ts != null) valMapVal.ts = ts;
                     valMap.set(valMapKey, valMapVal);
                     map.set(key, valMap);
@@ -198,7 +205,7 @@ export class userdataDmp {
         }
     }
 
-    private magirecoJsonRequst(url: URL, postData?: { obj: any }): Promise<NonNullable<any>> {
+    private magirecoJsonRequst(url: URL, postData?: postData): Promise<NonNullable<any>> {
         return new Promise((resolve, reject) => {
             const host = url.host;
             const path = url.pathname + url.search;
@@ -484,7 +491,7 @@ export class userdataDmp {
     }
 
     private readonly tsRegEx = /(?<=timeStamp\=)\d+/;
-    private async execHttpGetApi(url: URL, retries = 0, retryAfterSec = 4): Promise<{ url: string, ts?: number, respBody: any }> {
+    private async execHttpGetApi(url: URL, retries = 0, retryAfterSec = 4): Promise<httpGetApiResult> {
         const retryAfter = Math.trunc((retryAfterSec + Math.random() * 2) * 1000);
         let lastError: any = new Error("execHttpGetApi max retries exceeded");
         for (let i = 0, resp; i <= retries && resp == null; i++) {
@@ -494,7 +501,7 @@ export class userdataDmp {
                     console.error(`execHttpGetApi unsuccessful resultCode=${resp.resultCode} errorTxt=${resp.errorTxt}`);
                     throw new Error(JSON.stringify(resp));
                 }
-                let ret: { url: string, ts?: number, respBody: any } = { url: url.href, respBody: resp };
+                let ret: httpGetApiResult = { url: url.href, respBody: resp };
                 const urlTs = url.href.match(this.tsRegEx);
                 if (urlTs != null && !isNaN(Number(urlTs[0]))) {
                     ret.url.replace(this.tsRegEx, "");
@@ -509,8 +516,8 @@ export class userdataDmp {
         }
         throw lastError;
     }
-    private async execHttpPostApi(url: URL, postData: { obj: any }, retries = 0, retryAfterSec = 4
-    ): Promise<{ url: string, ts?: number, postData: { obj: any }, respBody: any }> {
+    private async execHttpPostApi(url: URL, postData: postData, retries = 0, retryAfterSec = 4
+    ): Promise<httpPostApiResult> {
         const retryAfter = Math.trunc((retryAfterSec + Math.random() * 2) * 1000);
         let lastError: any = new Error("execHttpPostApi max retries exceeded");
         for (let i = 0, resp; i <= retries && resp == null; i++) {
@@ -520,7 +527,7 @@ export class userdataDmp {
                     console.error(`execHttpPostApi unsuccessful resultCode=${resp.resultCode} errorTxt=${resp.errorTxt}`);
                     throw new Error(JSON.stringify(resp));
                 }
-                let ret: { url: string, ts?: number, postData: { obj: any }, respBody: any }
+                let ret: httpPostApiResult
                     = { url: url.href, postData: postData, respBody: resp };
                 const urlTs = url.href.match(this.tsRegEx);
                 if (urlTs != null && !isNaN(Number(urlTs[0]))) {
