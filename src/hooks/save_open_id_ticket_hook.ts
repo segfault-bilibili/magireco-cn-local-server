@@ -1,6 +1,7 @@
 import * as http from "http";
 import * as http2 from "http2";
 import * as parameters from "../parameters";
+import * as userdataDump from "../userdata_dump";
 import { saveResponseBodyHook } from "./save_response_body_hook";
 
 export class saveOpenIdTicketHook extends saveResponseBodyHook {
@@ -12,6 +13,8 @@ export class saveOpenIdTicketHook extends saveResponseBodyHook {
 
     private readonly openIdKeyRegEx = /^User-Id-[0-9a-zA-Z]+$/i;
     private readonly ticketKeyRegEx = /^Ticket$/i;
+    private readonly webSessionIdRegEx = /^Webview-Session-Id$/i;
+    private readonly webSessionIdValueRegEx = /^\d{14}$/;
 
     matchRequest(
         method?: string,
@@ -29,12 +32,13 @@ export class saveOpenIdTicketHook extends saveResponseBodyHook {
         if (!isMagiReco) return isGameLogin;
 
         if (headers == null) return isGameLogin;
-        let open_id: string | undefined, ticket: string | undefined;
+        let open_id: string | undefined, ticket: string | undefined, webSessionId: string | undefined, timestamp: number | undefined;
         for (let key in headers) {
             let val = headers[key];
             if (typeof val !== 'string' || val === "") continue;
             if (key.match(this.openIdKeyRegEx)) open_id = val;
             if (key.match(this.ticketKeyRegEx)) ticket = val;
+            if (key.match(this.webSessionIdRegEx)) webSessionId = val;
             if (open_id != null && ticket != null) break;
         }
         if (open_id == null || ticket == null) {
@@ -52,7 +56,25 @@ export class saveOpenIdTicketHook extends saveResponseBodyHook {
         }
 
         console.log(`${tag} got open_id and ticket from request`);
-        this.params.save({ key: this.paramKey, val: { open_id: open_id, ticket: ticket } })
+        if (webSessionId != null && webSessionId.match(this.webSessionIdValueRegEx)) try {
+            let year = Number(webSessionId.substring(0, 4));
+            let month = Number(webSessionId.substring(4, 6)) - 1;
+            let date = Number(webSessionId.substring(6, 8));
+            let hour = Number(webSessionId.substring(8, 10));
+            let minute = Number(webSessionId.substring(10, 12));
+            let second = Number(webSessionId.substring(12, 14));
+            let d = new Date();
+            d.setFullYear(year);
+            d.setMonth(month);
+            d.setDate(date);
+            d.setHours(hour);
+            d.setMinutes(minute);
+            d.setSeconds(second);
+            timestamp = d.getTime();
+        } catch (e) {}
+        let val: userdataDump.openIdTicket = { open_id: open_id, ticket: ticket };
+        if (timestamp != null && !isNaN(timestamp)) val.timestamp = timestamp;
+        this.params.save({ key: this.paramKey, val: val })
             .then(() => console.log(`${tag} saved to paramKey=[${this.paramKey}]`));
         return false; // no need to capture request/response body
     }

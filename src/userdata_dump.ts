@@ -12,6 +12,7 @@ export type openIdTicket = {
     open_id: string,
     ticket: string,
     uname?: string,
+    timestamp?: number,
 }
 
 type postData = { obj: any }

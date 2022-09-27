@@ -328,7 +328,7 @@ export class controlInterface {
         const upstreamProxyPort = upstreamProxy.port;
         const upstreamProxyEnabled = this.params.upstreamProxyEnabled;
 
-        let loginStatus = `未登录`, loginStatusStyle = "color: red", loginBtnText = "登录";
+        let loginStatus = `B站账户未登录`, loginStatusStyle = "color: red", loginBtnText = "登录";
         const bsgamesdkResponse = this.params.bsgamesdkResponse;
         if (bsgamesdkResponse != null && bsgamesdkResponse.access_key != null) {
             let since: number | string | undefined = bsgamesdkResponse.timestamp;
@@ -338,11 +338,33 @@ export class controlInterface {
             }
             let expires: number | string | undefined = bsgamesdkResponse.expires;
             if (expires != null) expires = `${new Date(expires).toLocaleDateString()} ${new Date(expires).toLocaleTimeString()}`;
-            loginStatus = getStrRep(`已登录 账户=[${bsgamesdkResponse.uname}] uid=[${bsgamesdkResponse.uid}]`
+            loginStatus = getStrRep(`B站账户已登录 账户=[${bsgamesdkResponse.uname}] uid=[${bsgamesdkResponse.uid}]`
                 + ` 实名=[${bsgamesdkResponse.auth_name}] 实名认证状态=[${bsgamesdkResponse.realname_verified}]`
                 + ` 登录时间=[${since}] 登录过期时间=[${expires}]`);
             loginStatusStyle = "color: green";
-            loginBtnText = "重新登录"
+            loginBtnText = "重新登录";
+        }
+
+        let openIdTicketStatus = "游戏未登录", openIdTicketStatusStyle = "color: red";
+        const openIdTicket = this.params.openIdTicket;
+        if (
+            openIdTicket != null
+            && openIdTicket.open_id != null && openIdTicket.open_id !== ""
+            && openIdTicket.ticket != null && openIdTicket.ticket !== ""
+        ) {
+            let since: number | string | undefined = openIdTicket.timestamp;
+            if (since != null) {
+                since = Number(since);
+                since = `${new Date(since).toLocaleDateString()} ${new Date(since).toLocaleTimeString()}`;
+            }
+            const uname = openIdTicket.uname;
+            let inconsistent = bsgamesdkResponse?.uname !== uname;
+            openIdTicketStatus = `${inconsistent ? "游戏账户与B站不一致" : "游戏已登录"}`;
+            if (uname == null) openIdTicketStatus += " 账户未知";
+            else openIdTicketStatus += ` 账户=[${uname}]`;
+            openIdTicketStatus += ` 登录时间=[${since}]`;
+            openIdTicketStatus = getStrRep(openIdTicketStatus);
+            openIdTicketStatusStyle = `color: ${inconsistent ? "red" : "green"}`;
         }
 
         let upstreamProxyCACertStatus = "未上传", upstreamProxyCACertStyle = "color: red";
@@ -369,6 +391,7 @@ export class controlInterface {
             + `\n    });`
             + `\n    setTimeout(() => {`
             + `\n      document.getElementById(\"loginstatus\").textContent = \"${loginStatus}\";`
+            + `\n      document.getElementById(\"openidticketstatus\").textContent = \"${openIdTicketStatus}\";`
             + `\n    });`
             + `\n  </script>`
             + `\n  <style>`
@@ -485,6 +508,10 @@ export class controlInterface {
             + `\n  </form>`
             + `\n  <hr>`
             + `\n  <h2 id=\"dumpuserdata\">下载个人账号数据</h2>`
+            + `\n  <div>`
+            + `\n    <button id=\"refreshbtn3\" onclick=\"window.location.reload(true);\">刷新</button>`
+            + `\n    <label style=\"${openIdTicketStatusStyle}\" id=\"openidticketstatus\" for=\"refreshbtn3\">TO_BE_FILLED_BY_JAVASCRIPT</label>`
+            + `\n  </div>`
             + `\n  <form action=\"/api/dump_userdata\" method=\"post\">`
             + `\n    <div>`
             + `\n      <input id=\"fetch_chara_enhance_tree_checkbox\" name=\"fetch_chara_enhance_tree\" value=\"true\" type=\"checkbox\" ${this.params.fetchCharaEnhancementTree ? "checked" : ""}>`
@@ -498,8 +525,8 @@ export class controlInterface {
             + `\n      <input type=\"submit\" value=\"从官服下载\" id=\"prepare_download_btn\">`
             + `\n    </div>`
             + `\n    <div>`
-            + `\n      <button id=\"refreshbtn3\" onclick=\"window.location.reload(true);\">刷新</button>`
-            + `\n      <label style=\"${userdataDumpStatusStyle}\" for=\"refreshbtn3\">${userdataDumpStatus}</label>`
+            + `\n      <button id=\"refreshbtn4\" onclick=\"window.location.reload(true);\">刷新</button>`
+            + `\n      <label style=\"${userdataDumpStatusStyle}\" for=\"refreshbtn4\">${userdataDumpStatus}</label>`
             + `\n    </div>`
             + `\n  </form>`
             + `\n    ${this.userdataDmp.lastSnapshot == null ? "" : aHref(this.userdataDmp.userdataDumpFileName, `/${this.userdataDmp.userdataDumpFileName}`)}`
