@@ -189,9 +189,7 @@ export class userdataDmp {
             if (!(await this.testLogin())) throw new Error("login test failed, cannot login");
         }
 
-        const retries = 4;
-
-        const fetchPromises1 = this.firstRoundUrlList.map((url) => this.execHttpGetApi(url, retries));
+        const fetchPromises1 = this.firstRoundUrlList.map((url) => this.execHttpGetApi(url));
         console.log(`userdataDmp.getSnapshot() 1st round fetching...`);
         await grow(fetchPromises1);
         console.log(`userdataDmp.getSnapshot() 1st round collecting...`);
@@ -199,8 +197,8 @@ export class userdataDmp {
         console.log(`userdataDmp.getSnapshot() 1st round completed`);
 
         const fetchPromises2 = this.getSecondRoundRequests(httpGetRespMap).map((item) =>
-            item.postData != null ? this.execHttpPostApi(item.url, item.postData, retries)
-                : this.execHttpGetApi(item.url, 2)
+            item.postData != null ? this.execHttpPostApi(item.url, item.postData)
+                : this.execHttpGetApi(item.url)
         );
         console.log(`userdataDmp.getSnapshot() 2nd round fetching...`);
         await grow(fetchPromises2);
@@ -209,8 +207,8 @@ export class userdataDmp {
         console.log(`userdataDmp.getSnapshot() 2nd round completed`);
 
         const fetchPromises3 = this.getThirdRoundRequests(httpGetRespMap, httpPostRespMap).map((item) =>
-            item.postData != null ? this.execHttpPostApi(item.url, item.postData, retries)
-                : this.execHttpGetApi(item.url, 2)
+            item.postData != null ? this.execHttpPostApi(item.url, item.postData)
+                : this.execHttpGetApi(item.url)
         );
         console.log(`userdataDmp.getSnapshot() 3rd round fetching...`);
         await grow(fetchPromises3);
@@ -703,62 +701,39 @@ export class userdataDmp {
     }
 
     private readonly tsRegEx = /(?<=timeStamp\=)\d+/;
-    private async execHttpGetApi(url: URL, retries = 0, retryAfterSec = 4): Promise<httpGetApiResult> {
-        const retryAfter = Math.trunc((retryAfterSec + Math.random() * 2) * 1000);
-        let lastError: any = new Error("execHttpGetApi max retries exceeded");
-        for (let i = 0, resp; i <= retries && resp == null; i++) {
-            try {
-                resp = await this.magirecoJsonRequst(url);
-                if (resp.resultCode === "error") {
-                    console.error(`execHttpGetApi unsuccessful resultCode=${resp.resultCode} errorTxt=${resp.errorTxt}`);
-                    throw new Error(JSON.stringify(resp));
-                }
-                if (resp.interrupt != null) {
-                    let interruptStr = JSON.stringify(resp.interrupt);
-                    console.error(`execHttpGetApi unsuccessful interrupt=${interruptStr}`);
-                    throw new Error(interruptStr);
-                }
-                let ret: httpGetApiResult = { url: url.href, respBody: resp };
-                const urlTs = url.href.match(this.tsRegEx);
-                if (urlTs != null && !isNaN(Number(urlTs[0]))) {
-                    ret.url = ret.url.replace(this.tsRegEx, "");
-                    ret.ts = Number(urlTs[0]);
-                }
-                return ret;
-            } catch (e) {
-                lastError = e;
-                console.error(`execHttpGetApi error`, e, `will retry after ${retryAfter}ms...`);
-                await new Promise<void>((resolve) => setTimeout(() => resolve(), retryAfter));
-            }
+    private async execHttpGetApi(url: URL): Promise<httpGetApiResult> {
+        let resp = await this.magirecoJsonRequst(url);
+        if (resp.resultCode === "error") {
+            console.error(`execHttpGetApi unsuccessful resultCode=${resp.resultCode} errorTxt=${resp.errorTxt}`);
+            throw new Error(JSON.stringify(resp));
         }
-        throw lastError;
+        if (resp.interrupt != null) {
+            let interruptStr = JSON.stringify(resp.interrupt);
+            console.error(`execHttpGetApi unsuccessful interrupt=${interruptStr}`);
+            throw new Error(interruptStr);
+        }
+        let ret: httpGetApiResult = { url: url.href, respBody: resp };
+        const urlTs = url.href.match(this.tsRegEx);
+        if (urlTs != null && !isNaN(Number(urlTs[0]))) {
+            ret.url = ret.url.replace(this.tsRegEx, "");
+            ret.ts = Number(urlTs[0]);
+        }
+        return ret;
     }
-    private async execHttpPostApi(url: URL, postData: postData, retries = 0, retryAfterSec = 4
-    ): Promise<httpPostApiResult> {
-        const retryAfter = Math.trunc((retryAfterSec + Math.random() * 2) * 1000);
-        let lastError: any = new Error("execHttpPostApi max retries exceeded");
-        for (let i = 0, resp; i <= retries && resp == null; i++) {
-            try {
-                resp = await this.magirecoJsonRequst(url, postData);
-                if (resp.resultCode === "error") {
-                    console.error(`execHttpPostApi unsuccessful resultCode=${resp.resultCode} errorTxt=${resp.errorTxt}`);
-                    throw new Error(JSON.stringify(resp));
-                }
-                let ret: httpPostApiResult
-                    = { url: url.href, postData: postData, respBody: resp };
-                const urlTs = url.href.match(this.tsRegEx);
-                if (urlTs != null && !isNaN(Number(urlTs[0]))) {
-                    ret.url = ret.url.replace(this.tsRegEx, "");
-                    ret.ts = Number(urlTs[0]);
-                }
-                return ret;
-            } catch (e) {
-                lastError = e;
-                console.error(`execHttpPostApi error`, e, `will retry after ${retryAfter}ms...`);
-                await new Promise<void>((resolve) => setTimeout(() => resolve(), retryAfter));
-            }
+    private async execHttpPostApi(url: URL, postData: postData): Promise<httpPostApiResult> {
+        let resp = await this.magirecoJsonRequst(url, postData);
+        if (resp.resultCode === "error") {
+            console.error(`execHttpPostApi unsuccessful resultCode=${resp.resultCode} errorTxt=${resp.errorTxt}`);
+            throw new Error(JSON.stringify(resp));
         }
-        throw lastError;
+        let ret: httpPostApiResult
+            = { url: url.href, postData: postData, respBody: resp };
+        const urlTs = url.href.match(this.tsRegEx);
+        if (urlTs != null && !isNaN(Number(urlTs[0]))) {
+            ret.url = ret.url.replace(this.tsRegEx, "");
+            ret.ts = Number(urlTs[0]);
+        }
+        return ret;
     }
 
     static newRandomID(): magirecoIDs {
