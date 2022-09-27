@@ -824,6 +824,30 @@ export class localServer {
         });
     }
 
+    static compress(data: Buffer, encoding?: string): Buffer {
+        if (encoding == null) return data = Buffer.concat([data]);
+        let compressed: Buffer;
+        switch (encoding) {
+            case 'gzip':
+                compressed = zlib.gzipSync(data);
+                break;
+            case 'deflate':
+                compressed = zlib.deflateSync(data);
+                break;
+            case 'br':
+                compressed = zlib.brotliCompressSync(data, {
+                    params: {
+                        [zlib.constants.BROTLI_PARAM_MODE]: zlib.constants.BROTLI_MODE_TEXT,
+                        [zlib.constants.BROTLI_PARAM_QUALITY]: 6,
+                        [zlib.constants.BROTLI_PARAM_SIZE_HINT]: data.byteLength,
+                    },
+                });
+                break;
+            default:
+                throw new Error(`unknown compress encoding=${encoding}`);
+        }
+        return compressed;
+    }
     static decompress(data: Buffer, encoding?: string): Buffer {
         if (encoding == null) return data = Buffer.concat([data]);
         let decompressed: Buffer;
@@ -833,6 +857,9 @@ export class localServer {
                 break;
             case 'deflate':
                 decompressed = zlib.inflateSync(data);
+                break;
+            case 'br':
+                decompressed = zlib.brotliDecompressSync(data);
                 break;
             default:
                 throw new Error(`unknown compress encoding=${encoding}`);

@@ -172,11 +172,23 @@ export class controlInterface {
                     let snapshot = this.userdataDmp.lastSnapshot;
                     if (snapshot != null) {
                         let stringified = JSON.stringify(snapshot, parameters.replacer);
-                        res.writeHead(200, {
+                        let algo: string | null | undefined;
+                        let acceptEncodings = req.headers["accept-encoding"];
+                        if (acceptEncodings != null && acceptEncodings.length > 0) {
+                            acceptEncodings = typeof acceptEncodings === 'string' ? acceptEncodings.split(",") : acceptEncodings;
+                            let algos = acceptEncodings.map((item) => item.match(/(?<=^\s*)(br|gzip)(?=(\s|;|$))/))
+                                .map((item) => item && item[0]).filter((item) => item != null).sort();
+                            algo = algos.find((item) => item != null);
+                        }
+                        let headers: http.OutgoingHttpHeaders = {
                             ["Content-Type"]: "application/json; charset=utf-8",
                             ["Content-Disposition"]: `attachment; filename=\"${this.userdataDumpFileName}\"`,
-                        });
-                        res.end(stringified);
+                        }
+                        if (algo != null) headers["Content-Encoding"] = algo;
+                        res.writeHead(200, headers);
+                        let body = algo != null ? localServer.compress(Buffer.from(stringified, 'utf-8'), algo)
+                            : stringified;
+                        res.end(body);
                         return;
                     } else {
                         this.sendResultAsync(res, 404, "has not yet downloaded");
