@@ -127,8 +127,11 @@ export class userdataDmp {
             this.getSnapshotPromise()
                 .then((result) => resolve(result))
                 .catch((err) => {
-                    this._isDownloading = false;
-                    reject(this._lastError = err);
+                    this.params.save({ key: "openIdTicket", val: undefined })
+                        .finally(() => {
+                            this._isDownloading = false;
+                            reject(this._lastError = err);
+                        });
                 })
         );
     }
