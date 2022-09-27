@@ -457,13 +457,13 @@ export class userdataDmp {
                 + `userFollowList`
                 + `&timeStamp=${ts}`
             ),
-            //好友（关注）
+            //好友（关注，仅GUID）
             new URL(
                 `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/FollowTop?value=`
                 + `userFollowList`
                 + `&timeStamp=${ts}`
             ),
-            //好友（粉丝）
+            //好友（粉丝，仅GUID）
             new URL(
                 `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/friend/follower/list/1`
             ),
@@ -594,6 +594,37 @@ export class userdataDmp {
             url: new URL(`https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/search/friend_search/_search`),
             postData: { obj: { type: 0 } }
         });
+        //好友
+        const friendList: Set<string> = new Set<string>();
+        //关注列表
+        const followTop = map.get(
+            `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/FollowTop?value=`
+            + `userFollowList`
+            + `&timeStamp=`
+        )?.body;
+        const userFollowList = followTop["userFollowList"];
+        if (userFollowList == null || !Array.isArray(userFollowList)) throw new Error("unable to read userFollowList");
+        userFollowList.forEach((item) => {
+            const followUserId = item["followUserId"];
+            if (typeof followUserId !== 'string') throw new Error("unable to read followUserId");
+            if (!followUserId.match(guidRegEx)) throw new Error("followUserId must be guid");
+            friendList.add(followUserId);
+        });
+        //粉丝列表
+        const friendFollowerList = map.get(
+            `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/friend/follower/list/1`
+        )?.body;
+        if (friendFollowerList == null || !Array.isArray(friendFollowerList)) throw new Error("unable to read friendFollowerList");
+        friendFollowerList.forEach((item) => {
+            const followerUserId = item["followerUserId"];
+            if (typeof followerUserId !== 'string') throw new Error("unable to read followerUserId");
+            if (!followerUserId.match(guidRegEx)) throw new Error("followerUserId must be guid");
+            friendList.add(followerUserId);
+        });
+        //把关注和粉丝汇总
+        friendList.forEach((id) => requests.push({
+            url: new URL(`https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/friend/user/${id}`)
+        }));
         //助战选择
         //看上去来自这里：https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/json/friend_search/_search.json?72e447c0eff8c6a7
         const fakeFriends = [
