@@ -88,10 +88,9 @@ export class userdataDmp {
         return uid;
     }
     private get uname(): string {
-        let obj: openIdTicket | bsgamesdkPwdAuthenticate.bsgamesdkResponse | undefined = this.params.openIdTicket;
-        if (obj == null) obj = this.params.bsgamesdkResponse;
-        if (obj == null) throw new Error("unable to read uname, both openIdTicket and bsgamesdkResponse is null");
-        const uname = obj.uname;
+        const bsgamesdkResponse = this.params.bsgamesdkResponse;
+        if (bsgamesdkResponse == null) throw new Error("unable to read uname, bsgamesdkResponse is null");
+        const uname = bsgamesdkResponse.uname;
         if (uname == null) throw new Error("unable to read uname, uname == null");
         return uname;
     }
