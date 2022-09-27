@@ -243,9 +243,14 @@ export class controlInterface {
                     }
                     if (algo != null) headers["Content-Encoding"] = algo;
                     res.writeHead(200, headers);
-                    let body = algo != null ? localServer.compress(Buffer.from(stringified, 'utf-8'), algo)
-                        : stringified;
-                    res.end(body);
+                    let lastSnapshotBr = this.userdataDmp.lastSnapshotBr;
+                    if (algo === 'br' && lastSnapshotBr != null) {
+                        res.end(lastSnapshotBr);
+                    } else if (algo != null) {
+                        res.end(localServer.compress(Buffer.from(stringified, 'utf-8'), algo));
+                    } else {
+                        res.end(stringified);
+                    }
                     return;
                 } else {
                     this.sendResultAsync(res, 404, "has not yet downloaded");

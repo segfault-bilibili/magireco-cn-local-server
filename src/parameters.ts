@@ -59,7 +59,7 @@ const persistParams: {
     bsgamesdkResponse: undefined,
     openIdTicket: undefined,
     magirecoIDs: undefined,
-    fetchCharaEnhancementTree: true,
+    fetchCharaEnhancementTree: false,
 }
 
 export class params {

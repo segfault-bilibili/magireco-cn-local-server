@@ -41,7 +41,11 @@ export class userdataDmp {
     get lastSnapshot(): snapshot | undefined {
         return this._lastSnapshot;
     }
+    get lastSnapshotBr(): Buffer | undefined {
+        return this._lastSnapshotBr;
+    }
     private _lastSnapshot?: snapshot;
+    private _lastSnapshotBr?: Buffer;
     get isDownloading(): boolean {
         return this._isDownloading;
     }
@@ -215,6 +219,13 @@ export class userdataDmp {
                 post: httpPostRespMap,
             },
         };
+
+        console.log("JSON.stringify()...");
+        let jsonBuf = Buffer.from(JSON.stringify(this._lastSnapshot, parameters.replacer), 'utf-8');
+        console.log("brotli compressing...");
+        this._lastSnapshotBr = localServer.compress(jsonBuf, "br");
+        console.log(`brotli compressed. [${jsonBuf.byteLength}] => [${this._lastSnapshotBr.byteLength}]`);
+
         this._isDownloading = false;
         return this._lastSnapshot;
     }

@@ -838,7 +838,7 @@ export class localServer {
                 compressed = zlib.brotliCompressSync(data, {
                     params: {
                         [zlib.constants.BROTLI_PARAM_MODE]: zlib.constants.BROTLI_MODE_TEXT,
-                        [zlib.constants.BROTLI_PARAM_QUALITY]: 6,
+                        [zlib.constants.BROTLI_PARAM_QUALITY]: 8,
                         [zlib.constants.BROTLI_PARAM_SIZE_HINT]: data.byteLength,
                     },
                 });
