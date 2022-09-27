@@ -132,7 +132,7 @@ export class userdataDmp {
                 })
         );
     }
-    private async getSnapshotPromise(): Promise<snapshot> {
+    private async getSnapshotPromise(concurrencyLimit = 5): Promise<snapshot> {
         if (this.isDownloading) throw new Error("previous download has not finished");
         this._isDownloading = true;
         this._lastError = undefined;
@@ -141,12 +141,20 @@ export class userdataDmp {
         const httpGetRespMap = new Map<string, snapshotRespEntry>(),
             httpPostRespMap = new Map<string, Map<string, snapshotRespEntry>>();
 
-        const grow = async (seeds: Array<Promise<httpApiResult>>) => {
-            const fetchResult = await Promise.allSettled(seeds);
-            const succCount = fetchResult.filter((promise) => promise.status === 'fulfilled').length;
-            const failCount = fetchResult.filter((promise) => promise.status !== 'fulfilled').length;
-            console.log(`succCount=${succCount} failCount=${failCount}`);
-            if (failCount != 0) throw new Error(`failCount != 0`);
+        const grow = async (allSeeds: Array<Promise<httpApiResult>>) => {
+            let growed: Array<Promise<httpApiResult>> = [];
+            for (let start = 0; start < allSeeds.length; start += concurrencyLimit) {
+                let end = Math.min(start + concurrencyLimit, allSeeds.length);
+                let seeds = allSeeds.slice(start, end);
+                const fetchResult = await Promise.allSettled(seeds);
+                const succCount = fetchResult.filter((promise) => promise.status === 'fulfilled').length;
+                const failCount = fetchResult.filter((promise) => promise.status !== 'fulfilled').length;
+                console.log(`settled/total:${end}/${allSeeds.length} succCount=${succCount} failCount=${failCount}`);
+                if (failCount != 0) throw new Error(`failCount != 0`);
+                seeds.forEach((seed) => growed.push(seed));
+            }
+            for (let i = 0, total = allSeeds.length; i < total; i++) allSeeds.shift();
+            growed.forEach((seed) => allSeeds.push(seed));
         }
         const reap = async (
             crops: Array<Promise<httpApiResult>>,
