@@ -24,6 +24,7 @@ type httpApiResult = { url: string, ts?: number, postData?: postData, respBody: 
 type snapshotRespEntry = { ts?: number, body: any }
 
 export type snapshot = {
+    uid: number,
     timestamp: number,
     httpResp: {
         get: Map<string, snapshotRespEntry>,
@@ -107,12 +108,10 @@ export class userdataDmp {
     }
 
     get userdataDumpFileName(): string {
-        try {
-            return `magireco_cn_dump_uid_${this.uid}.json`;
-        } catch (e) {
-            console.error(`get userdataDumpFileName error`, e);
-            return "magireco_cn_dump.json"
-        }
+        const filenameWithoutUid = "magireco_cn_dump.json";
+        const lastSnapshot = this.lastSnapshot;
+        if (lastSnapshot == null) return filenameWithoutUid;
+        return `magireco_cn_dump_uid_${lastSnapshot.uid}.json`;
     }
     readonly userdataDumpFileNameRegEx = /^\/magireco_cn_dump[^\/\\]*\.json$/;
 
@@ -220,6 +219,7 @@ export class userdataDmp {
         console.log(`userdataDmp.getSnapshot() 3rd round completed`);
 
         this._lastSnapshot = {
+            uid: this.uid,
             timestamp: timestamp,
             httpResp: {
                 get: httpGetRespMap,
