@@ -427,6 +427,9 @@ export class controlInterface {
             + `\n      document.getElementById(\"openidticketstatus\").textContent = \"${openIdTicketStatus}\";`
             + `\n      document.getElementById(\"userdatadumpstatus\").textContent = \"${userdataDumpStatus}\";`
             + `\n    });`
+            + `\n    function unlock_prepare_download_btn() {`
+            + `\n      document.getElementById(\"prepare_download_btn\").removeAttribute(\"disabled\");`
+            + `\n    }`
             + `\n  </script>`
             + `\n  <style>`
             + `\n    code {`
@@ -558,10 +561,10 @@ export class controlInterface {
             + `\n    </div>`
             + `\n    <div>`
             + `\n      <input id=\"new_download_checkbox\" name=\"new\" value=\"true\" type=\"checkbox\" ${this.userdataDmp.lastError != null ? "checked" : ""}>`
-            + `\n      <label for=\"new_download_checkbox\">重新从官服下载</label>`
+            + `\n      <label for=\"new_download_checkbox\" onclick=\"unlock_prepare_download_btn();\">重新从官服下载</label>`
             + `\n    </div>`
             + `\n    <div>`
-            + `\n      <input type=\"submit\" value=\"从官服下载\" id=\"prepare_download_btn\">`
+            + `\n      <input type=\"submit\" ${this.userdataDmp.isDownloading ? "disabled" : ""} value=\"从官服下载\" id=\"prepare_download_btn\">`
             + `\n    </div>`
             + `\n    <div>`
             + `\n      <button id=\"refreshbtn4\" onclick=\"window.location.reload(true);\">刷新</button>`
