@@ -126,11 +126,26 @@ export class userdataDmp {
             console.log(`succCount=${succCount} failCount=${failCount}`);
             if (failCount != 0) throw new Error(`failCount != 0`);
         }
-        const reap = async (crops: Array<Promise<{ url: string, respBody: any }>>, map: Map<string, any>) => {
+        const reap = async (
+            crops: Array<Promise<{ url: string, postData?: { obj: any }, respBody: any }>>,
+            httpGetMap: Map<string, any>, httpPostMap: Map<string, Map<string, any>>
+        ) => {
             await Promise.all(crops.map((promise) => promise.then((result) => {
-                const key = result.url, val = result.respBody;
-                if (map.has(key)) throw new Error(`key=[${key}] already exists`);
-                map.set(key, val);
+                if (result.postData == null) {
+                    const map = httpGetMap;
+                    const key = result.url, val = result.respBody;
+                    if (map.has(key)) throw new Error(`key=[${key}] already exists`);
+                    map.set(key, val);
+                } else {
+                    const map = httpPostMap;
+                    const key = result.url, valMapVal = result.respBody;
+                    const existingValMap = map.get(key);
+                    const valMap = existingValMap != null ? existingValMap : new Map<string, any>();
+                    const valMapKey = JSON.stringify(result.postData.obj);
+                    if (valMap.has(valMapKey)) throw new Error(`key=[${key}] already exists`);
+                    valMap.set(valMapKey, valMapVal);
+                    map.set(key, valMap);
+                }
             })));
         }
 
@@ -140,11 +155,11 @@ export class userdataDmp {
             if (!(await this.testLogin())) throw new Error("login test failed, cannot login");
         }
 
-        const fetchPromises1 = this.httpGetApiList.map((url) => this.execHttpGetApi(url, 2));
+        const fetchPromises1 = this.firstRoundUrlList.map((url) => this.execHttpGetApi(url, 2));
         console.log(`userdataDmp.getSnapshot() 1st round fetching...`);
         await grow(fetchPromises1);
         console.log(`userdataDmp.getSnapshot() 1st round collecting...`);
-        await reap(fetchPromises1, httpGetRespMap);
+        await reap(fetchPromises1, httpGetRespMap, httpPostRespMap);
         console.log(`userdataDmp.getSnapshot() 1st round completed`);
 
         //TODO 获得履历翻页、左上角个人头像、好友等等
@@ -175,13 +190,13 @@ export class userdataDmp {
         }
     }
 
-    private magirecoJsonRequst(url: URL, postDataObj?: NonNullable<object>): Promise<NonNullable<any>> {
+    private magirecoJsonRequst(url: URL, postData?: { obj: any }): Promise<NonNullable<any>> {
         return new Promise((resolve, reject) => {
             const host = url.host;
             const path = url.pathname + url.search;
-            if (postDataObj === null) reject(new Error("postDataObj === null"));
-            const postData = postDataObj === undefined ? undefined : JSON.stringify(postDataObj);
-            const method = postData == null ? http2.constants.HTTP2_METHOD_GET : http2.constants.HTTP2_METHOD_POST;
+            const isPOST = postData != null;
+            const postDataStr = isPOST ? JSON.stringify(postData.obj) : undefined;
+            const method = isPOST ? http2.constants.HTTP2_METHOD_POST : http2.constants.HTTP2_METHOD_GET;
             const reqHeaders = {
                 [http2.constants.HTTP2_HEADER_METHOD]: method,
                 [http2.constants.HTTP2_HEADER_PATH]: path,
@@ -200,7 +215,7 @@ export class userdataDmp {
                 ["Accept-Encoding"]: "gzip, deflate",
                 ["Accept-Language"]: "zh-CN,en-US;q=0.9",
             }
-            if (postData != null) reqHeaders["Content-Type"] = "application/json";
+            if (isPOST) reqHeaders["Content-Type"] = "application/json";
             const isLogin = url.pathname === "/magica/api/system/game/login";
             const openIdTicket = this.params.openIdTicket;
             const open_id = openIdTicket?.open_id;
@@ -215,7 +230,7 @@ export class userdataDmp {
                     reqHeaders["User-Id-Fba9x88mae"] = open_id;
                     reqHeaders["Webview-Session-Id"] = this.webSessionId;
                 }
-                this.localServer.http2RequestAsync(url, reqHeaders, postData).then((result) => {
+                this.localServer.http2RequestAsync(url, reqHeaders, postDataStr).then((result) => {
                     const statusCode = result.headers[":status"];
                     if (statusCode != 200) reject(new Error(`statusCode=[${statusCode}]`));
                     else if (typeof result.respBody !== 'string') reject(new Error("cannot parse binary data"));
@@ -254,7 +269,7 @@ export class userdataDmp {
             app_version: "2.2.1",
         }
         const gameLoginURL = new URL("https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/system/game/login");
-        const resp = await this.magirecoJsonRequst(gameLoginURL, postDataObj);
+        const resp = await this.magirecoJsonRequst(gameLoginURL, { obj: postDataObj });
         if (resp.resultCode !== "success") {
             console.error(`gameLogin unsuccessful resultCode=${resp.resultCode} errorTxt=${resp.errorTxt}`);
             throw new Error(JSON.stringify(resp));
@@ -263,7 +278,7 @@ export class userdataDmp {
         return resp;
     }
 
-    private get httpGetApiList(): Array<URL> {
+    private get firstRoundUrlList(): Array<URL> {
         const ts = this.timeStamp;
         return [
             //登录页
@@ -473,6 +488,25 @@ export class userdataDmp {
             } catch (e) {
                 lastError = e;
                 console.error(`execHttpGetApi error`, e, `will retry after ${retryAfterSec}s...`);
+                await new Promise<void>((resolve) => setTimeout(() => resolve(), retryAfterSec * 1000));
+            }
+        }
+        throw lastError;
+    }
+    private async execHttpPostApi(url: URL, postData: { obj: any }, retries = 0, retryAfterSec = 4
+    ): Promise<{ url: string, postData: { obj: any }, respBody: any }> {
+        let lastError: any = new Error("execHttpPostApi max retries exceeded");
+        for (let i = 0, resp; i <= retries && resp == null; i++) {
+            try {
+                resp = await this.magirecoJsonRequst(url, postData);
+                if (resp.resultCode === "error") {
+                    console.error(`execHttpPostApi unsuccessful resultCode=${resp.resultCode} errorTxt=${resp.errorTxt}`);
+                    throw new Error(JSON.stringify(resp));
+                }
+                return { url: url.href, postData: postData, respBody: resp };
+            } catch (e) {
+                lastError = e;
+                console.error(`execHttpPostApi error`, e, `will retry after ${retryAfterSec}s...`);
                 await new Promise<void>((resolve) => setTimeout(() => resolve(), retryAfterSec * 1000));
             }
         }
