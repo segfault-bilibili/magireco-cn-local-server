@@ -514,7 +514,7 @@ export class userdataDmp {
                 let ret: httpGetApiResult = { url: url.href, respBody: resp };
                 const urlTs = url.href.match(this.tsRegEx);
                 if (urlTs != null && !isNaN(Number(urlTs[0]))) {
-                    ret.url.replace(this.tsRegEx, "");
+                    ret.url = ret.url.replace(this.tsRegEx, "");
                     ret.ts = Number(urlTs[0]);
                 }
                 return ret;
@@ -541,7 +541,7 @@ export class userdataDmp {
                     = { url: url.href, postData: postData, respBody: resp };
                 const urlTs = url.href.match(this.tsRegEx);
                 if (urlTs != null && !isNaN(Number(urlTs[0]))) {
-                    ret.url.replace(this.tsRegEx, "");
+                    ret.url = ret.url.replace(this.tsRegEx, "");
                     ret.ts = Number(urlTs[0]);
                 }
                 return ret;
