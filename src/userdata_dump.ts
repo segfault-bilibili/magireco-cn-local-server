@@ -134,7 +134,7 @@ export class userdataDmp {
                 })
         );
     }
-    private async getSnapshotPromise(concurrencyLimit = 5): Promise<snapshot> {
+    private async getSnapshotPromise(concurrencyLimit = 1): Promise<snapshot> {
         if (this.isDownloading) throw new Error("previous download has not finished");
         this._isDownloading = true;
         this._lastError = undefined;
@@ -286,17 +286,31 @@ export class userdataDmp {
                     reqHeaders["Webview-Session-Id"] = this.webSessionId;
                 }
                 this.localServer.http2RequestAsync(url, reqHeaders, postDataStr).then((result) => {
-                    const statusCode = result.headers[":status"];
-                    if (statusCode != 200) reject(new Error(`statusCode=[${statusCode}]`));
-                    else if (typeof result.respBody !== 'string') reject(new Error("cannot parse binary data"));
-                    else try {
-                        if (result.respBody === "") reject(new Error("respBody is empty"));
-                        const respBodyParsed = JSON.parse(result.respBody);
-                        if (respBodyParsed == null) reject(new Error("respBodyParsed == null"));
-                        else resolve(respBodyParsed);
-                    } catch (e) {
-                        reject(e);
+                    const openIdTicket = this.params.openIdTicket;
+                    const newTicket = result.headers["Ticket"];
+                    let ticketRenewed = false;
+                    if (openIdTicket != null && typeof newTicket === 'string') {
+                        if (openIdTicket.ticket !== newTicket && newTicket.match(guidRegEx)) {
+                            console.log(`renew ticket`);
+                            openIdTicket.ticket = newTicket;
+                            ticketRenewed = true;
+                        }
                     }
+                    const resolveOrReject = () => {
+                        const statusCode = result.headers[":status"];
+                        if (statusCode != 200) reject(new Error(`statusCode=[${statusCode}]`));
+                        else if (typeof result.respBody !== 'string') reject(new Error("cannot parse binary data"));
+                        else try {
+                            if (result.respBody === "") reject(new Error("respBody is empty"));
+                            const respBodyParsed = JSON.parse(result.respBody);
+                            if (respBodyParsed == null) reject(new Error("respBodyParsed == null"));
+                            else resolve(respBodyParsed);
+                        } catch (e) {
+                            reject(e);
+                        }
+                    }
+                    if (ticketRenewed) this.params.save().then(() => resolveOrReject());
+                    else resolveOrReject();
                 }).catch((e) => reject(e));
             } catch (e) {
                 reject(e);
