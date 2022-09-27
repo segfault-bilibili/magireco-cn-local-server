@@ -114,6 +114,7 @@ export class userdataDmp {
     private async getSnapshotPromise(): Promise<snapshot> {
         if (this.isDownloading) throw new Error("previous download has not finished");
         this._isDownloading = true;
+        this._lastError = undefined;
 
         const timestamp = new Date().getTime();
         const httpGetRespMap = new Map<string, any>(), httpPostRespMap = new Map<string, Map<string, any>>();

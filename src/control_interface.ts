@@ -107,17 +107,22 @@ export class controlInterface {
                         return;
                     case "dump_userdata":
                         try {
-                            let dumpDataParams = await this.getParsedPostData(req);
-                            if (this.userdataDmp.lastSnapshot != null && dumpDataParams.get("new") == null) {
-                                this.sendResultAsync(res, 200, "download has completed");
-                            } else if (this.userdataDmp.isDownloading) {
-                                this.sendResultAsync(res, 429, "have not yet finished downloading, please be patient...");
+                            const dumpDataParams = await this.getParsedPostData(req); // finish receiving first
+                            const requestingNewDownload = dumpDataParams.get("new") != null;
+                            const lastSnapshot = this.userdataDmp.lastSnapshot;
+                            const alreadyDownloaded = lastSnapshot != null;
+                            const lastError = this.userdataDmp.lastError;
+                            const hasDownloadResultOrError = alreadyDownloaded || lastError != null;
+                            const isDownloading = this.userdataDmp.isDownloading;
+                            if (!isDownloading && (requestingNewDownload || !hasDownloadResultOrError)) {
+                                this.userdataDmp.getSnapshotAsync()
+                                    .catch((e) => console.error(`dump_userdata error`, e)); // prevent crash
+                                this.sendResultAsync(res, 200, "downloading, pleses wait...");
                             } else {
-                                const lastError = this.userdataDmp.lastError;
-                                if (lastError == null) {
-                                    this.userdataDmp.getSnapshotAsync()
-                                        .catch((e) => console.error(`dump_userdata error`, e)); // prevent crash
-                                    this.sendResultAsync(res, 200, "downloading, pleses wait...");
+                                if (alreadyDownloaded) {
+                                    this.sendResultAsync(res, 200, "download is already completed");
+                                } else if (isDownloading) {
+                                    this.sendResultAsync(res, 429, "download is not yet finished, please be patient...");
                                 } else {
                                     this.sendResultAsync(res, 500, `error ${lastError instanceof Error ? lastError.message : ""}`);
                                 }
@@ -298,10 +303,10 @@ export class controlInterface {
             upstreamProxyCACertStyle = "color: green";
         }
 
-        let userdataDumpStatus = "尚未开始准备数据", userdataDumpStatusStyle = "color: red";;
-        if (this.userdataDmp.isDownloading) userdataDumpStatus = "数据准备中...", userdataDumpStatusStyle = "color: blue";
-        else if (this.userdataDmp.lastSnapshot != null) userdataDumpStatus = "数据已准备好", userdataDumpStatusStyle = "color: green";
-        else if (this.userdataDmp.lastError != null) userdataDumpStatus = "准备数据过程中出错", userdataDumpStatusStyle = "color: red";
+        let userdataDumpStatus = "尚未开始从官服下载", userdataDumpStatusStyle = "color: red";;
+        if (this.userdataDmp.isDownloading) userdataDumpStatus = "从官服下载中...", userdataDumpStatusStyle = "color: blue";
+        else if (this.userdataDmp.lastSnapshot != null) userdataDumpStatus = "从官服下载数据完毕", userdataDumpStatusStyle = "color: green";
+        else if (this.userdataDmp.lastError != null) userdataDumpStatus = "从官服下载数据过程中出错", userdataDumpStatusStyle = "color: red";
 
         const html = "<!doctype html>"
             + `\n<html>`
@@ -416,9 +421,13 @@ export class controlInterface {
             + `\n  <h2 id=\"dumpuserdata\">下载个人账号数据</h2>`
             + `\n  <form action=\"/api/dump_userdata\" method=\"post\">`
             + `\n    <div>`
+            + `\n      <label for=\"new_download_checkbox\">重新从官服下载</label>`
+            + `\n      <input id=\"new_download_checkbox\" name=\"new\" value=\"true\" type=\"checkbox\" ${this.userdataDmp.lastError != null ? "checked" : ""}>`
+            + `\n    </div>`
+            + `\n    <div>`
             + `\n      <label style=\"${userdataDumpStatusStyle}\" for=\"refreshbtn3\">${userdataDumpStatus}</label>`
             + `\n      <button id=\"refreshbtn3\" onclick=\"window.location.reload(true);\">刷新</button>`
-            + `\n      <input type=\"submit\" value=\"${this.userdataDmp.lastSnapshot == null ? "" : "重新"}准备数据\" id=\"prepare_download_btn\">`
+            + `\n      <input type=\"submit\" value=\"从官服下载\" id=\"prepare_download_btn\">`
             + `\n    </div>`
             + `\n  </form>`
             + `\n    ${this.userdataDmp.lastSnapshot == null ? "" : aHref(this.userdataDumpFileName, `/${this.userdataDumpFileName}`)}`
