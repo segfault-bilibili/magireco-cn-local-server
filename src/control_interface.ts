@@ -148,7 +148,7 @@ export class controlInterface {
                                 if (alreadyDownloaded) {
                                     this.sendResultAsync(res, 200, "download is already completed");
                                 } else if (isDownloading) {
-                                    this.sendResultAsync(res, 429, "download is not yet finished, please be patient...");
+                                    this.sendResultAsync(res, 429, `download not yet finished\n${this.userdataDmp.fetchStatus}`);
                                 } else {
                                     this.sendResultAsync(res, 500, `error ${lastError instanceof Error ? lastError.message : ""}`);
                                 }
@@ -403,7 +403,7 @@ export class controlInterface {
         }
 
         let userdataDumpStatus = "尚未开始从官服下载", userdataDumpStatusStyle = "color: red";;
-        if (this.userdataDmp.isDownloading) userdataDumpStatus = "从官服下载中...", userdataDumpStatusStyle = "color: blue";
+        if (this.userdataDmp.isDownloading) userdataDumpStatus = `从官服下载中 ${this.userdataDmp.fetchStatus}`, userdataDumpStatusStyle = "color: blue";
         else if (this.userdataDmp.lastSnapshot != null) userdataDumpStatus = "从官服下载数据完毕", userdataDumpStatusStyle = "color: green";
         else if (this.userdataDmp.lastError != null) userdataDumpStatus = "从官服下载数据过程中出错", userdataDumpStatusStyle = "color: red";
 
@@ -421,6 +421,7 @@ export class controlInterface {
             + `\n    setTimeout(() => {`
             + `\n      document.getElementById(\"loginstatus\").textContent = \"${loginStatus}\";`
             + `\n      document.getElementById(\"openidticketstatus\").textContent = \"${openIdTicketStatus}\";`
+            + `\n      document.getElementById(\"userdatadumpstatus\").textContent = \"${userdataDumpStatus}\";`
             + `\n    });`
             + `\n  </script>`
             + `\n  <style>`
@@ -560,7 +561,7 @@ export class controlInterface {
             + `\n    </div>`
             + `\n    <div>`
             + `\n      <button id=\"refreshbtn4\" onclick=\"window.location.reload(true);\">刷新</button>`
-            + `\n      <label style=\"${userdataDumpStatusStyle}\" for=\"refreshbtn4\">${userdataDumpStatus}</label>`
+            + `\n      <label id=\"userdatadumpstatus\" style=\"${userdataDumpStatusStyle}\" for=\"refreshbtn4\">TO_BE_FILLED_BY_JAVASCRIPT</label>`
             + `\n    </div>`
             + `\n  </form>`
             + `\n  <form action=\"/api/clear_game_login\" method=\"post\">`

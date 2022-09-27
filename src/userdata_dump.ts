@@ -54,6 +54,10 @@ export class userdataDmp {
         return this._lastError;
     }
     private _lastError?: any;
+    get fetchStatus(): string {
+        return this._fetchStatus;
+    }
+    private _fetchStatus = "";
 
     private get timeStamp(): string {
         return String(new Date().getTime());
@@ -147,6 +151,8 @@ export class userdataDmp {
         const httpGetRespMap = new Map<string, snapshotRespEntry>(),
             httpPostRespMap = new Map<string, Map<string, snapshotRespEntry>>();
 
+        let stage = 1;
+
         const grow = async (seeds: Array<httpApiRequest>) => {
             let results: Array<httpApiResult> = [];
             for (let i = 0, total = seeds.length; i < total; i++) {
@@ -154,7 +160,7 @@ export class userdataDmp {
                 let promise = request.postData == null ? this.execHttpGetApi(request.url)
                     : this.execHttpPostApi(request.url, request.postData);
                 let response = await promise;
-                console.log(`${i + 1}/${total} fetched`);
+                console.log(this._fetchStatus = `stage [${stage}/3]: fetched/total [${i + 1}/${total}]`);
                 results.push(response);
             }
             return results;
@@ -184,6 +190,7 @@ export class userdataDmp {
                     map.set(key, valMap);
                 }
             });
+            stage++;
         }
 
         if (!this.isGameLoggedIn || !(await this.testLogin())) {
