@@ -15,9 +15,10 @@ export type openIdTicket = {
 }
 
 export type snapshot = {
-    timestamp: number, httpResp: {
-        get: Map<string, any>,
-        post: Map<string, Map<string, any>>
+    timestamp: number,
+    httpResp: {
+        get: Map<string, { ts?: number, body: any }>,
+        post: Map<string, Map<string, { ts?: number, body: any }>>
     }
 }
 
@@ -117,7 +118,8 @@ export class userdataDmp {
         this._lastError = undefined;
 
         const timestamp = new Date().getTime();
-        const httpGetRespMap = new Map<string, any>(), httpPostRespMap = new Map<string, Map<string, any>>();
+        const httpGetRespMap = new Map<string, { ts?: number, body: any }>(),
+            httpPostRespMap = new Map<string, Map<string, { ts?: number, body: any }>>();
 
         const grow = async (seeds: Array<Promise<{ url: string, respBody: any }>>) => {
             const fetchResult = await Promise.allSettled(seeds);
@@ -127,22 +129,26 @@ export class userdataDmp {
             if (failCount != 0) throw new Error(`failCount != 0`);
         }
         const reap = async (
-            crops: Array<Promise<{ url: string, postData?: { obj: any }, respBody: any }>>,
-            httpGetMap: Map<string, any>, httpPostMap: Map<string, Map<string, any>>
+            crops: Array<Promise<{ url: string, ts?: number, postData?: { obj: any }, respBody: any }>>,
+            httpGetMap: Map<string, { ts?: number, body: any }>, httpPostMap: Map<string, Map<string, { ts?: number, body: any }>>
         ) => {
             await Promise.all(crops.map((promise) => promise.then((result) => {
                 if (result.postData == null) {
                     const map = httpGetMap;
-                    const key = result.url, val = result.respBody;
+                    const key = result.url, body = result.respBody, ts = result.ts;
                     if (map.has(key)) throw new Error(`key=[${key}] already exists`);
+                    let val: { ts?: number, body: any } = { body: body };
+                    if (ts != null) val.ts = ts;
                     map.set(key, val);
                 } else {
                     const map = httpPostMap;
-                    const key = result.url, valMapVal = result.respBody;
+                    const key = result.url, body = result.respBody, ts = result.ts;
                     const existingValMap = map.get(key);
-                    const valMap = existingValMap != null ? existingValMap : new Map<string, any>();
+                    const valMap = existingValMap != null ? existingValMap : new Map<string, { ts?: number, body: any }>();
                     const valMapKey = JSON.stringify(result.postData.obj);
                     if (valMap.has(valMapKey)) throw new Error(`key=[${key}] already exists`);
+                    let valMapVal: { ts?: number, body: any } = { body: body };
+                    if (ts != null) valMapVal.ts = ts;
                     valMap.set(valMapKey, valMapVal);
                     map.set(key, valMap);
                 }
@@ -171,7 +177,7 @@ export class userdataDmp {
             httpResp: {
                 get: httpGetRespMap,
                 post: httpPostRespMap,
-            }
+            },
         };
         this._isDownloading = false;
         return this._lastSnapshot;
@@ -477,7 +483,8 @@ export class userdataDmp {
         ];
     }
 
-    private async execHttpGetApi(url: URL, retries = 0, retryAfterSec = 4): Promise<{ url: string, respBody: any }> {
+    private readonly tsRegEx = /(?<=timeStamp\=)\d+/;
+    private async execHttpGetApi(url: URL, retries = 0, retryAfterSec = 4): Promise<{ url: string, ts?: number, respBody: any }> {
         const retryAfter = Math.trunc((retryAfterSec + Math.random() * 2) * 1000);
         let lastError: any = new Error("execHttpGetApi max retries exceeded");
         for (let i = 0, resp; i <= retries && resp == null; i++) {
@@ -487,7 +494,13 @@ export class userdataDmp {
                     console.error(`execHttpGetApi unsuccessful resultCode=${resp.resultCode} errorTxt=${resp.errorTxt}`);
                     throw new Error(JSON.stringify(resp));
                 }
-                return { url: url.href, respBody: resp };
+                let ret: { url: string, ts?: number, respBody: any } = { url: url.href, respBody: resp };
+                const urlTs = url.href.match(this.tsRegEx);
+                if (urlTs != null && !isNaN(Number(urlTs[0]))) {
+                    ret.url.replace(this.tsRegEx, "");
+                    ret.ts = Number(urlTs[0]);
+                }
+                return ret;
             } catch (e) {
                 lastError = e;
                 console.error(`execHttpGetApi error`, e, `will retry after ${retryAfter}ms...`);
@@ -497,7 +510,7 @@ export class userdataDmp {
         throw lastError;
     }
     private async execHttpPostApi(url: URL, postData: { obj: any }, retries = 0, retryAfterSec = 4
-    ): Promise<{ url: string, postData: { obj: any }, respBody: any }> {
+    ): Promise<{ url: string, ts?: number, postData: { obj: any }, respBody: any }> {
         const retryAfter = Math.trunc((retryAfterSec + Math.random() * 2) * 1000);
         let lastError: any = new Error("execHttpPostApi max retries exceeded");
         for (let i = 0, resp; i <= retries && resp == null; i++) {
@@ -507,7 +520,14 @@ export class userdataDmp {
                     console.error(`execHttpPostApi unsuccessful resultCode=${resp.resultCode} errorTxt=${resp.errorTxt}`);
                     throw new Error(JSON.stringify(resp));
                 }
-                return { url: url.href, postData: postData, respBody: resp };
+                let ret: { url: string, ts?: number, postData: { obj: any }, respBody: any }
+                    = { url: url.href, postData: postData, respBody: resp };
+                const urlTs = url.href.match(this.tsRegEx);
+                if (urlTs != null && !isNaN(Number(urlTs[0]))) {
+                    ret.url.replace(this.tsRegEx, "");
+                    ret.ts = Number(urlTs[0]);
+                }
+                return ret;
             } catch (e) {
                 lastError = e;
                 console.error(`execHttpPostApi error`, e, `will retry after ${retryAfter}ms...`);
