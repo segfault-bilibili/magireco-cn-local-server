@@ -435,11 +435,11 @@ export class controlInterface {
             + `\n      <input type=\"file\" name=\"upstream_proxy_cacert\" id=\"upstream_proxy_cacert\">`
             + `\n    </div>`
             + `\n    <div>`
-            + `\n      <button id=\"refreshbtn1\" onclick=\"window.location.reload(true);\">刷新</button>`
-            + `\n      <label style=\"${upstreamProxyCACertStyle}\" id=\"upstream_proxy_ca_status\" for=\"refreshbtn1\">${upstreamProxyCACertStatus}</label>`
+            + `\n      <input type=\"submit\" value=\"上传/清除上游代理CA证书(PEM格式)\" id=\"upload_upstream_proxy_cacert_btn\">`
             + `\n    </div>`
             + `\n    <div>`
-            + `\n      <input type=\"submit\" value=\"上传/清除上游代理CA证书(PEM格式)\" id=\"upload_upstream_proxy_cacert_btn\">`
+            + `\n      <button id=\"refreshbtn1\" onclick=\"window.location.reload(true);\">刷新</button>`
+            + `\n      <label style=\"${upstreamProxyCACertStyle}\" id=\"upstream_proxy_ca_status\" for=\"refreshbtn1\">${upstreamProxyCACertStatus}</label>`
             + `\n    </div>`
             + `\n  </form>`
             + `\n  <hr>`
@@ -476,11 +476,11 @@ export class controlInterface {
             + `\n      <input name=\"password\" id=\"password\" type=\"password\" value=\"\">`
             + `\n    </div>`
             + `\n    <div>`
-            + `\n      <button id=\"refreshbtn2\" onclick=\"window.location.reload(true);\">刷新</button>`
-            + `\n      <label style=\"${loginStatusStyle}\" id=\"loginstatus\" for=\"refreshbtn2\">TO_BE_FILLED_BY_JAVASCRIPT</label>`
+            + `\n      <button id=\"loginbtn\">${loginBtnText}</button>`
             + `\n    </div>`
             + `\n    <div>`
-            + `\n      <button id=\"loginbtn\">${loginBtnText}</button>`
+            + `\n      <button id=\"refreshbtn2\" onclick=\"window.location.reload(true);\">刷新</button>`
+            + `\n      <label style=\"${loginStatusStyle}\" id=\"loginstatus\" for=\"refreshbtn2\">TO_BE_FILLED_BY_JAVASCRIPT</label>`
             + `\n    </div>`
             + `\n  </form>`
             + `\n  <hr>`
@@ -495,11 +495,11 @@ export class controlInterface {
             + `\n      <label for=\"new_download_checkbox\">重新从官服下载</label>`
             + `\n    </div>`
             + `\n    <div>`
-            + `\n      <button id=\"refreshbtn3\" onclick=\"window.location.reload(true);\">刷新</button>`
-            + `\n      <label style=\"${userdataDumpStatusStyle}\" for=\"refreshbtn3\">${userdataDumpStatus}</label>`
+            + `\n      <input type=\"submit\" value=\"从官服下载\" id=\"prepare_download_btn\">`
             + `\n    </div>`
             + `\n    <div>`
-            + `\n      <input type=\"submit\" value=\"从官服下载\" id=\"prepare_download_btn\">`
+            + `\n      <button id=\"refreshbtn3\" onclick=\"window.location.reload(true);\">刷新</button>`
+            + `\n      <label style=\"${userdataDumpStatusStyle}\" for=\"refreshbtn3\">${userdataDumpStatus}</label>`
             + `\n    </div>`
             + `\n  </form>`
             + `\n    ${this.userdataDmp.lastSnapshot == null ? "" : aHref(this.userdataDmp.userdataDumpFileName, `/${this.userdataDmp.userdataDumpFileName}`)}`
