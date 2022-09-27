@@ -287,7 +287,7 @@ export class userdataDmp {
                 }
                 this.localServer.http2RequestAsync(url, reqHeaders, postDataStr).then((result) => {
                     const openIdTicket = this.params.openIdTicket;
-                    const newTicket = result.headers["Ticket"];
+                    const newTicket = result.headers["ticket"];
                     let ticketRenewed = false;
                     if (openIdTicket != null && typeof newTicket === 'string') {
                         if (openIdTicket.ticket !== newTicket && newTicket.match(guidRegEx)) {
