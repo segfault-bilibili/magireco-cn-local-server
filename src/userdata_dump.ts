@@ -145,11 +145,12 @@ export class userdataDmp {
 
         const grow = async (seeds: Array<httpApiRequest>) => {
             let results: Array<httpApiResult> = [];
-            for (let i = 0; i < seeds.length; i++) {
+            for (let i = 0, total = seeds.length; i < total; i++) {
                 let request = seeds.shift() as httpApiRequest;
                 let promise = request.postData == null ? this.execHttpGetApi(request.url)
                     : this.execHttpPostApi(request.url, request.postData);
                 let response = await promise;
+                console.log(`${i + 1}/${total} fetched`);
                 results.push(response);
             }
             return results;
