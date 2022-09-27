@@ -158,6 +158,16 @@ export class controlInterface {
                             this.sendResultAsync(res, 500, e instanceof Error ? e.message : `dump_userdata error`);
                         }
                         return;
+                    case "clear_game_login":
+                        try {
+                            await this.getParsedPostData(req);
+                            await this.params.save({ key: "openIdTicket", val: undefined });
+                            this.sendResultAsync(res, 200, "cleared game login status");
+                        } catch (e) {
+                            console.error(`clear_game_login error`, e);
+                            this.sendResultAsync(res, 500, e instanceof Error ? e.message : `clear_game_login error`);
+                        }
+                        return;
                     default:
                         let result = `unknown api=${apiName}`;
                         console.error(result);
@@ -508,10 +518,15 @@ export class controlInterface {
             + `\n  </form>`
             + `\n  <hr>`
             + `\n  <h2 id=\"dumpuserdata\">下载个人账号数据</h2>`
-            + `\n  <div>`
-            + `\n    <button id=\"refreshbtn3\" onclick=\"window.location.reload(true);\">刷新</button>`
-            + `\n    <label style=\"${openIdTicketStatusStyle}\" id=\"openidticketstatus\" for=\"refreshbtn3\">TO_BE_FILLED_BY_JAVASCRIPT</label>`
-            + `\n  </div>`
+            + `\n  <form action=\"/api/clear_game_login\" method=\"post\">`
+            + `\n    <div>`
+            + `\n      <input type=\"submit\" id=\"clear_game_login_btn\" value=\"清除游戏登录状态\">`
+            + `\n    </div>`
+            + `\n    <div>`
+            + `\n      <button id=\"refreshbtn3\" onclick=\"window.location.reload(true);\">刷新</button>`
+            + `\n      <label style=\"${openIdTicketStatusStyle}\" id=\"openidticketstatus\" for=\"refreshbtn3\">TO_BE_FILLED_BY_JAVASCRIPT</label>`
+            + `\n    </div>`
+            + `\n  </form>`
             + `\n  <form action=\"/api/dump_userdata\" method=\"post\">`
             + `\n    <div>`
             + `\n      <input id=\"fetch_chara_enhance_tree_checkbox\" name=\"fetch_chara_enhance_tree\" value=\"true\" type=\"checkbox\" ${this.params.fetchCharaEnhancementTree ? "checked" : ""}>`
