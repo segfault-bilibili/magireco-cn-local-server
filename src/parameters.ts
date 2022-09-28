@@ -170,7 +170,7 @@ export class params {
             + `\n - name: "magirecolocal"`
             + `\n   type: http`
             + `\n   server: ${host}`
-            + `\n   port: ${port}"`
+            + `\n   port: ${port}`
     }
     get upstreamProxy(): listenAddr { return this.mapData.get("upstreamProxy"); }
     get upstreamProxyEnabled(): boolean { return this.mapData.get("upstreamProxyEnabled"); }
