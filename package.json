@@ -4,9 +4,17 @@
   "description": "Magia Record CN Local Server",
   "main": "out/proxy_main.js",
   "scripts": {
+    "prepare": "npm run build",
+    "prepublishOnly": "npm run test && npm run lint",
+    "preversion": "npm run lint",
+    "version": "npm run format && git add -A src",
+    "postversion": "git push && git push --tags",
+    "build": "tsc",
     "once": "npx ts-node ./src/proxy_main.ts",
     "dev": "npx nodemon",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "format": "echo \"Error: no format cmd specified\" && exit 0",
+    "lint": "echo \"Error: no lint cmd specified\" && exit 0",
+    "test": "echo \"Error: no test specified\" && exit 0"
   },
   "repository": {
     "type": "git",
