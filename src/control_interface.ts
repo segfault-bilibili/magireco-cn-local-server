@@ -499,11 +499,11 @@ export class controlInterface {
             + `\n    <div>`
             + `\n      <input type=\"submit\" value=\"上传/清除上游代理CA证书(PEM格式)\" id=\"upload_upstream_proxy_cacert_btn\">`
             + `\n    </div>`
-            + `\n    <div>`
-            + `\n      <button id=\"refreshbtn1\" onclick=\"window.location.reload(true);\">刷新</button>`
-            + `\n      <label style=\"${upstreamProxyCACertStyle}\" id=\"upstream_proxy_ca_status\" for=\"refreshbtn1\">${upstreamProxyCACertStatus}</label>`
-            + `\n    </div>`
             + `\n  </form>`
+            + `\n  <div>`
+            + `\n    <button id=\"refreshbtn1\" onclick=\"window.location.reload(true);\">刷新</button>`
+            + `\n    <label style=\"${upstreamProxyCACertStyle}\" id=\"upstream_proxy_ca_status\" for=\"refreshbtn1\">${upstreamProxyCACertStatus}</label>`
+            + `\n  </div>`
             + `\n  <hr>`
             + `\n  <h2>说明</h2>`
             + `\n  <ol>`
@@ -540,11 +540,11 @@ export class controlInterface {
             + `\n    <div>`
             + `\n      <input type=\"submit\" id=\"loginbtn\" value=\"${loginBtnText}\">`
             + `\n    </div>`
-            + `\n    <div>`
-            + `\n      <button id=\"refreshbtn2\" onclick=\"window.location.reload(true);\">刷新</button>`
-            + `\n      <label style=\"${loginStatusStyle}\" id=\"loginstatus\" for=\"refreshbtn2\">TO_BE_FILLED_BY_JAVASCRIPT</label>`
-            + `\n    </div>`
             + `\n  </form>`
+            + `\n  <div>`
+            + `\n    <button id=\"refreshbtn2\" onclick=\"window.location.reload(true);\">刷新</button>`
+            + `\n    <label style=\"${loginStatusStyle}\" id=\"loginstatus\" for=\"refreshbtn2\">TO_BE_FILLED_BY_JAVASCRIPT</label>`
+            + `\n  </div>`
             + `\n  <form action=\"/api/clear_bilibili_login\" method=\"post\">`
             + `\n    <div>`
             + `\n      <input type=\"submit\" id=\"clear_bilibili_login_btn\" value=\"清除B站登录状态\">`
@@ -572,11 +572,11 @@ export class controlInterface {
             + `\n    <div>`
             + `\n      <input type=\"submit\" ${this.userdataDmp.isDownloading ? "disabled" : ""} value=\"从官服下载\" id=\"prepare_download_btn\">`
             + `\n    </div>`
-            + `\n    <div>`
-            + `\n      <button id=\"refreshbtn4\" onclick=\"window.location.reload(true);\">刷新</button>`
-            + `\n      <label id=\"userdatadumpstatus\" style=\"${userdataDumpStatusStyle}\" for=\"refreshbtn4\">TO_BE_FILLED_BY_JAVASCRIPT</label>`
-            + `\n    </div>`
             + `\n  </form>`
+            + `\n  <div>`
+            + `\n    <button id=\"refreshbtn4\" onclick=\"window.location.reload(true);\">刷新</button>`
+            + `\n    <label id=\"userdatadumpstatus\" style=\"${userdataDumpStatusStyle}\" for=\"refreshbtn4\">TO_BE_FILLED_BY_JAVASCRIPT</label>`
+            + `\n  </div>`
             + `\n  <form action=\"/api/clear_game_login\" method=\"post\">`
             + `\n    <div>`
             + `\n      <input type=\"submit\" id=\"clear_game_login_btn\" value=\"清除游戏登录状态\">`
