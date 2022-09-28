@@ -253,11 +253,8 @@ export class controlInterface {
                         res.end(lastSnapshotGzip);
                     } else {
                         let stringified = JSON.stringify(snapshot, parameters.replacer);
-                        if (algo != null) {
-                            res.end(localServer.compress(Buffer.from(stringified, 'utf-8'), algo));
-                        } else {
-                            res.end(stringified);
-                        }
+                        let buf = Buffer.from(stringified, 'utf-8');
+                        res.end(buf);
                     }
                     return;
                 } else {
