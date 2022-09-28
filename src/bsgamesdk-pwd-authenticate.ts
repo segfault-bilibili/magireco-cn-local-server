@@ -93,9 +93,10 @@ export class bsgamesdkPwdAuth {
             val = decodeURIComponent(val);
             postDataMap.set(key, val);
             return key;
-        }).filter((key) => key !== "" && key !== "sign").sort();
+        }).filter((key) => key !== "" && key !== "sign" && key !== "item_name" && key !== "item_desc").sort();
         let toBeSigned = keys.reduce((prev, curr) => prev + postDataMap.get(curr), "") + app_key_Android;
-        let sign = crypto.createHash('md5').update(toBeSigned).digest().toString('hex');
+        let buf = Buffer.from(toBeSigned, 'utf-8');
+        let sign = crypto.createHash('md5').update(buf).digest().toString('hex');
         return sign;
     }
 
@@ -127,6 +128,7 @@ export class bsgamesdkPwdAuth {
 
         let sign = this.getPostDataSign(postData);
         postData += `&sign=${sign}`;
+        console.log("DEBUG postData", postData);
 
         const issueCipherURL = new URL("https://line1-sdk-center-login-sh.biligame.net/api/external/issue/cipher/v3");
         let resp = await this.bsgamesdkReq(issueCipherURL, postData);
