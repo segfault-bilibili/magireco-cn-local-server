@@ -419,6 +419,7 @@ class controlInterface {
         const officialURL = new URL("https://game.bilibili.com/magireco/");
         const gsxnjURL = new URL("https://www.gsxnj.cn/");
         const clashURL = new URL("https://github.com/Kr328/ClashForAndroid/releases/latest");
+        const termuxURL = new URL("https://termux.dev/");
         const autoBattleURL = new URL("https://www.bilibili.com/video/BV1nf4y1y713");
         const aHref = (text, url, newTab = true) => `<a target=\"${newTab ? "_blank" : "_self"}\" href=${url}>${text}</a>`;
         let httpProxyAddr = "", httpProxyPort = "";
@@ -598,16 +599,19 @@ class controlInterface {
             + `\n  登录后即可${aHref("下载保存个人游戏账号数据", "#dumpuserdata", false)}，包括你拥有的魔法少女列表、记忆结晶列表、好友列表、以及最近的获得履历等等。`
             + `\n  </li>`
             + `\n  <li>`
-            + `\n  另外，让游戏客户端通过上述HTTP代理设置连接服务器时（也就是通过这个本地服务器进行中转），即会自动从游戏通信内容中抓取到登录信息，然后刷新这个页面即可看到登录状态变为绿色“已登录”。`
+            + `\n  另外，让${aHref("游戏客户端", officialURL.href)}通过上述HTTP代理设置连接服务器时（也就是通过这个本地服务器进行中转），即会自动从游戏通信内容中抓取到登录信息，然后刷新这个页面即可看到登录状态变为绿色“已登录”。`
             + `\n  <br>接着就同样可以利用抓取到的登录信息来下载保存个人账号数据。`
-            + `\n  <br>但这很显然要求你有一定的动手能力，比如使用<code>adb reverse tcp:${httpProxyPort} tcp:${httpProxyPort}</code>命令设置端口映射；`
+            + `\n  <br>但这很显然要求你有一定的动手能力，比如电脑上直接跑这个本地服务器、用Android模拟器跑游戏客户端和${aHref("Clash for Android", clashURL.href)}，然后用<code>adb -e reverse tcp:${httpProxyPort} tcp:${httpProxyPort}</code>命令（<code>-e</code>参数指定连接至模拟器而不是真机；<code>-d</code>则反之。若有多个设备/模拟器则可用<code>-t</code>指定<code>adb devices -l</code>列出的transport_id编号，比如<code>-t 2</code>）设置端口映射来让Clash能连到虚拟机外，CA证书也安装在跑游戏客户端和Clash的Android模拟器里；`
+            + `\n  <br>或是在Android真机上用${aHref("Termux", termuxURL.href)}跑这个本地服务器，然后用类似${aHref("光速", gsxnjURL.href)}之类虚拟机来跑游戏客户端，并在虚拟机内安装CA证书，Clash则直接跑在真机上。`
+            + `\n  <br>（<b>注意Clash第一次启动后需要设置一下代理模式</b>，否则默认是DIRECT直连）`
             + `\n  <br>尤其是CA证书必须安装为Android的系统证书，这一步可以用${aHref("autoBattle脚本", autoBattleURL.href)}（安装后请先下拉在线更新到最新版）选择运行[安装CA证书]这个脚本自动完成。`
-            + `\n  <br><b>警告：安卓6的MuMu模拟器等环境下，Clash for Android似乎不能正常分流，可能导致网络通信在本地“死循环”：由这个本地服务器发出、本该直连出去的请求，被Clash拦截后又送回给了这个本地服务器，即死循环。</b>`
+            + `\n  <br><b>警告：Android 6的MuMu模拟器等环境下，Clash for Android似乎不能正常分流，可能导致网络通信在本地“死循环”：由这个本地服务器发出、本该直连出去的请求，被Clash拦截后又送回给了这个本地服务器，即死循环。</b>`
             + `\n  </li>`
             + `\n  </ol>`
             + `\n  <hr>`
             + `\n  <h2 id=\"bilibilipwdauth\">Bilibili登录</h2>`
             + `\n  <i>下面这个登录界面只是快捷省事的途径，不一定可靠。</i><br>`
+            + `\n  <b>如果你不记得密码，强烈建议不要反复试错，以免触发这里无法应对的二次验证。</b>可以直接<b>重置密码</b>，或者尝试上述让游戏走代理这个折腾的办法。<br>`
             + `\n  <form action=\"/api/pwdlogin\" method=\"post\">`
             + `\n    <div>`
             + `\n      <label for=\"username\">账户</label>`
