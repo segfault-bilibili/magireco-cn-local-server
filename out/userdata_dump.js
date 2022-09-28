@@ -3,6 +3,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.userdataDmp = exports.guidRegEx = void 0;
 const crypto = require("crypto");
 const http2 = require("http2");
+const fs = require("fs");
+const path = require("path");
 const parameters = require("./parameters");
 const local_server_1 = require("./local_server");
 exports.guidRegEx = /^[\da-f]{8}-([\da-f]{4}-){3}[\da-f]{12}$/i;
@@ -12,10 +14,12 @@ class userdataDmp {
         this._fetchStatus = "";
         this._flag = 1;
         this.userdataDumpFileNameRegEx = /^\/magireco_cn_dump[^\/\\]*\.json$/;
+        this.internalUserdataDumpFileName = "lastUserdataDump.br";
         this.tsRegEx = /(?<=timeStamp\=)\d+/;
         this.params = params;
         this.localServer = localServer;
         this.clientSessionId = 100 + Math.floor(Math.random() * 899);
+        this.loadLastSnapshot();
     }
     get magirecoIDs() { return this.params.magirecoIDs; }
     get lastSnapshot() {
@@ -51,7 +55,10 @@ class userdataDmp {
             throw new Error("login timestamp is empty");
         if (isNaN(Number(loginTime)))
             throw new Error(`login timestamp=[${loginTime}] converted to NaN`);
-        const date = new Date(Number(loginTime));
+        return this.dateTimeNumberStr(Number(loginTime));
+    }
+    dateTimeNumberStr(time) {
+        const date = new Date(time);
         const year = String(date.getFullYear()).padStart(4, "0");
         const mon = String(date.getMonth() + 1).padStart(2, "0");
         const day = String(date.getDate()).padStart(2, "0");
@@ -100,11 +107,18 @@ class userdataDmp {
         return true;
     }
     get userdataDumpFileName() {
-        const filenameWithoutUid = "magireco_cn_dump.json";
+        return this.getUserdataDumpFileName(true);
+    }
+    getUserdataDumpFileName(includeDateTime) {
+        var _a;
+        let time = (_a = this._lastSnapshot) === null || _a === void 0 ? void 0 : _a.timestamp;
+        const dateTimeNumberStr = includeDateTime ? this.dateTimeNumberStr(time == null ? new Date().getTime() : time)
+            : "last";
+        const filenameWithoutUid = `magireco_cn_dump_${dateTimeNumberStr}.json`;
         const lastSnapshot = this.lastSnapshot;
         if (lastSnapshot == null)
             return filenameWithoutUid;
-        return `magireco_cn_dump_uid_${lastSnapshot.uid}.json`;
+        return `magireco_cn_dump_uid_${lastSnapshot.uid}_${dateTimeNumberStr}.json`;
     }
     getSnapshotAsync() {
         return new Promise((resolve, reject) => this.getSnapshotPromise()
@@ -225,8 +239,32 @@ class userdataDmp {
         console.log(this._fetchStatus = "gzip compressing...");
         this._lastSnapshotGzip = local_server_1.localServer.compress(jsonBuf, "gzip");
         console.log(this._fetchStatus = `gzip compressed. [${jsonBuf.byteLength}] => [${this._lastSnapshotGzip.byteLength}]`);
+        console.log(this._fetchStatus = `writting to [${this.internalUserdataDumpFileName}] ...`);
+        fs.writeFileSync(path.join(".", this.internalUserdataDumpFileName), this._lastSnapshotBr);
+        console.log(this._fetchStatus = `written to [${this.internalUserdataDumpFileName}]`);
         this._isDownloading = false;
         return this._lastSnapshot;
+    }
+    loadLastSnapshot() {
+        if (this._lastSnapshot != null) {
+            console.log("won't replace current snapshot");
+            return;
+        }
+        try {
+            const filePath = path.join(".", this.internalUserdataDumpFileName);
+            if (fs.existsSync(filePath)) {
+                console.log(`loading [${filePath}] ...`);
+                this._lastSnapshotBr = fs.readFileSync(filePath);
+                let decompressedBuf = local_server_1.localServer.decompress(this._lastSnapshotBr, "br");
+                let decompressed = decompressedBuf.toString('utf-8');
+                this._lastSnapshotGzip = local_server_1.localServer.compress(decompressedBuf, "gzip");
+                this._lastSnapshot = JSON.parse(decompressed, parameters.reviver);
+                console.log(`loaded ${this.userdataDumpFileName}`);
+            }
+        }
+        catch (e) {
+            console.log(`loadLastSnapshot`, e);
+        }
     }
     async testLogin() {
         const testURL = new URL(`https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/announcements/red/obvious`);
