@@ -175,6 +175,8 @@ class controlInterface {
                     case "clear_bsgamesdk_ids":
                         try {
                             await this.getParsedPostData(req);
+                            await this.params.save({ key: "bsgamesdkResponse", val: undefined });
+                            this.sendResultAsync(res, 200, "cleared bilibili login status");
                             await this.params.save({ key: "bsgamesdkIDs", val: undefined });
                             this.sendResultAsync(res, 200, "cleared bilibili devices ids");
                         }
@@ -197,6 +199,8 @@ class controlInterface {
                     case "clear_magireco_ids":
                         try {
                             await this.getParsedPostData(req);
+                            await this.params.save({ key: "openIdTicket", val: undefined });
+                            this.sendResultAsync(res, 200, "cleared game login status");
                             await this.params.save({ key: "magirecoIDs", val: undefined });
                             this.sendResultAsync(res, 200, "cleared magireco devices ids");
                         }
@@ -591,7 +595,7 @@ class controlInterface {
             + `\n  </form>`
             + `\n  <form action=\"/api/clear_bsgamesdk_ids\" method=\"post\">`
             + `\n    <div>`
-            + `\n      <input type=\"submit\" id=\"clear_bsgamesdk_ids_btn\" value=\"重置用于B站登录的设备ID\">`
+            + `\n      <input type=\"submit\" id=\"clear_bsgamesdk_ids_btn\" value=\"清除B站登录状态并重置设备ID\">`
             + `\n      <br><code>bd_id=[${bd_id}]</code>`
             + `\n      <br><code>buvid=[${buvid}]</code>`
             + `\n      <br><code>udid=[${udid}]</code>`
@@ -632,7 +636,7 @@ class controlInterface {
             + `\n  </form>`
             + `\n  <form action=\"/api/clear_magireco_ids\" method=\"post\">`
             + `\n    <div>`
-            + `\n      <input type=\"submit\" id=\"clear_magireco_ids_btn\" value=\"重置用于游戏登录的设备ID\">`
+            + `\n      <input type=\"submit\" id=\"clear_magireco_ids_btn\" value=\"清除游戏登录状态并重置设备ID\">`
             + `\n      <br><code>device_id=[${device_id}]</code>`
             + `\n    </div>`
             + `\n  </form>`
