@@ -417,6 +417,7 @@ export class controlInterface {
             + `\n<html>`
             + `\n<head>`
             + `\n  <meta charset =\"utf-8\">`
+            + `\n  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>`
             + `\n  <title>Magireco CN Local Server</title>`
             + `\n  <script>`
             + `\n    window.addEventListener('pageshow', (ev) => {`
@@ -607,6 +608,7 @@ export class controlInterface {
                 + `\n<html>`
                 + `\n<head>`
                 + `\n  <meta charset =\"utf-8\">`
+                + `\n  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>`
                 + `\n  <title>Magireco CN Local Server - API Result</title>`
                 + `\n  <script>`
                 + `\n    window.onload =() => {`
