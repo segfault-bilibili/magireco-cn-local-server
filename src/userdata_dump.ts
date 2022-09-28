@@ -45,12 +45,8 @@ export class userdataDmp {
     get lastSnapshotBr(): Buffer | undefined {
         return this._lastSnapshotBr;
     }
-    get lastSnapshotGzip(): Buffer | undefined {
-        return this._lastSnapshotBr;
-    }
     private _lastSnapshot?: snapshot;
     private _lastSnapshotBr?: Buffer;
-    private _lastSnapshotGzip?: Buffer;
     get isDownloading(): boolean {
         return this._isDownloading;
     }
@@ -267,9 +263,6 @@ export class userdataDmp {
         console.log(this._fetchStatus = "brotli compressing...");
         this._lastSnapshotBr = localServer.compress(jsonBuf, "br");
         console.log(this._fetchStatus = `brotli compressed. [${jsonBuf.byteLength}] => [${this._lastSnapshotBr.byteLength}]`);
-        console.log(this._fetchStatus = "gzip compressing...");
-        this._lastSnapshotGzip = localServer.compress(jsonBuf, "gzip");
-        console.log(this._fetchStatus = `gzip compressed. [${jsonBuf.byteLength}] => [${this._lastSnapshotGzip.byteLength}]`);
 
         console.log(this._fetchStatus = `writting to [${this.internalUserdataDumpFileName}] ...`);
         fs.writeFileSync(path.join(".", this.internalUserdataDumpFileName), this._lastSnapshotBr);
@@ -288,11 +281,11 @@ export class userdataDmp {
             const filePath = path.join(".", this.internalUserdataDumpFileName);
             if (fs.existsSync(filePath)) {
                 console.log(`loading [${filePath}] ...`);
-                this._lastSnapshotBr = fs.readFileSync(filePath);
-                let decompressedBuf = localServer.decompress(this._lastSnapshotBr, "br");
+                let lastSnapshotBr = fs.readFileSync(filePath);
+                let decompressedBuf = localServer.decompress(lastSnapshotBr, "br");
                 let decompressed = decompressedBuf.toString('utf-8');
-                this._lastSnapshotGzip = localServer.compress(decompressedBuf, "gzip");
                 this._lastSnapshot = JSON.parse(decompressed, parameters.reviver);
+                this._lastSnapshotBr = lastSnapshotBr;
                 console.log(`loaded ${this.userdataDumpFileName}`);
             }
         } catch (e) {
