@@ -105,30 +105,29 @@ export class bsgamesdkPwdAuth {
             + `domain_switch_count=0&`
             + `sdk_type=1&`
             + `sdk_log_type=1&`
-            + `timestamp=${new Date().getTime()}&`
+            + `timestamp=${encodeURIComponent(new Date().getTime())}&`
             + `sdk_ver=5.4.2&`
             + `original_domain=https%3A%2F%2Fline1-sdk-center-login-sh.biligame.net&`
             + `version=3&`
-            + `udid=${this.IDs.udid}&`
+            + `udid=${encodeURIComponent(this.IDs.udid)}&`
             + `platform_type=3&`
             + `apk_sign=4502a02a00395dec05a4134ad593224d&`
-            + `old_buvid=${this.IDs.buvid}&`
+            + `old_buvid=${encodeURIComponent(this.IDs.buvid)}&`
             + `current_env=0&`
             + `app_ver=2.2.1&`
             + `server_id=1034&`
             + `domain=line1-sdk-center-login-sh.biligame.net&`
             + `app_id=810&`
-            + `bd_id=${this.IDs.bd_id}&`
+            + `bd_id=${encodeURIComponent(this.IDs.bd_id)}&`
             + `version_code=136&`
             + `platform=3&`
-            + `cur_buvid=${this.IDs.buvid}&`
+            + `cur_buvid=${encodeURIComponent(this.IDs.buvid)}&`
             + `cipher_type=bili_login_rsa&`
             + `channel_id=1&`
             + `game_id=810`;
 
         let sign = this.getPostDataSign(postData);
         postData += `&sign=${sign}`;
-        console.log("DEBUG postData", postData);
 
         const issueCipherURL = new URL("https://line1-sdk-center-login-sh.biligame.net/api/external/issue/cipher/v3");
         let resp = await this.bsgamesdkReq(issueCipherURL, postData);
@@ -152,26 +151,27 @@ export class bsgamesdkPwdAuth {
             + `sdk_ver=5.4.2&`
             + `original_domain=https%3A%2F%2Fline1-sdk-center-login-sh.biligame.net&`
             + `version=3&`
-            + `udid=${this.IDs.udid}&`
+            + `udid=${encodeURIComponent(this.IDs.udid)}&`
             + `platform_type=3&`
             + `apk_sign=4502a02a00395dec05a4134ad593224d&`
-            + `old_buvid=${this.IDs.buvid}&`
+            + `old_buvid=${encodeURIComponent(this.IDs.buvid)}&`
             + `current_env=0&`
             + `app_ver=2.2.1&`
             + `server_id=1034&`
             + `domain=line1-sdk-center-login-sh.biligame.net&`
             + `app_id=810&`
             + `pwd=${encodeURIComponent(encryptedPwd)}&`
-            + `bd_id=${this.IDs.bd_id}&`
+            + `bd_id=${encodeURIComponent(this.IDs.bd_id)}&`
             + `version_code=136&`
             + `platform=3&`
-            + `cur_buvid=${this.IDs.buvid}&`
+            + `cur_buvid=${encodeURIComponent(this.IDs.buvid)}&`
             + `channel_id=1&`
             + `game_id=810&`
-            + `user_id=${user_id}`;
+            + `user_id=${encodeURIComponent(user_id)}`;
 
         let sign = this.getPostDataSign(postData);
         postData += `&sign=${sign}`;
+
         const loginV3URL = new URL("https://line1-sdk-center-login-sh.biligame.net/api/external/login/v3");
         let resp = await this.bsgamesdkReq(loginV3URL, postData);
         if (resp.code != 0) throw new Error(`resp.code=[${resp.code}] resp.message=[${resp.message}]`
