@@ -661,6 +661,7 @@ export class controlInterface {
             + `\n      <br><code>device_id=[${device_id}]</code>`
             + `\n    </div>`
             + `\n  </form>`
+            + `\n    ${this.userdataDmp.lastSnapshot == null ? "" : "<br><b>在某品牌手机上，曾经观察到第一次下载回来是0字节空文件的问题，如果碰到这个问题可以再次点击或长按下面的链接重试下载，或者换个浏览器试试。</b>"}`
             + `\n    ${this.userdataDmp.lastSnapshot == null ? "" : aHref(this.userdataDmp.userdataDumpFileName, `/${this.userdataDmp.userdataDumpFileName}`)}`
             + `\n  <hr>`
             /* //FIXME
