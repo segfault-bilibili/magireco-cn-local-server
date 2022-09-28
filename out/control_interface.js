@@ -1,8 +1,10 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.controlInterface = void 0;
+const fs = require("fs");
 const net = require("net");
 const http = require("http");
+const ChildProcess = require("child_process");
 const parameters = require("./parameters");
 const http_proxy_1 = require("./http_proxy");
 const local_server_1 = require("./local_server");
@@ -310,7 +312,42 @@ class controlInterface {
             await params.save();
         let localserver = new local_server_1.localServer(params);
         let httpproxy = new http_proxy_1.httpProxy(params);
-        new controlInterface(params, [localserver, httpproxy]);
+        let control_interface = new controlInterface(params, [localserver, httpproxy]);
+        control_interface.openWebOnAndroid();
+    }
+    openWebOnAndroid() {
+        try {
+            const androidSpecificFileList = [
+                "/system/build.prop",
+                "/sdcard",
+                "/storage/emulated",
+            ];
+            let found = androidSpecificFileList.filter((path) => fs.existsSync(path));
+            if (found.length > 0) {
+                const addr = this.params.listenList.controlInterface;
+                const webUrl = `http://${addr.host}:${addr.port}/`;
+                const shellCmd = `am start -a \"android.intent.action.VIEW\" -d \"${webUrl}\"`;
+                ChildProcess.exec(shellCmd, (error, stdout, stderr) => {
+                    try {
+                        if (error == null) {
+                            console.log(`    即将从浏览器打开Web控制界面...\n  ${webUrl}`);
+                            console.log(`  【如果没成功自动打开浏览器，请手动复制上述网址粘贴到浏览器地址栏】`);
+                        }
+                        else {
+                            console.error("error", error);
+                            console.error("stdout", stdout);
+                            console.error("stderr", stderr);
+                        }
+                    }
+                    catch (e) {
+                        console.error(e);
+                    }
+                });
+            }
+        }
+        catch (e) {
+            console.error(e);
+        }
     }
     async closeAll() {
         let promises = this.serverList.map((server) => server.close());

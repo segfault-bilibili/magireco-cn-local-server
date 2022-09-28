@@ -9,6 +9,7 @@ export declare class controlInterface {
     private readonly bsgamesdkPwdAuth;
     private readonly userdataDmp;
     static launch(): Promise<void>;
+    openWebOnAndroid(): void;
     constructor(params: parameters.params, serverList: Array<localServer | httpProxy>);
     private closeAll;
     shutdown(): Promise<void>;
