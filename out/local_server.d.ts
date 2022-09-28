@@ -1,8 +1,4 @@
 /// <reference types="node" />
-/// <reference types="node" />
-/// <reference types="node" />
-/// <reference types="node" />
-/// <reference types="node" />
 import * as http from "http";
 import * as http2 from "http2";
 import * as tls from "tls";

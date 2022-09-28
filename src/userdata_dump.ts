@@ -1,8 +1,9 @@
 import * as crypto from "crypto";
 import * as http2 from "http2";
+import * as fs from "fs";
+import * as path from "path";
 import * as parameters from "./parameters";
 import { localServer } from "./local_server";
-import * as bsgamesdkPwdAuthenticate from "./bsgamesdk-pwd-authenticate";
 
 export type magirecoIDs = {
     device_id: string;
@@ -77,7 +78,10 @@ export class userdataDmp {
         const loginTime = bsgamesdkResponse.timestamp;
         if (loginTime == null || loginTime === "") throw new Error("login timestamp is empty");
         if (isNaN(Number(loginTime))) throw new Error(`login timestamp=[${loginTime}] converted to NaN`);
-        const date = new Date(Number(loginTime));
+        return this.dateTimeNumberStr(Number(loginTime));
+    }
+    private dateTimeNumberStr(time: number): string {
+        const date = new Date(time);
         const year = String(date.getFullYear()).padStart(4, "0");
         const mon = String(date.getMonth() + 1).padStart(2, "0");
         const day = String(date.getDate()).padStart(2, "0");
@@ -120,17 +124,25 @@ export class userdataDmp {
     }
 
     get userdataDumpFileName(): string {
-        const filenameWithoutUid = "magireco_cn_dump.json";
+        return this.getUserdataDumpFileName(true);
+    }
+    private getUserdataDumpFileName(includeDateTime: boolean): string {
+        let time = this._lastSnapshot?.timestamp;
+        const dateTimeNumberStr = includeDateTime ? this.dateTimeNumberStr(time == null ? new Date().getTime() : time)
+            : "last";
+        const filenameWithoutUid = `magireco_cn_dump_${dateTimeNumberStr}.json`;
         const lastSnapshot = this.lastSnapshot;
         if (lastSnapshot == null) return filenameWithoutUid;
-        return `magireco_cn_dump_uid_${lastSnapshot.uid}.json`;
+        return `magireco_cn_dump_uid_${lastSnapshot.uid}_${dateTimeNumberStr}.json`;
     }
     readonly userdataDumpFileNameRegEx = /^\/magireco_cn_dump[^\/\\]*\.json$/;
+    readonly internalUserdataDumpFileName = "lastUserdataDump.br";
 
     constructor(params: parameters.params, localServer: localServer) {
         this.params = params;
         this.localServer = localServer;
         this.clientSessionId = 100 + Math.floor(Math.random() * 899);
+        this.loadLastSnapshot();
     }
 
     getSnapshotAsync(): Promise<snapshot> {
@@ -259,8 +271,33 @@ export class userdataDmp {
         this._lastSnapshotGzip = localServer.compress(jsonBuf, "gzip");
         console.log(this._fetchStatus = `gzip compressed. [${jsonBuf.byteLength}] => [${this._lastSnapshotGzip.byteLength}]`);
 
+        console.log(this._fetchStatus = `writting to [${this.internalUserdataDumpFileName}] ...`);
+        fs.writeFileSync(path.join(".", this.internalUserdataDumpFileName), this._lastSnapshotBr);
+        console.log(this._fetchStatus = `written to [${this.internalUserdataDumpFileName}]`);
+
         this._isDownloading = false;
         return this._lastSnapshot;
+    }
+
+    loadLastSnapshot(): void {
+        if (this._lastSnapshot != null) {
+            console.log("won't replace current snapshot");
+            return;
+        }
+        try {
+            const filePath = path.join(".", this.internalUserdataDumpFileName);
+            if (fs.existsSync(filePath)) {
+                console.log(`loading [${filePath}] ...`);
+                this._lastSnapshotBr = fs.readFileSync(filePath);
+                let decompressedBuf = localServer.decompress(this._lastSnapshotBr, "br");
+                let decompressed = decompressedBuf.toString('utf-8');
+                this._lastSnapshotGzip = localServer.compress(decompressedBuf, "gzip");
+                this._lastSnapshot = JSON.parse(decompressed, parameters.reviver);
+                console.log(`loaded ${this.userdataDumpFileName}`);
+            }
+        } catch (e) {
+            console.log(`loadLastSnapshot`, e);
+        }
     }
 
     private async testLogin(): Promise<boolean> {

@@ -104,4 +104,6 @@ dist
 .tern-port
 
 params.json
+params.json.old
 ca.crt
+lastUserdataDump.br
