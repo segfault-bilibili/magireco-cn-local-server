@@ -605,6 +605,7 @@ export class controlInterface {
             + `\n    </div>`
             + `\n    <div>`
             + `\n      <input type=\"submit\" ${this.userdataDmp.isDownloading ? "disabled" : ""} value=\"从官服下载\" id=\"prepare_download_btn\">`
+            + `\n      <br><i>从官服下载个人账号数据数据到本地服务器需要大约几分钟时间。下载完成后，下面会给出文件保存链接。</i>`
             + `\n    </div>`
             + `\n  </form>`
             + `\n  <div>`

@@ -172,6 +172,17 @@ class controlInterface {
                             this.sendResultAsync(res, 500, e instanceof Error ? e.message : `clear_bilibili_login error`);
                         }
                         return;
+                    case "clear_bsgamesdk_ids":
+                        try {
+                            await this.getParsedPostData(req);
+                            await this.params.save({ key: "bsgamesdkIDs", val: undefined });
+                            this.sendResultAsync(res, 200, "cleared bilibili devices ids");
+                        }
+                        catch (e) {
+                            console.error(`clear_bsgamesdk_ids error`, e);
+                            this.sendResultAsync(res, 500, e instanceof Error ? e.message : `clear_bsgamesdk_ids error`);
+                        }
+                        return;
                     case "clear_game_login":
                         try {
                             await this.getParsedPostData(req);
@@ -181,6 +192,17 @@ class controlInterface {
                         catch (e) {
                             console.error(`clear_game_login error`, e);
                             this.sendResultAsync(res, 500, e instanceof Error ? e.message : `clear_game_login error`);
+                        }
+                        return;
+                    case "clear_magireco_ids":
+                        try {
+                            await this.getParsedPostData(req);
+                            await this.params.save({ key: "magirecoIDs", val: undefined });
+                            this.sendResultAsync(res, 200, "cleared magireco devices ids");
+                        }
+                        catch (e) {
+                            console.error(`clear_magireco_ids error`, e);
+                            this.sendResultAsync(res, 500, e instanceof Error ? e.message : `clear_magireco_ids error`);
                         }
                         return;
                     default:
@@ -425,10 +447,15 @@ class controlInterface {
         else if (this.userdataDmp.lastError != null)
             userdataDumpStatus = `从官服下载数据过程中出错  ${this.userdataDmp.fetchStatus}`, userdataDumpStatusStyle = "color: red";
         userdataDumpStatus = (0, getStrRep_1.getStrRep)(userdataDumpStatus);
+        const bsgamesdkIDs = this.params.bsgamesdkIDs;
+        const bd_id = bsgamesdkIDs.bd_id, buvid = bsgamesdkIDs.buvid, udid = bsgamesdkIDs.udid;
+        const magirecoIDs = this.params.magirecoIDs;
+        const device_id = magirecoIDs.device_id;
         const html = "<!doctype html>"
             + `\n<html>`
             + `\n<head>`
             + `\n  <meta charset =\"utf-8\">`
+            + `\n  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>`
             + `\n  <title>Magireco CN Local Server</title>`
             + `\n  <script>`
             + `\n    window.addEventListener('pageshow', (ev) => {`
@@ -562,6 +589,14 @@ class controlInterface {
             + `\n      <input type=\"submit\" id=\"clear_bilibili_login_btn\" value=\"清除B站登录状态\">`
             + `\n    </div>`
             + `\n  </form>`
+            + `\n  <form action=\"/api/clear_bsgamesdk_ids\" method=\"post\">`
+            + `\n    <div>`
+            + `\n      <input type=\"submit\" id=\"clear_bsgamesdk_ids_btn\" value=\"重置用于B站登录的设备ID\">`
+            + `\n      <br><code>bd_id=[${bd_id}]</code>`
+            + `\n      <br><code>buvid=[${buvid}]</code>`
+            + `\n      <br><code>udid=[${udid}]</code>`
+            + `\n    </div>`
+            + `\n  </form>`
             + `\n  <hr>`
             + `\n  <h2 id=\"dumpuserdata\">下载个人账号数据</h2>`
             + `\n  <div>`
@@ -583,6 +618,7 @@ class controlInterface {
             + `\n    </div>`
             + `\n    <div>`
             + `\n      <input type=\"submit\" ${this.userdataDmp.isDownloading ? "disabled" : ""} value=\"从官服下载\" id=\"prepare_download_btn\">`
+            + `\n      <br><i>从官服下载个人账号数据数据到本地服务器需要大约几分钟时间。下载完成后，下面会给出文件保存链接。</i>`
             + `\n    </div>`
             + `\n  </form>`
             + `\n  <div>`
@@ -592,6 +628,12 @@ class controlInterface {
             + `\n  <form action=\"/api/clear_game_login\" method=\"post\">`
             + `\n    <div>`
             + `\n      <input type=\"submit\" id=\"clear_game_login_btn\" value=\"清除游戏登录状态\">`
+            + `\n    </div>`
+            + `\n  </form>`
+            + `\n  <form action=\"/api/clear_magireco_ids\" method=\"post\">`
+            + `\n    <div>`
+            + `\n      <input type=\"submit\" id=\"clear_magireco_ids_btn\" value=\"重置用于游戏登录的设备ID\">`
+            + `\n      <br><code>device_id=[${device_id}]</code>`
             + `\n    </div>`
             + `\n  </form>`
             + `\n    ${this.userdataDmp.lastSnapshot == null ? "" : aHref(this.userdataDmp.userdataDumpFileName, `/${this.userdataDmp.userdataDumpFileName}`)}`
@@ -617,6 +659,7 @@ class controlInterface {
                 + `\n<html>`
                 + `\n<head>`
                 + `\n  <meta charset =\"utf-8\">`
+                + `\n  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>`
                 + `\n  <title>Magireco CN Local Server - API Result</title>`
                 + `\n  <script>`
                 + `\n    window.onload =() => {`
