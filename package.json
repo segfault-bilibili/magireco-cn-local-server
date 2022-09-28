@@ -1,10 +1,10 @@
 {
   "name": "magireco-cn-local-server",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Magia Record CN Local Server",
   "main": "out/proxy_main.js",
   "bin": {
-    "magireco-cn-local-server": "./out/proxy_main.js"
+    "magireco-cn-local-server": "./bin/magireco-cn-local-server"
   },
   "scripts": {
     "start": "npm run build && node ./out/proxy_main.js",
