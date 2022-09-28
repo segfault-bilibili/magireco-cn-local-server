@@ -1,5 +1,7 @@
+import * as fs from "fs";
 import * as net from "net";
 import * as http from "http";
+import * as ChildProcess from "child_process";
 import * as parameters from "./parameters";
 import { httpProxy } from "./http_proxy";
 import { localServer } from "./local_server";
@@ -22,7 +24,39 @@ export class controlInterface {
         if (params.checkModified()) await params.save();
         let localserver = new localServer(params);
         let httpproxy = new httpProxy(params);
-        new controlInterface(params, [localserver, httpproxy]);
+        let control_interface = new controlInterface(params, [localserver, httpproxy]);
+        control_interface.openWebOnAndroid();
+    }
+    openWebOnAndroid(): void {
+        try {
+            const androidSpecificFileList = [
+                "/system/build.prop",
+                "/sdcard",
+                "/storage/emulated",
+            ];
+            let found = androidSpecificFileList.filter((path) => fs.existsSync(path));
+            if (found.length > 0) {
+                const addr = this.params.listenList.controlInterface;
+                const webUrl = `http://${addr.host}:${addr.port}/`;
+                const shellCmd = `am start -a \"android.intent.action.VIEW\" -d \"${webUrl}\"`;
+                ChildProcess.exec(shellCmd, (error, stdout, stderr) => {
+                    try {
+                        if (error == null) {
+                            console.log(`    即将从浏览器打开Web控制界面...\n  ${webUrl}`);
+                            console.log(`  【如果没成功自动打开浏览器，请手动复制上述网址粘贴到浏览器地址栏】`);
+                        } else {
+                            console.error("error", error);
+                            console.error("stdout", stdout);
+                            console.error("stderr", stderr);
+                        }
+                    } catch (e) {
+                        console.error(e);
+                    }
+                });
+            }
+        } catch (e) {
+            console.error(e);
+        }
     }
 
     constructor(params: parameters.params, serverList: Array<localServer | httpProxy>) {
