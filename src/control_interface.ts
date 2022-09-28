@@ -424,11 +424,11 @@ export class controlInterface {
             + `\n        window.location.reload(true);/*refresh on back or forward*/`
             + `\n      }`
             + `\n    });`
-            + `\n    setTimeout(() => {`
+            + `\n    window.onload = () => {`
             + `\n      document.getElementById(\"loginstatus\").textContent = \"${loginStatus}\";`
             + `\n      document.getElementById(\"openidticketstatus\").textContent = \"${openIdTicketStatus}\";`
             + `\n      document.getElementById(\"userdatadumpstatus\").textContent = \"${userdataDumpStatus}\";`
-            + `\n    });`
+            + `\n    };`
             + `\n    function unlock_prepare_download_btn() {`
             + `\n      document.getElementById(\"prepare_download_btn\").removeAttribute(\"disabled\");`
             + `\n    }`
@@ -609,10 +609,10 @@ export class controlInterface {
                 + `\n  <meta charset =\"utf-8\">`
                 + `\n  <title>Magireco CN Local Server - API Result</title>`
                 + `\n  <script>`
-                + `\n    setTimeout(() => {`
+                + `\n    window.onload =() => {`
                 + `\n      document.getElementById(\"httpstatus\").textContent = \"${statusCode}\";`
                 + `\n      document.getElementById(\"result\").textContent = \"${strRep}\";`
-                + `\n    });`
+                + `\n    };`
                 + `\n  </script>`
                 + `\n  <style>`
                 + `\n    label,input {`
