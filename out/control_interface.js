@@ -716,12 +716,13 @@ class controlInterface {
                 + `\n  </style>`
                 + `\n</head>`
                 + `\n<body>`
-                + `\n  <button onclick=\"window.history.back();\">Back</button>`
+                + `\n  <label for=\"backbtn\">${statusCode == 200 ? "操作成功" : "错误"}</label>`
+                + `\n  <button id=\"backbtn\" onclick=\"window.history.back();\">返回 Back</button>`
                 + `\n  <hr>`
                 + `\n  <label for=\"httpstatus\">HTTP Status Code</label>`
                 + `\n  <textarea id=\"httpstatus\" readonly rows=\"1\" cols=\"64\">TO_BE_FILLED_BY_JAVASCRIPT</textarea>`
                 + `\n  <br>`
-                + `\n  <label for=\"result\">${statusCode == 200 ? "Result" : "Error Message"}</label>`
+                + `\n  <label for=\"result\">${statusCode == 200 ? "结果 Result" : "错误消息 Error Message"}</label>`
                 + `\n  <textarea id=\"result\" readonly rows=\"20\" cols=\"64\">TO_BE_FILLED_BY_JAVASCRIPT</textarea>`
                 + `\n</body>`
                 + `\n</html>`;
