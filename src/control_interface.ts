@@ -331,7 +331,6 @@ export class controlInterface {
                         ["Content-Type"]: "application/json; charset=utf-8",
                         ["Content-Disposition"]: `attachment; filename=\"${userdataDumpFileName}\"`,
                     }
-                    let transferEncodingArray = ["chunked"];
                     let pipelineList: Array<stream.Readable | stream.Writable>;
 
                     let lastSnapshotBr = this.userdataDmp.lastSnapshotBr;
@@ -350,26 +349,8 @@ export class controlInterface {
                         pipelineList = [fromStringified];
                     }
 
-                    let reCompressor: zlib.Gzip | zlib.Deflate | null;
-                    if (algo === 'br') {
-                        reCompressor = null;
-                    } else if (algo === 'gzip') {
-                        reCompressor = zlib.createGzip();
-                    } else if (algo === 'deflate') {
-                        reCompressor = zlib.createDeflate();
-                    } else {
-                        algo = null;
-                        reCompressor = null;
-                    }
-
-                    if (algo != null) transferEncodingArray.unshift(algo);
-                    if (reCompressor != null) pipelineList.push(reCompressor);
-
                     pipelineList.push(res);
 
-                    const transferEncoding = transferEncodingArray.join(", ");
-                    console.log(`using transferEncoding=[${transferEncoding}] for ${req.url}`);
-                    headers["Transfer-Encoding"] = transferEncoding;
                     res.writeHead(200, headers);
                     let doneCallback = (err: NodeJS.ErrnoException | null) => {
                         if (err != null) console.error(`error sending ${userdataDumpFileName}`, err);
