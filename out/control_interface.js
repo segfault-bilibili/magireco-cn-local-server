@@ -6,6 +6,7 @@ const zlib = require("zlib");
 const fs = require("fs");
 const net = require("net");
 const http = require("http");
+const process = require("process");
 const ChildProcess = require("child_process");
 const parameters = require("./parameters");
 const http_proxy_1 = require("./http_proxy");
@@ -106,6 +107,20 @@ class controlInterface {
                         catch (e) {
                             console.error(`set_upstream_proxy error`, e);
                             this.sendResultAsync(res, 500, e instanceof Error ? e.message : `set_upstream_proxy error`);
+                        }
+                        return;
+                    case "set_auto_open_web":
+                        try {
+                            let autoOpenWebParams = await this.getParsedPostData(req);
+                            let newAutoOpenWeb = autoOpenWebParams.get("auto_open_web") != null;
+                            await this.params.save({ key: "autoOpenWeb", val: newAutoOpenWeb });
+                            let resultText = "sucessfully updated auto open web settings";
+                            console.log(resultText);
+                            this.sendResultAsync(res, 200, resultText);
+                        }
+                        catch (e) {
+                            console.error(`set_auto_open_web error`, e);
+                            this.sendResultAsync(res, 500, e instanceof Error ? e.message : `set_auto_open_web error`);
                         }
                         return;
                     case "pwdlogin":
@@ -350,7 +365,11 @@ class controlInterface {
         control_interface.openWebOnAndroid();
     }
     openWebOnAndroid() {
+        var _a;
         try {
+            const addr = this.params.listenList.controlInterface;
+            const webUrl = `http://${addr.host}:${addr.port}/`;
+            let shellCmd;
             const androidSpecificFileList = [
                 "/system/build.prop",
                 "/sdcard",
@@ -358,26 +377,31 @@ class controlInterface {
             ];
             let found = androidSpecificFileList.filter((path) => fs.existsSync(path));
             if (found.length > 0) {
-                const addr = this.params.listenList.controlInterface;
-                const webUrl = `http://${addr.host}:${addr.port}/`;
-                const shellCmd = `am start -a \"android.intent.action.VIEW\" -d \"${webUrl}\"`;
-                ChildProcess.exec(shellCmd, (error, stdout, stderr) => {
-                    try {
-                        if (error == null) {
-                            console.log(`    即将从浏览器打开Web控制界面...\n  ${webUrl}`);
-                            console.log(`  【如果没成功自动打开浏览器，请手动复制上述网址粘贴到浏览器地址栏】`);
-                        }
-                        else {
-                            console.error("error", error);
-                            console.error("stdout", stdout);
-                            console.error("stderr", stderr);
-                        }
-                    }
-                    catch (e) {
-                        console.error(e);
-                    }
-                });
+                shellCmd = `am start -a \"android.intent.action.VIEW\" -d \"${webUrl}\"`;
             }
+            else if ((_a = process.env["windir"]) === null || _a === void 0 ? void 0 : _a.match(/^[A-Z]\:\\WINDOWS/i)) {
+                shellCmd = `start ${webUrl}`;
+            }
+            if (shellCmd == null || !this.params.autoOpenWeb) {
+                console.log(`请手动在浏览器中打开Web控制界面\n  ${webUrl}`);
+                return;
+            }
+            ChildProcess.exec(shellCmd, (error, stdout, stderr) => {
+                try {
+                    if (error == null) {
+                        console.log(`    即将从浏览器打开Web控制界面...\n  ${webUrl}`);
+                        console.log(`  【如果没成功自动打开浏览器，请手动复制上述网址粘贴到浏览器地址栏】`);
+                    }
+                    else {
+                        console.error("error", error);
+                        console.error("stdout", stdout);
+                        console.error("stderr", stderr);
+                    }
+                }
+                catch (e) {
+                    console.error(e);
+                }
+            });
         }
         catch (e) {
             console.error(e);
@@ -455,7 +479,10 @@ class controlInterface {
         const clashURL = new URL("https://github.com/Kr328/ClashForAndroid/releases/latest");
         const termuxURL = new URL("https://termux.dev/");
         const autoBattleURL = new URL("https://www.bilibili.com/video/BV1nf4y1y713");
+        const nodeJsUrl = new URL("https://nodejs.org/zh-cn/download/current/");
+        const npmRepoUrl = new URL("https://www.npmjs.com/package/magireco-cn-local-server");
         const aHref = (text, url, newTab = true) => `<a target=\"${newTab ? "_blank" : "_self"}\" href=${url}>${text}</a>`;
+        const autoOpenWeb = this.params.autoOpenWeb;
         let httpProxyAddr = "", httpProxyPort = "";
         const listenList = this.params.listenList;
         if (listenList != null) {
@@ -486,6 +513,7 @@ class controlInterface {
         }
         let openIdTicketStatus = "游戏未登录", openIdTicketStatusStyle = "color: red";
         const openIdTicket = this.params.openIdTicket;
+        let gameUid;
         if (openIdTicket != null
             && openIdTicket.open_id != null && openIdTicket.open_id !== ""
             && openIdTicket.ticket != null && openIdTicket.ticket !== "") {
@@ -498,6 +526,7 @@ class controlInterface {
             const open_id = openIdTicket.open_id;
             const uidMatched = open_id.match(/\d+$/);
             const uid = uidMatched != null && !isNaN(Number(uidMatched[0])) ? (Number(uidMatched[0])) : undefined;
+            gameUid = uid;
             let inconsistent = (bsgamesdkResponse === null || bsgamesdkResponse === void 0 ? void 0 : bsgamesdkResponse.uid) !== uid;
             openIdTicketStatus = `${inconsistent ? "游戏账户与B站不一致" : "游戏已登录"}`;
             if (uname == null)
@@ -516,10 +545,19 @@ class controlInterface {
         }
         let userdataDumpStatus = "尚未开始从官服下载", userdataDumpStatusStyle = "color: red";
         ;
-        if (this.userdataDmp.isDownloading)
+        const isDownloading = this.userdataDmp.isDownloading;
+        const lastSnapshot = this.userdataDmp.lastSnapshot;
+        if (isDownloading)
             userdataDumpStatus = `从官服下载中 ${this.userdataDmp.fetchStatus}`, userdataDumpStatusStyle = "color: blue";
-        else if (this.userdataDmp.lastSnapshot != null)
-            userdataDumpStatus = "从官服下载数据完毕", userdataDumpStatusStyle = "color: green";
+        else if (lastSnapshot != null) {
+            const lastUid = lastSnapshot.uid;
+            if (lastUid != null && lastUid === gameUid) {
+                userdataDumpStatus = "从官服下载数据完毕", userdataDumpStatusStyle = "color: green";
+            }
+            else {
+                userdataDumpStatus = `从官服下载数据完毕（uid=[${lastUid}]，不属于当前登录账号uid=[${gameUid}]）`, userdataDumpStatusStyle = "color: orange";
+            }
+        }
         else if (this.userdataDmp.lastError != null)
             userdataDumpStatus = `从官服下载数据过程中出错  ${this.userdataDmp.fetchStatus}`, userdataDumpStatusStyle = "color: red";
         userdataDumpStatus = (0, getStrRep_1.getStrRep)(userdataDumpStatus);
@@ -539,11 +577,17 @@ class controlInterface {
             + `\n        window.location.reload(true);/*refresh on back or forward*/`
             + `\n      }`
             + `\n    });`
-            + `\n    window.onload = () => {`
+            + `\n    function confirmRefresh() {`
+            + `\n      if (confirm(\"即将刷新页面\")) {`
+            + `\n        window.location.reload(true);`
+            + `\n      }`
+            + `\n    }`
+            + `\n    window.addEventListener('load', (ev) => {`
             + `\n      document.getElementById(\"loginstatus\").textContent = \"${loginStatus}\";`
             + `\n      document.getElementById(\"openidticketstatus\").textContent = \"${openIdTicketStatus}\";`
             + `\n      document.getElementById(\"userdatadumpstatus\").textContent = \"${userdataDumpStatus}\";`
-            + `\n    };`
+            + `\n      ${isDownloading ? "setTimeout(() => {confirmRefresh();}, 10000);" : ""}`
+            + `\n    });`
             + `\n    function unlock_prepare_download_btn() {`
             + `\n      document.getElementById(\"prepare_download_btn\").removeAttribute(\"disabled\");`
             + `\n    }`
@@ -620,6 +664,16 @@ class controlInterface {
             + `\n    <label style=\"${upstreamProxyCACertStyle}\" id=\"upstream_proxy_ca_status\" for=\"refreshbtn1\">${upstreamProxyCACertStatus}</label>`
             + `\n  </div>`
             + `\n  <hr>`
+            + `\n  <form action=\"/api/set_auto_open_web\" method=\"post\">`
+            + `\n    <div>`
+            + `\n      <input id=\"auto_open_web\" name=\"auto_open_web\" value=\"true\" type=\"checkbox\" ${autoOpenWeb ? "checked" : ""}>`
+            + `\n      <label for=\"auto_open_web\">启动时自动打开浏览器</label>`
+            + `\n    </div>`
+            + `\n    <div>`
+            + `\n      <input type=\"submit\" id=\"set_auto_open_web_btn\" value=\"应用\">`
+            + `\n    </div>`
+            + `\n  </form>`
+            + `\n  <hr>`
             + `\n  <h2>说明</h2>`
             + `\n  <ol>`
             + `\n  <li>`
@@ -635,11 +689,11 @@ class controlInterface {
             + `\n  <li>`
             + `\n  另外，让${aHref("游戏客户端", officialURL.href)}通过上述HTTP代理设置连接服务器时（也就是通过这个本地服务器进行中转），即会自动从游戏通信内容中抓取到登录信息，然后刷新这个页面即可看到登录状态变为绿色“已登录”。`
             + `\n  <br>接着就同样可以利用抓取到的登录信息来下载保存个人账号数据。`
-            + `\n  <br>但这很显然要求你有一定的动手能力，比如电脑上直接跑这个本地服务器、用Android模拟器跑游戏客户端和${aHref("Clash for Android", clashURL.href)}，然后用<code>adb -e reverse tcp:${httpProxyPort} tcp:${httpProxyPort}</code>命令（<code>-e</code>参数指定连接至模拟器而不是真机；<code>-d</code>则反之。若有多个设备/模拟器则可用<code>-t</code>指定<code>adb devices -l</code>列出的transport_id编号，比如<code>-t 2</code>）设置端口映射来让Clash能连到虚拟机外，CA证书也安装在跑游戏客户端和Clash的Android模拟器里；`
-            + `\n  <br>或是在Android真机上用${aHref("Termux", termuxURL.href)}跑这个本地服务器，然后用类似${aHref("光速", gsxnjURL.href)}之类虚拟机来跑游戏客户端，并在虚拟机内安装CA证书，Clash则直接跑在真机上。`
+            + `\n  <br>但这很显然要求你有一定的动手能力，比如电脑上用${aHref("最新版NodeJS", nodeJsUrl.href)}直接跑${aHref("这个本地服务器", npmRepoUrl.href)}、用Android模拟器跑游戏客户端和${aHref("Clash for Android", clashURL.href)}，然后用<code>adb -e reverse tcp:${httpProxyPort} tcp:${httpProxyPort}</code>命令（<code>-e</code>参数指定连接至模拟器而不是真机；<code>-d</code>则反之。若有多个设备/模拟器则可用<code>-t</code>指定<code>adb devices -l</code>列出的transport_id编号，比如<code>-t 2</code>）设置端口映射来让模拟器里的Clash能连到外边，CA证书也安装在跑游戏客户端和Clash的Android模拟器里；`
+            + `\n  <br>或是在Android真机上用${aHref("Termux", termuxURL.href)}跑这个本地服务器，然后用类似${aHref("光速", gsxnjURL.href)}之类虚拟机来跑游戏客户端，并在虚拟机内安装CA证书，Clash则直接跑在真机上，然后需要设置Clash分流来<b>只让跑着游戏客户端的虚拟机App走代理，不能让跑着本地服务器的Termux也走代理</b><i>（否则很显然，本地服务器转发到游戏官服时又被Clash拦截送回本地服务器，这样网络通信就“死循环”了）</i>，也就是在Clash的[网络]=>[访问控制模式]中选择<b>[仅允许已选择的应用]</b>，然后在[访问控制应用包列表]中<b>只勾选跑着游戏客户端（以及下文提到的autoBattle脚本）的虚拟机App</b>。`
             + `\n  <br>（<b>注意Clash第一次启动后需要设置一下代理模式</b>，否则默认是DIRECT直连）`
-            + `\n  <br>尤其是CA证书必须安装为Android的系统证书，这一步可以用${aHref("autoBattle脚本", autoBattleURL.href)}（安装后请先下拉在线更新到最新版）选择运行[安装CA证书]这个脚本自动完成。`
-            + `\n  <br><b>警告：Android 6的MuMu模拟器等环境下，Clash for Android似乎不能正常分流，可能导致网络通信在本地“死循环”：由这个本地服务器发出、本该直连出去的请求，被Clash拦截后又送回给了这个本地服务器，即死循环。</b>`
+            + `\n  <br>尤其是<b>CA证书必须安装为Android的系统证书</b>，这一步可以用${aHref("autoBattle脚本", autoBattleURL.href)}（安装后请先下拉在线更新到最新版）选择运行[安装CA证书]这个脚本自动完成。`
+            + `\n  <br>另外提醒一下：Android 6的MuMu模拟器等环境下，Clash for Android似乎不能正常按应用分流，所以不能在MuMu模拟器里再安装Termux、然后用Termux跑本地服务器，否则会出现上述网络通信“死循环”问题。<b>使用MuMu模拟器时也应该按照上述方法，在模拟器外直接在电脑上跑本地服务器。</b>`
             + `\n  </li>`
             + `\n  </ol>`
             + `\n  <hr>`

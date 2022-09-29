@@ -19,6 +19,7 @@ var mode;
 })(mode = exports.mode || (exports.mode = {}));
 const persistParams = {
     mode: mode.ACCOUNT_DUMP,
+    autoOpenWeb: true,
     listenList: {
         controlInterface: { port: 10000, host: "127.0.0.1" },
         httpProxy: { port: 10001, host: "127.0.0.1" },
@@ -165,6 +166,7 @@ class params {
         return this.stringify() !== this.lastSaved;
     }
     get mode() { return this.mapData.get("mode"); }
+    get autoOpenWeb() { return this.mapData.get("autoOpenWeb"); }
     get listenList() { return this.mapData.get("listenList"); }
     get clashYaml() {
         const host = this.listenList.httpProxy.host;

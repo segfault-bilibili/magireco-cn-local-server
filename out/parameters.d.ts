@@ -35,6 +35,7 @@ export declare class params {
     }> | string, path?: string): Promise<void>;
     checkModified(): boolean;
     get mode(): mode;
+    get autoOpenWeb(): boolean;
     get listenList(): listenList;
     get clashYaml(): string;
     get upstreamProxy(): listenAddr;
