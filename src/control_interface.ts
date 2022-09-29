@@ -499,6 +499,7 @@ export class controlInterface {
 
         let openIdTicketStatus = "游戏未登录", openIdTicketStatusStyle = "color: red";
         const openIdTicket = this.params.openIdTicket;
+        let gameUid: number | undefined;
         if (
             openIdTicket != null
             && openIdTicket.open_id != null && openIdTicket.open_id !== ""
@@ -513,6 +514,7 @@ export class controlInterface {
             const open_id = openIdTicket.open_id;
             const uidMatched = open_id.match(/\d+$/);
             const uid = uidMatched != null && !isNaN(Number(uidMatched[0])) ? (Number(uidMatched[0])) : undefined;
+            gameUid = uid;
             let inconsistent = bsgamesdkResponse?.uid !== uid;
             openIdTicketStatus = `${inconsistent ? "游戏账户与B站不一致" : "游戏已登录"}`;
             if (uname == null) openIdTicketStatus += " 账户未知";
@@ -531,9 +533,16 @@ export class controlInterface {
 
         let userdataDumpStatus = "尚未开始从官服下载", userdataDumpStatusStyle = "color: red";;
         const isDownloading = this.userdataDmp.isDownloading;
+        const lastSnapshot = this.userdataDmp.lastSnapshot;
         if (isDownloading) userdataDumpStatus = `从官服下载中 ${this.userdataDmp.fetchStatus}`, userdataDumpStatusStyle = "color: blue";
-        else if (this.userdataDmp.lastSnapshot != null) userdataDumpStatus = "从官服下载数据完毕", userdataDumpStatusStyle = "color: green";
-        else if (this.userdataDmp.lastError != null) userdataDumpStatus = `从官服下载数据过程中出错  ${this.userdataDmp.fetchStatus}`, userdataDumpStatusStyle = "color: red";
+        else if (lastSnapshot != null) {
+            const lastUid = lastSnapshot.uid;
+            if (lastUid != null && lastUid === gameUid) {
+                userdataDumpStatus = "从官服下载数据完毕", userdataDumpStatusStyle = "color: green";
+            } else {
+                userdataDumpStatus = `从官服下载数据完毕（uid=[${lastUid}]，不属于当前登录账号uid=[${gameUid}]）`, userdataDumpStatusStyle = "color: orange";
+            }
+        } else if (this.userdataDmp.lastError != null) userdataDumpStatus = `从官服下载数据过程中出错  ${this.userdataDmp.fetchStatus}`, userdataDumpStatusStyle = "color: red";
         userdataDumpStatus = getStrRep(userdataDumpStatus);
 
         const bsgamesdkIDs = this.params.bsgamesdkIDs;
