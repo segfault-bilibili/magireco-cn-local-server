@@ -589,7 +589,7 @@ export class controlInterface {
             + `\n    ${aHref("magirecolocal.yaml", "/magirecolocal.yaml")}`
             + `\n  </div>`
             + `\n  <div>`
-            + `\n    <label for=\"paramsjson\">下载备份所有配置数据：</label>`
+            + `\n    <label for=\"paramsjson\"><b style=\"color: red\">（含有登录密钥等敏感数据，请勿分享）</b>下载备份所有配置数据：</label>`
             + `\n    ${aHref("params.json", "/params.json")}`
             + `\n  </div>`
             + `\n  <form enctype=\"multipart/form-data\" action=\"/api/upload_params\" method=\"post\">`
@@ -720,6 +720,8 @@ export class controlInterface {
             + `\n    <div>`
             + `\n      <input type=\"submit\" ${this.userdataDmp.isDownloading ? "disabled" : ""} value=\"从官服下载\" id=\"prepare_download_btn\">`
             + `\n      <br><i>从官服下载个人账号数据数据到本地服务器需要大约几分钟时间。下载完成后，下面会给出文件保存链接。</i>`
+            + `\n      <br><i>请不要反复从官服下载，避免给官服增加压力。</i>`
+            + `\n      <br><b style=\"color: red\">因为可能含有隐私敏感数据，请勿分享下载到的个人数据。</b>`
             + `\n    </div>`
             + `\n  </form>`
             + `\n  <div>`
