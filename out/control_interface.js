@@ -13,7 +13,7 @@ const http_proxy_1 = require("./http_proxy");
 const local_server_1 = require("./local_server");
 const bsgamesdkPwdAuthenticate = require("./bsgamesdk-pwd-authenticate");
 const parse_charset_1 = require("./parse_charset");
-const getStrRep_1 = require("./getStrRep");
+const get_str_rep_1 = require("./get_str_rep");
 const userdataDump = require("./userdata_dump");
 const multipart = require("parse-multipart-data");
 class controlInterface {
@@ -285,11 +285,11 @@ class controlInterface {
                             .map((item) => item && item[0]).filter((item) => item != null).sort();
                         algo = algos.find((item) => item != null);
                     }
+                    const userdataDumpFileName = this.userdataDmp.userdataDumpFileName;
                     let headers = {
                         ["Content-Type"]: "application/json; charset=utf-8",
-                        ["Content-Disposition"]: `attachment; filename=\"${this.userdataDmp.userdataDumpFileName}\"`,
+                        ["Content-Disposition"]: `attachment; filename=\"${userdataDumpFileName}\"`,
                     };
-                    let transferEncodingArray = ["chunked"];
                     let pipelineList;
                     let lastSnapshotBr = this.userdataDmp.lastSnapshotBr;
                     if (lastSnapshotBr != null) {
@@ -299,40 +299,21 @@ class controlInterface {
                         pipelineList.push(decompressor);
                     }
                     else {
-                        console.log(`(should never go here!) stringifying object to [${this.userdataDmp.userdataDumpFileName}] ...`);
+                        console.log(`(should never go here!) stringifying object to [${userdataDumpFileName}] ...`);
                         let stringified = JSON.stringify(snapshot, parameters.replacer);
-                        console.log(`stringified object to [${this.userdataDmp.userdataDumpFileName}]. creating buffer...`);
+                        console.log(`stringified object to [${userdataDumpFileName}]. creating buffer...`);
                         let stringifiedBuf = Buffer.from(stringified, 'utf-8');
-                        console.log(`created buffer for [${this.userdataDmp.userdataDumpFileName}], sending it`);
+                        console.log(`created buffer for [${userdataDumpFileName}], sending it`);
                         let fromStringified = stream.Readable.from(stringifiedBuf);
                         pipelineList = [fromStringified];
                     }
-                    let reCompressor;
-                    if (algo === 'br') {
-                        reCompressor = null;
-                    }
-                    else if (algo === 'gzip') {
-                        reCompressor = zlib.createGzip();
-                    }
-                    else if (algo === 'deflate') {
-                        reCompressor = zlib.createDeflate();
-                    }
-                    else {
-                        algo = null;
-                        reCompressor = null;
-                    }
-                    if (algo != null)
-                        transferEncodingArray.unshift(algo);
-                    if (reCompressor != null)
-                        pipelineList.push(reCompressor);
                     pipelineList.push(res);
-                    const transferEncoding = transferEncodingArray.join(", ");
-                    console.log(`using transferEncoding=[${transferEncoding}] for ${req.url}`);
-                    headers["Transfer-Encoding"] = transferEncoding;
                     res.writeHead(200, headers);
                     let doneCallback = (err) => {
                         if (err != null)
-                            console.error(err);
+                            console.error(`error sending ${userdataDumpFileName}`, err);
+                        else
+                            console.log(`finished sending ${userdataDumpFileName}`);
                     };
                     stream.pipeline(pipelineList, doneCallback);
                     return;
@@ -505,7 +486,7 @@ class controlInterface {
             let expires = bsgamesdkResponse.expires;
             if (expires != null)
                 expires = `${new Date(expires).toLocaleDateString()} ${new Date(expires).toLocaleTimeString()}`;
-            loginStatus = (0, getStrRep_1.getStrRep)(`B站账户已登录 账户=[${bsgamesdkResponse.uname}] uid=[${bsgamesdkResponse.uid}]`
+            loginStatus = (0, get_str_rep_1.getStrRep)(`B站账户已登录 账户=[${bsgamesdkResponse.uname}] uid=[${bsgamesdkResponse.uid}]`
                 + ` 实名=[${bsgamesdkResponse.auth_name}] 实名认证状态=[${bsgamesdkResponse.realname_verified}]`
                 + ` 登录时间=[${since}] 登录过期时间=[${expires}]`);
             loginStatusStyle = "color: green";
@@ -537,7 +518,7 @@ class controlInterface {
             openIdTicketStatus += ` 登录时间=[${since}]`;
             openIdTicketStatusStyle = `color: ${inconsistent ? "red" : "green"}`;
         }
-        openIdTicketStatus = (0, getStrRep_1.getStrRep)(openIdTicketStatus);
+        openIdTicketStatus = (0, get_str_rep_1.getStrRep)(openIdTicketStatus);
         let upstreamProxyCACertStatus = "未上传", upstreamProxyCACertStyle = "color: red";
         if (this.params.upstreamProxyCACert != null) {
             upstreamProxyCACertStatus = "已上传";
@@ -560,7 +541,7 @@ class controlInterface {
         }
         else if (this.userdataDmp.lastError != null)
             userdataDumpStatus = `从官服下载数据过程中出错  ${this.userdataDmp.fetchStatus}`, userdataDumpStatusStyle = "color: red";
-        userdataDumpStatus = (0, getStrRep_1.getStrRep)(userdataDumpStatus);
+        userdataDumpStatus = (0, get_str_rep_1.getStrRep)(userdataDumpStatus);
         const bsgamesdkIDs = this.params.bsgamesdkIDs;
         const bd_id = bsgamesdkIDs.bd_id, buvid = bsgamesdkIDs.buvid, udid = bsgamesdkIDs.udid;
         const magirecoIDs = this.params.magirecoIDs;
@@ -788,7 +769,7 @@ class controlInterface {
     }
     async sendResultAsync(res, statusCode, result) {
         return new Promise((resolve, reject) => {
-            let strRep = (0, getStrRep_1.getStrRep)(result);
+            let strRep = (0, get_str_rep_1.getStrRep)(result);
             let html = `<!doctype html>`
                 + `\n<html>`
                 + `\n<head>`
