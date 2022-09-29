@@ -29,6 +29,7 @@ export enum mode {
 
 const persistParams: {
     mode: mode,
+    autoOpenWeb: boolean,
     listenList: listenList,
     upstreamProxy: listenAddr,
     upstreamProxyEnabled: boolean,
@@ -42,6 +43,7 @@ const persistParams: {
     concurrentFetch: boolean,
 } = {
     mode: mode.ACCOUNT_DUMP,
+    autoOpenWeb: true,
     listenList: {
         controlInterface: { port: 10000, host: "127.0.0.1" },
         httpProxy: { port: 10001, host: "127.0.0.1" },
@@ -160,6 +162,7 @@ export class params {
     }
 
     get mode(): mode { return this.mapData.get("mode"); }
+    get autoOpenWeb(): boolean { return this.mapData.get("autoOpenWeb"); }
     get listenList(): listenList { return this.mapData.get("listenList"); }
     get clashYaml(): string {
         const host = this.listenList.httpProxy.host;

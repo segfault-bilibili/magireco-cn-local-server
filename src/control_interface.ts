@@ -3,6 +3,7 @@ import * as zlib from "zlib";
 import * as fs from "fs";
 import * as net from "net";
 import * as http from "http";
+import * as process from "process";
 import * as ChildProcess from "child_process";
 import * as parameters from "./parameters";
 import { httpProxy } from "./http_proxy";
@@ -31,6 +32,11 @@ export class controlInterface {
     }
     openWebOnAndroid(): void {
         try {
+            const addr = this.params.listenList.controlInterface;
+            const webUrl = `http://${addr.host}:${addr.port}/`;
+
+            let shellCmd: string | undefined;
+
             const androidSpecificFileList = [
                 "/system/build.prop",
                 "/sdcard",
@@ -38,24 +44,30 @@ export class controlInterface {
             ];
             let found = androidSpecificFileList.filter((path) => fs.existsSync(path));
             if (found.length > 0) {
-                const addr = this.params.listenList.controlInterface;
-                const webUrl = `http://${addr.host}:${addr.port}/`;
-                const shellCmd = `am start -a \"android.intent.action.VIEW\" -d \"${webUrl}\"`;
-                ChildProcess.exec(shellCmd, (error, stdout, stderr) => {
-                    try {
-                        if (error == null) {
-                            console.log(`    即将从浏览器打开Web控制界面...\n  ${webUrl}`);
-                            console.log(`  【如果没成功自动打开浏览器，请手动复制上述网址粘贴到浏览器地址栏】`);
-                        } else {
-                            console.error("error", error);
-                            console.error("stdout", stdout);
-                            console.error("stderr", stderr);
-                        }
-                    } catch (e) {
-                        console.error(e);
-                    }
-                });
+                shellCmd = `am start -a \"android.intent.action.VIEW\" -d \"${webUrl}\"`;
+            } else if (process.env["windir"]?.match(/^[A-Z]\:\\WINDOWS/i)) {
+                shellCmd = `start ${webUrl}`;
             }
+
+            if (shellCmd == null || !this.params.autoOpenWeb) {
+                console.log(`请手动在浏览器中打开Web控制界面\n  ${webUrl}`);
+                return;
+            }
+
+            ChildProcess.exec(shellCmd, (error, stdout, stderr) => {
+                try {
+                    if (error == null) {
+                        console.log(`    即将从浏览器打开Web控制界面...\n  ${webUrl}`);
+                        console.log(`  【如果没成功自动打开浏览器，请手动复制上述网址粘贴到浏览器地址栏】`);
+                    } else {
+                        console.error("error", error);
+                        console.error("stdout", stdout);
+                        console.error("stderr", stderr);
+                    }
+                } catch (e) {
+                    console.error(e);
+                }
+            });
         } catch (e) {
             console.error(e);
         }
@@ -143,6 +155,19 @@ export class controlInterface {
                         } catch (e) {
                             console.error(`set_upstream_proxy error`, e);
                             this.sendResultAsync(res, 500, e instanceof Error ? e.message : `set_upstream_proxy error`);
+                        }
+                        return;
+                    case "set_auto_open_web":
+                        try {
+                            let autoOpenWebParams = await this.getParsedPostData(req);
+                            let newAutoOpenWeb = autoOpenWebParams.get("auto_open_web") != null;
+                            await this.params.save({ key: "autoOpenWeb", val: newAutoOpenWeb });
+                            let resultText = "sucessfully updated auto open web settings";
+                            console.log(resultText);
+                            this.sendResultAsync(res, 200, resultText);
+                        } catch (e) {
+                            console.error(`set_auto_open_web error`, e);
+                            this.sendResultAsync(res, 500, e instanceof Error ? e.message : `set_auto_open_web error`);
                         }
                         return;
                     case "pwdlogin":
@@ -442,6 +467,7 @@ export class controlInterface {
 
         const aHref = (text: string, url: string, newTab = true) => `<a target=\"${newTab ? "_blank" : "_self"}\" href=${url}>${text}</a>`
 
+        const autoOpenWeb = this.params.autoOpenWeb;
         let httpProxyAddr = "", httpProxyPort = "";
         const listenList = this.params.listenList;
         if (listenList != null) {
@@ -606,6 +632,16 @@ export class controlInterface {
             + `\n    <button id=\"refreshbtn1\" onclick=\"window.location.reload(true);\">刷新</button>`
             + `\n    <label style=\"${upstreamProxyCACertStyle}\" id=\"upstream_proxy_ca_status\" for=\"refreshbtn1\">${upstreamProxyCACertStatus}</label>`
             + `\n  </div>`
+            + `\n  <hr>`
+            + `\n  <form action=\"/api/set_auto_open_web\" method=\"post\">`
+            + `\n    <div>`
+            + `\n      <input id=\"auto_open_web\" name=\"auto_open_web\" value=\"true\" type=\"checkbox\" ${autoOpenWeb ? "checked" : ""}>`
+            + `\n      <label for=\"auto_open_web\">启动时自动打开浏览器</label>`
+            + `\n    </div>`
+            + `\n    <div>`
+            + `\n      <input type=\"submit\" id=\"set_auto_open_web_btn\" value=\"应用\">`
+            + `\n    </div>`
+            + `\n  </form>`
             + `\n  <hr>`
             + `\n  <h2>说明</h2>`
             + `\n  <ol>`
