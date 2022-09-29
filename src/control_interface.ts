@@ -10,7 +10,7 @@ import { httpProxy } from "./http_proxy";
 import { localServer } from "./local_server";
 import * as bsgamesdkPwdAuthenticate from "./bsgamesdk-pwd-authenticate";
 import { parseCharset } from "./parse_charset";
-import { getStrRep } from "./getStrRep";
+import { getStrRep } from "./get_str_rep";
 import * as userdataDump from "./userdata_dump";
 import * as multipart from "parse-multipart-data";
 
