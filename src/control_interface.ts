@@ -530,7 +530,8 @@ export class controlInterface {
         }
 
         let userdataDumpStatus = "尚未开始从官服下载", userdataDumpStatusStyle = "color: red";;
-        if (this.userdataDmp.isDownloading) userdataDumpStatus = `从官服下载中 ${this.userdataDmp.fetchStatus}`, userdataDumpStatusStyle = "color: blue";
+        const isDownloading = this.userdataDmp.isDownloading;
+        if (isDownloading) userdataDumpStatus = `从官服下载中 ${this.userdataDmp.fetchStatus}`, userdataDumpStatusStyle = "color: blue";
         else if (this.userdataDmp.lastSnapshot != null) userdataDumpStatus = "从官服下载数据完毕", userdataDumpStatusStyle = "color: green";
         else if (this.userdataDmp.lastError != null) userdataDumpStatus = `从官服下载数据过程中出错  ${this.userdataDmp.fetchStatus}`, userdataDumpStatusStyle = "color: red";
         userdataDumpStatus = getStrRep(userdataDumpStatus);
@@ -552,11 +553,17 @@ export class controlInterface {
             + `\n        window.location.reload(true);/*refresh on back or forward*/`
             + `\n      }`
             + `\n    });`
-            + `\n    window.onload = () => {`
+            + `\n    function confirmRefresh() {`
+            + `\n      if (confirm(\"即将刷新页面\")) {`
+            + `\n        window.location.reload(true);`
+            + `\n      }`
+            + `\n    }`
+            + `\n    window.addEventListener('load', (ev) => {`
             + `\n      document.getElementById(\"loginstatus\").textContent = \"${loginStatus}\";`
             + `\n      document.getElementById(\"openidticketstatus\").textContent = \"${openIdTicketStatus}\";`
             + `\n      document.getElementById(\"userdatadumpstatus\").textContent = \"${userdataDumpStatus}\";`
-            + `\n    };`
+            + `\n      ${isDownloading ? "setTimeout(() => {confirmRefresh();}, 10000);" : ""}`
+            + `\n    });`
             + `\n    function unlock_prepare_download_btn() {`
             + `\n      document.getElementById(\"prepare_download_btn\").removeAttribute(\"disabled\");`
             + `\n    }`
