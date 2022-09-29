@@ -29,10 +29,8 @@ export declare class userdataDmp {
     private get magirecoIDs();
     get lastSnapshot(): snapshot | undefined;
     get lastSnapshotBr(): Buffer | undefined;
-    get lastSnapshotGzip(): Buffer | undefined;
     private _lastSnapshot?;
     private _lastSnapshotBr?;
-    private _lastSnapshotGzip?;
     get isDownloading(): boolean;
     private _isDownloading;
     get lastError(): any;

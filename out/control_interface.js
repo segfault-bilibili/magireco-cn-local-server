@@ -1,6 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.controlInterface = void 0;
+const stream = require("stream");
+const zlib = require("zlib");
 const fs = require("fs");
 const net = require("net");
 const http = require("http");
@@ -257,13 +259,14 @@ class controlInterface {
                     return;
             }
             if (req.url.match(this.userdataDmp.userdataDumpFileNameRegEx)) {
+                console.log(`serving ${req.url}`);
                 let snapshot = this.userdataDmp.lastSnapshot;
                 if (snapshot != null) {
                     let algo;
                     let acceptEncodings = req.headers["accept-encoding"];
                     if (acceptEncodings != null && acceptEncodings.length > 0) {
                         acceptEncodings = typeof acceptEncodings === 'string' ? acceptEncodings.split(",") : acceptEncodings;
-                        let algos = acceptEncodings.map((item) => item.match(/(?<=^\s*)(br|gzip)(?=(\s|;|$))/))
+                        let algos = acceptEncodings.map((item) => item.match(/(?<=^\s*)(br|gzip|deflate)(?=(\s|;|$))/))
                             .map((item) => item && item[0]).filter((item) => item != null).sort();
                         algo = algos.find((item) => item != null);
                     }
@@ -271,21 +274,52 @@ class controlInterface {
                         ["Content-Type"]: "application/json; charset=utf-8",
                         ["Content-Disposition"]: `attachment; filename=\"${this.userdataDmp.userdataDumpFileName}\"`,
                     };
-                    if (algo != null)
-                        headers["Content-Encoding"] = algo;
-                    res.writeHead(200, headers);
-                    let lastSnapshotBr = this.userdataDmp.lastSnapshotBr, lastSnapshotGzip = this.userdataDmp.lastSnapshotGzip;
-                    if (algo === 'br' && lastSnapshotBr != null) {
-                        res.end(lastSnapshotBr);
-                    }
-                    else if (algo === 'gzip' && lastSnapshotGzip != null) {
-                        res.end(lastSnapshotGzip);
+                    let transferEncodingArray = ["chunked"];
+                    let pipelineList;
+                    let lastSnapshotBr = this.userdataDmp.lastSnapshotBr;
+                    if (lastSnapshotBr != null) {
+                        let fromCompressed = stream.Readable.from(lastSnapshotBr);
+                        pipelineList = [fromCompressed];
+                        let decompressor = zlib.createBrotliDecompress();
+                        pipelineList.push(decompressor);
                     }
                     else {
+                        console.log(`(should never go here!) stringifying object to [${this.userdataDmp.userdataDumpFileName}] ...`);
                         let stringified = JSON.stringify(snapshot, parameters.replacer);
-                        let buf = Buffer.from(stringified, 'utf-8');
-                        res.end(buf);
+                        console.log(`stringified object to [${this.userdataDmp.userdataDumpFileName}]. creating buffer...`);
+                        let stringifiedBuf = Buffer.from(stringified, 'utf-8');
+                        console.log(`created buffer for [${this.userdataDmp.userdataDumpFileName}], sending it`);
+                        let fromStringified = stream.Readable.from(stringifiedBuf);
+                        pipelineList = [fromStringified];
                     }
+                    let reCompressor;
+                    if (algo === 'br') {
+                        reCompressor = null;
+                    }
+                    else if (algo === 'gzip') {
+                        reCompressor = zlib.createGzip();
+                    }
+                    else if (algo === 'deflate') {
+                        reCompressor = zlib.createDeflate();
+                    }
+                    else {
+                        algo = null;
+                        reCompressor = null;
+                    }
+                    if (algo != null)
+                        transferEncodingArray.unshift(algo);
+                    if (reCompressor != null)
+                        pipelineList.push(reCompressor);
+                    pipelineList.push(res);
+                    const transferEncoding = transferEncodingArray.join(", ");
+                    console.log(`using transferEncoding=[${transferEncoding}] for ${req.url}`);
+                    headers["Transfer-Encoding"] = transferEncoding;
+                    res.writeHead(200, headers);
+                    let doneCallback = (err) => {
+                        if (err != null)
+                            console.error(err);
+                    };
+                    stream.pipeline(pipelineList, doneCallback);
                     return;
                 }
                 else {

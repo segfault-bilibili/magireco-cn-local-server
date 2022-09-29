@@ -28,9 +28,6 @@ class userdataDmp {
     get lastSnapshotBr() {
         return this._lastSnapshotBr;
     }
-    get lastSnapshotGzip() {
-        return this._lastSnapshotBr;
-    }
     get isDownloading() {
         return this._isDownloading;
     }
@@ -236,9 +233,6 @@ class userdataDmp {
         console.log(this._fetchStatus = "brotli compressing...");
         this._lastSnapshotBr = local_server_1.localServer.compress(jsonBuf, "br");
         console.log(this._fetchStatus = `brotli compressed. [${jsonBuf.byteLength}] => [${this._lastSnapshotBr.byteLength}]`);
-        console.log(this._fetchStatus = "gzip compressing...");
-        this._lastSnapshotGzip = local_server_1.localServer.compress(jsonBuf, "gzip");
-        console.log(this._fetchStatus = `gzip compressed. [${jsonBuf.byteLength}] => [${this._lastSnapshotGzip.byteLength}]`);
         console.log(this._fetchStatus = `writting to [${this.internalUserdataDumpFileName}] ...`);
         fs.writeFileSync(path.join(".", this.internalUserdataDumpFileName), this._lastSnapshotBr);
         console.log(this._fetchStatus = `written to [${this.internalUserdataDumpFileName}]`);
@@ -254,11 +248,11 @@ class userdataDmp {
             const filePath = path.join(".", this.internalUserdataDumpFileName);
             if (fs.existsSync(filePath)) {
                 console.log(`loading [${filePath}] ...`);
-                this._lastSnapshotBr = fs.readFileSync(filePath);
-                let decompressedBuf = local_server_1.localServer.decompress(this._lastSnapshotBr, "br");
+                let lastSnapshotBr = fs.readFileSync(filePath);
+                let decompressedBuf = local_server_1.localServer.decompress(lastSnapshotBr, "br");
                 let decompressed = decompressedBuf.toString('utf-8');
-                this._lastSnapshotGzip = local_server_1.localServer.compress(decompressedBuf, "gzip");
                 this._lastSnapshot = JSON.parse(decompressed, parameters.reviver);
+                this._lastSnapshotBr = lastSnapshotBr;
                 console.log(`loaded ${this.userdataDumpFileName}`);
             }
         }
