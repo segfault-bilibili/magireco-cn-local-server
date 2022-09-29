@@ -326,9 +326,10 @@ export class controlInterface {
                             .map((item) => item && item[0]).filter((item) => item != null).sort();
                         algo = algos.find((item) => item != null);
                     }
+                    const userdataDumpFileName = this.userdataDmp.userdataDumpFileName;
                     let headers: http.OutgoingHttpHeaders = {
                         ["Content-Type"]: "application/json; charset=utf-8",
-                        ["Content-Disposition"]: `attachment; filename=\"${this.userdataDmp.userdataDumpFileName}\"`,
+                        ["Content-Disposition"]: `attachment; filename=\"${userdataDumpFileName}\"`,
                     }
                     let transferEncodingArray = ["chunked"];
                     let pipelineList: Array<stream.Readable | stream.Writable>;
@@ -340,11 +341,11 @@ export class controlInterface {
                         let decompressor = zlib.createBrotliDecompress();
                         pipelineList.push(decompressor);
                     } else {
-                        console.log(`(should never go here!) stringifying object to [${this.userdataDmp.userdataDumpFileName}] ...`);
+                        console.log(`(should never go here!) stringifying object to [${userdataDumpFileName}] ...`);
                         let stringified = JSON.stringify(snapshot, parameters.replacer);
-                        console.log(`stringified object to [${this.userdataDmp.userdataDumpFileName}]. creating buffer...`);
+                        console.log(`stringified object to [${userdataDumpFileName}]. creating buffer...`);
                         let stringifiedBuf = Buffer.from(stringified, 'utf-8');
-                        console.log(`created buffer for [${this.userdataDmp.userdataDumpFileName}], sending it`);
+                        console.log(`created buffer for [${userdataDumpFileName}], sending it`);
                         let fromStringified = stream.Readable.from(stringifiedBuf);
                         pipelineList = [fromStringified];
                     }
@@ -371,7 +372,8 @@ export class controlInterface {
                     headers["Transfer-Encoding"] = transferEncoding;
                     res.writeHead(200, headers);
                     let doneCallback = (err: NodeJS.ErrnoException | null) => {
-                        if (err != null) console.error(err);
+                        if (err != null) console.error(`error sending ${userdataDumpFileName}`, err);
+                        else console.log(`finished sending ${userdataDumpFileName}`);
                     }
                     stream.pipeline(pipelineList, doneCallback);
                     return;
