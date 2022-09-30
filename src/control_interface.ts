@@ -86,7 +86,7 @@ export class controlInterface {
             }
 
             if (req.url.startsWith("/api/")) {
-                let apiName = req.url.replace(/(^\/api\/)|(\?.*$)/g, "");
+                const apiName = req.url.replace(/(^\/api\/)|(\?.*$)/g, "");
                 console.log(`controlInterface received api request [${apiName}]`);
                 switch (apiName) {
                     /*
@@ -111,8 +111,8 @@ export class controlInterface {
                             await this.params.save(newParamStr);
                             this.sendResultAsync(res, 200, "saved new params");
                         } catch (e) {
-                            console.error("upload_upstream_proxy_cacert error", e);
-                            this.sendResultAsync(res, 500, e instanceof Error ? e.message : `upload_upstream_proxy_cacert error`);
+                            console.error(`${apiName} error`, e);
+                            this.sendResultAsync(res, 500, e instanceof Error ? e.message : `${apiName} error`);
                         }
                         return;
                     case "upload_upstream_proxy_cacert":
@@ -133,8 +133,8 @@ export class controlInterface {
                             console.log(msg);
                             this.sendResultAsync(res, 200, msg);
                         } catch (e) {
-                            console.error("upload_upstream_proxy_cacert error", e);
-                            this.sendResultAsync(res, 500, e instanceof Error ? e.message : `upload_upstream_proxy_cacert error`);
+                            console.error(`${apiName} error`, e);
+                            this.sendResultAsync(res, 500, e instanceof Error ? e.message : `${apiName} error`);
                         }
                         return;
                     case "set_upstream_proxy":
@@ -153,8 +153,8 @@ export class controlInterface {
                             console.log(resultText);
                             this.sendResultAsync(res, 200, resultText);
                         } catch (e) {
-                            console.error(`set_upstream_proxy error`, e);
-                            this.sendResultAsync(res, 500, e instanceof Error ? e.message : `set_upstream_proxy error`);
+                            console.error(`${apiName} error`, e);
+                            this.sendResultAsync(res, 500, e instanceof Error ? e.message : `${apiName} error`);
                         }
                         return;
                     case "set_auto_open_web":
@@ -166,8 +166,8 @@ export class controlInterface {
                             console.log(resultText);
                             this.sendResultAsync(res, 200, resultText);
                         } catch (e) {
-                            console.error(`set_auto_open_web error`, e);
-                            this.sendResultAsync(res, 500, e instanceof Error ? e.message : `set_auto_open_web error`);
+                            console.error(`${apiName} error`, e);
+                            this.sendResultAsync(res, 500, e instanceof Error ? e.message : `${apiName} error`);
                         }
                         return;
                     case "pwdlogin":
@@ -185,8 +185,8 @@ export class controlInterface {
                             let resultText = JSON.stringify(result);
                             this.sendResultAsync(res, 200, resultText);
                         } catch (e) {
-                            console.error(`bsgamesdkPwdAuth error`, e);
-                            this.sendResultAsync(res, 500, e instanceof Error ? e.message : `bsgamesdkPwdAuth error`);
+                            console.error(`${apiName} error`, e);
+                            this.sendResultAsync(res, 500, e instanceof Error ? e.message : `${apiName} error`);
                         }
                         return;
                     case "dump_userdata":
@@ -207,7 +207,7 @@ export class controlInterface {
                             const isDownloading = this.userdataDmp.isDownloading;
                             if (!isDownloading && (requestingNewDownload || !hasDownloadResultOrError)) {
                                 this.userdataDmp.getSnapshotAsync()
-                                    .catch((e) => console.error(`dump_userdata error`, e)); // prevent crash
+                                    .catch((e) => console.error(`${apiName} error`, e)); // prevent crash
                                 this.sendResultAsync(res, 200, "downloading, pleses wait...");
                             } else {
                                 if (alreadyDownloaded) {
@@ -219,8 +219,8 @@ export class controlInterface {
                                 }
                             }
                         } catch (e) {
-                            console.error(`dump_userdata error`, e);
-                            this.sendResultAsync(res, 500, e instanceof Error ? e.message : `dump_userdata error`);
+                            console.error(`${apiName} error`, e);
+                            this.sendResultAsync(res, 500, e instanceof Error ? e.message : `${apiName} error`);
                         }
                         return;
                     case "clear_bilibili_login":
@@ -229,8 +229,8 @@ export class controlInterface {
                             await this.params.save({ key: "bsgamesdkResponse", val: undefined });
                             this.sendResultAsync(res, 200, "cleared bilibili login status");
                         } catch (e) {
-                            console.error(`clear_bilibili_login error`, e);
-                            this.sendResultAsync(res, 500, e instanceof Error ? e.message : `clear_bilibili_login error`);
+                            console.error(`${apiName} error`, e);
+                            this.sendResultAsync(res, 500, e instanceof Error ? e.message : `${apiName} error`);
                         }
                         return;
                     case "clear_bsgamesdk_ids":
@@ -241,8 +241,8 @@ export class controlInterface {
                             await this.params.save({ key: "bsgamesdkIDs", val: undefined });
                             this.sendResultAsync(res, 200, "cleared bilibili devices ids");
                         } catch (e) {
-                            console.error(`clear_bsgamesdk_ids error`, e);
-                            this.sendResultAsync(res, 500, e instanceof Error ? e.message : `clear_bsgamesdk_ids error`);
+                            console.error(`${apiName} error`, e);
+                            this.sendResultAsync(res, 500, e instanceof Error ? e.message : `${apiName} error`);
                         }
                         return;
                     case "clear_game_login":
@@ -251,8 +251,8 @@ export class controlInterface {
                             await this.params.save({ key: "openIdTicket", val: undefined });
                             this.sendResultAsync(res, 200, "cleared game login status");
                         } catch (e) {
-                            console.error(`clear_game_login error`, e);
-                            this.sendResultAsync(res, 500, e instanceof Error ? e.message : `clear_game_login error`);
+                            console.error(`${apiName} error`, e);
+                            this.sendResultAsync(res, 500, e instanceof Error ? e.message : `${apiName} error`);
                         }
                         return;
                     case "clear_magireco_ids":
@@ -263,8 +263,8 @@ export class controlInterface {
                             await this.params.save({ key: "magirecoIDs", val: undefined });
                             this.sendResultAsync(res, 200, "cleared magireco devices ids");
                         } catch (e) {
-                            console.error(`clear_magireco_ids error`, e);
-                            this.sendResultAsync(res, 500, e instanceof Error ? e.message : `clear_magireco_ids error`);
+                            console.error(`${apiName} error`, e);
+                            this.sendResultAsync(res, 500, e instanceof Error ? e.message : `${apiName} error`);
                         }
                         return;
                     default:
@@ -718,7 +718,7 @@ export class controlInterface {
             + `\n      <label for=\"new_download_checkbox\" onclick=\"unlock_prepare_download_btn();\">重新从官服下载</label>`
             + `\n    </div>`
             + `\n    <div>`
-            + `\n      <input type=\"submit\" ${this.userdataDmp.isDownloading ? "disabled" : ""} value=\"从官服下载\" id=\"prepare_download_btn\">`
+            + `\n      <input type=\"submit\" ${isDownloading ? "disabled" : ""} value=\"从官服下载\" id=\"prepare_download_btn\">`
             + `\n      <br><i>从官服下载个人账号数据数据到本地服务器需要大约几分钟时间。下载完成后，下面会给出文件保存链接。</i>`
             + `\n      <br><i>请不要反复从官服下载，避免给官服增加压力。</i>`
             + `\n      <br><b style=\"color: red\">因为可能含有隐私敏感数据，请勿分享下载到的个人数据。</b>`
