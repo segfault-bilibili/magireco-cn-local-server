@@ -303,12 +303,12 @@ export class crawler {
             try {
                 let resp = await this.http2GetBuf(url);
                 if (resp.is404) {
-                    this.staticFile404Set.add(key);
+                    this.staticFile404Set.add(url.pathname);
                     urlStrSet.delete(key);
                     console.log(`HTTP 404 [${url.pathname}${url.search}]`);
                 } else {
                     this.saveFile(url.pathname, resp.body, resp.contentType);
-                    this.staticFile404Set.delete(key);
+                    this.staticFile404Set.delete(url.pathname);
                     if (resultMap.has(key)) throw new Error(`resultMap already has key=[${key}]`);
                     resultMap.set(key, { url: url, resp: resp });
                 }
