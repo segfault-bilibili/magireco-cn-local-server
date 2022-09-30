@@ -44,6 +44,7 @@ export class crawler {
     private readonly prodHost = "l3-prod-all-gs-mfsn2.bilibiligame.net";
     private get httpsProdMagicaNoSlash(): string { return `https://${this.prodHost}/magica`; }
 
+    stopCrawling = false;
     get isCrawling(): boolean {
         return this._isCrawling;
     }
@@ -106,6 +107,7 @@ export class crawler {
     }
     async getFetchAllPromise(): Promise<void> {
         if (this._isCrawling) throw new Error("previous crawling has not finished");
+        this.stopCrawling = false;
         this._isCrawling = true;
         this._lastError = undefined;
         this._crawlingStatus = "";
@@ -280,21 +282,33 @@ export class crawler {
 
         let resultMap = new Map<string, http2BatchGetResultItem>();
 
-        let hasError = false;
+        let hasError = false, stoppedCrawling = false;
         let crawl = async (index: number): Promise<number | undefined> => {
             if (hasError) return undefined;
             if (isNaN(index)) throw new Error("isNaN(index)");
             if (index < 0 || index >= urlList.length) throw new Error("index < 0 || index >= urlList.length");
 
             let url = urlList[index];
+            let key = url.href;
+
+            if (this.stopCrawling) {
+                stoppedCrawling = true;
+                console.log(`stop crawling (queue ${index % concurrent})`);
+            }
+            if (stoppedCrawling) {
+                urlStrSet.delete(key);
+                return undefined;
+            }
+
             try {
                 let resp = await this.http2GetBuf(url);
-                let key = url.href;
                 if (resp.is404) {
                     this.staticFile404Set.add(key);
                     urlStrSet.delete(key);
+                    console.log(`HTTP 404 [${url.pathname}${url.search}]`);
                 } else {
                     this.saveFile(url.pathname, resp.body, resp.contentType);
+                    this.staticFile404Set.delete(key);
                     if (resultMap.has(key)) throw new Error(`resultMap already has key=[${key}]`);
                     resultMap.set(key, { url: url, resp: resp });
                 }
@@ -366,7 +380,7 @@ export class crawler {
             let fileTimeStamp = fileTimeStampObj[subPath]; //it's actually unknown what this value is
             if (!subPath?.match(/^([0-9a-z\-\._ \(\)]+\/)+[0-9a-z\-\._ \(\)]+\.[0-9a-z]+$/i)) throw new Error(`invalid subPath=[${subPath}] fileTimeStamp=[${fileTimeStamp}]`);
             if (!fileTimeStamp?.match(/^[0-9a-f]{16}$/)) throw new Error(`subPath=[${subPath}] has invalid fileTimeStamp=[${fileTimeStamp}]`);
-            urlList.push(new URL(`${this.httpsProdMagicaNoSlash}/${subPath}`));
+            urlList.push(new URL(`${this.httpsProdMagicaNoSlash}/${subPath}?${headTime}`));
         }
         await this.batchHttp2GetSave(urlList);
     }

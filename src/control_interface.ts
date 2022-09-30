@@ -285,6 +285,16 @@ export class controlInterface {
                             }
                         }
                         return;
+                    case "stop_crawling":
+                        try {
+                            await this.getParsedPostData(req);
+                            this.crawler.stopCrawling = true;
+                            this.sendResultAsync(res, 200, "stop crawling");
+                        } catch (e) {
+                            console.error(`${apiName} error`, e);
+                            this.sendResultAsync(res, 500, e instanceof Error ? e.message : `${apiName} error`);
+                        }
+                        return;
                     default:
                         let result = `unknown api=${apiName}`;
                         console.error(result);
@@ -768,6 +778,11 @@ export class controlInterface {
             + `\n  <form action=\"/api/crawl_static_data\" method=\"post\">`
             + `\n    <div>`
             + `\n      <input type=\"submit\" id=\"crawl_static_data_btn\" ${isCrawling ? "disabled" : ""} value=\"开始爬取\">`
+            + `\n    </div>`
+            + `\n  </form>`
+            + `\n  <form action=\"/api/stop_crawling\" method=\"post\">`
+            + `\n    <div>`
+            + `\n      <input type=\"submit\" id=\"stop_crawling_btn\" ${isCrawling ? "" : "disabled"} value=\"停止爬取\">`
             + `\n    </div>`
             + `\n  </form>`
             + `\n  <hr>`
