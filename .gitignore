@@ -107,3 +107,8 @@ params.json
 params.json.old
 ca.crt
 lastUserdataDump.br
+
+static/
+conflict/
+staticFileMap.json
+staticFile404Set.json

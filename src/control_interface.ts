@@ -13,6 +13,7 @@ import { parseCharset } from "./parse_charset";
 import { getStrRep } from "./get_str_rep";
 import * as userdataDump from "./userdata_dump";
 import * as multipart from "parse-multipart-data";
+import * as staticResCrawler from "./static_res_crawler";
 
 export class controlInterface {
     private closing = false;
@@ -21,6 +22,7 @@ export class controlInterface {
     private readonly serverList: Array<httpProxy | localServer>;
     private readonly bsgamesdkPwdAuth: bsgamesdkPwdAuthenticate.bsgamesdkPwdAuth;
     private readonly userdataDmp: userdataDump.userdataDmp;
+    private readonly crawler: staticResCrawler.crawler;
 
     static async launch(): Promise<void> {
         const params = await parameters.params.load();
@@ -77,6 +79,7 @@ export class controlInterface {
         const localsvr = serverList.find((s) => s instanceof localServer) as localServer;
         const bsgamesdkPwdAuth = new bsgamesdkPwdAuthenticate.bsgamesdkPwdAuth(params, localsvr);
         const userdataDmp = new userdataDump.userdataDmp(params, localsvr);
+        const crawler = new staticResCrawler.crawler(params, localsvr);
 
         const httpServerSelf = http.createServer(async (req, res) => {
             if (req.url == null) {
@@ -267,6 +270,21 @@ export class controlInterface {
                             this.sendResultAsync(res, 500, e instanceof Error ? e.message : `${apiName} error`);
                         }
                         return;
+                    case "crawl_static_data":
+                        if (this.crawler.isCrawling) {
+                            this.sendResultAsync(res, 429, "crawling not yet finished");
+                        } else {
+                            try {
+                                await this.getParsedPostData(req);
+                                this.crawler.fetchAllAsync()
+                                    .catch((e) => console.error(`${apiName} error`, e)); // prevent crash
+                                this.sendResultAsync(res, 200, "crawling started");
+                            } catch (e) {
+                                console.error(`${apiName} error`, e);
+                                this.sendResultAsync(res, 500, e instanceof Error ? e.message : `${apiName} error`);
+                            }
+                        }
+                        return;
                     default:
                         let result = `unknown api=${apiName}`;
                         console.error(result);
@@ -378,6 +396,7 @@ export class controlInterface {
         this.serverList = serverList;
         this.bsgamesdkPwdAuth = bsgamesdkPwdAuth;
         this.userdataDmp = userdataDmp;
+        this.crawler = crawler;
     }
     private async closeAll(): Promise<void> {
         let promises = this.serverList.map((server) => server.close());
@@ -527,6 +546,9 @@ export class controlInterface {
             }
         } else if (this.userdataDmp.lastError != null) userdataDumpStatus = `从官服下载数据过程中出错  ${this.userdataDmp.fetchStatus}`, userdataDumpStatusStyle = "color: red";
         userdataDumpStatus = getStrRep(userdataDumpStatus);
+
+        const crawler = this.crawler;
+        const isCrawling = crawler.isCrawling;
 
         const bsgamesdkIDs = this.params.bsgamesdkIDs;
         const bd_id = bsgamesdkIDs.bd_id, buvid = bsgamesdkIDs.buvid, udid = bsgamesdkIDs.udid;
@@ -741,6 +763,13 @@ export class controlInterface {
             + `\n  </form>`
             + `\n    ${this.userdataDmp.lastSnapshot == null ? "" : "<br><b>在某品牌手机上，曾经观察到第一次下载回来是0字节空文件的问题，如果碰到这个问题可以再次点击或长按下面的链接重试下载，或者换个浏览器试试。</b><br>"}`
             + `\n    ${this.userdataDmp.lastSnapshot == null ? "" : aHref(this.userdataDmp.userdataDumpFileName, `/${this.userdataDmp.userdataDumpFileName}`)}`
+            + `\n  <hr>`
+            + `\n  <h2 id=\"crawlstaticdata\">爬取游戏静态资源文件</h2>`
+            + `\n  <form action=\"/api/crawl_static_data\" method=\"post\">`
+            + `\n    <div>`
+            + `\n      <input type=\"submit\" id=\"crawl_static_data_btn\" ${isCrawling ? "disabled" : ""} value=\"开始爬取\">`
+            + `\n    </div>`
+            + `\n  </form>`
             + `\n  <hr>`
             /* //FIXME
             + `\n  <h2>Control</h2>`

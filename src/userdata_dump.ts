@@ -350,7 +350,7 @@ export class userdataDmp {
                     reqHeaders["User-Id-Fba9x88mae"] = open_id;
                     reqHeaders["Webview-Session-Id"] = this.webSessionId;
                 }
-                this.localServer.http2RequestAsync(url, reqHeaders, postDataStr).then((result) => {
+                this.localServer.emitHttp2RequestAsync(url, reqHeaders, postDataStr, true).then((result) => {
                     const openIdTicket = this.params.openIdTicket;
                     const newTicket = result.headers["ticket"];
                     let ticketRenewed = false;

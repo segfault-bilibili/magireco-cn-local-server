@@ -781,7 +781,29 @@ export class localServer {
         });
     }
 
-    http2RequestAsync(url: URL, reqHeaders: http2.OutgoingHttpHeaders, reqBody?: string | Buffer
+    //sendHttp2RequestAsync does not trigger hooks
+    sendHttp2RequestAsync(
+        url: URL, reqHeaders: http2.OutgoingHttpHeaders, reqBody: string | Buffer | undefined,
+        cvtBufToStr: boolean
+    ): Promise<{ headers: http2.IncomingHttpHeaders & http2.IncomingHttpStatusHeader, respBody: string | Buffer }> {
+        return new Promise((resolve, reject) => {
+            const authority = `https://${url.host}/`, alpn = "h2", sni = url.hostname;
+            this.getH2SessionAsync(new URL(authority), alpn, sni).then((sess) => {
+                let request = sess.request(reqHeaders);
+                request.on('error', (err) => reject(err));
+                request.on('response', (headers, flags) =>
+                    this.handleHttp2Response(authority, request, headers, flags, resolve, reject, cvtBufToStr)
+                );
+                if (typeof reqBody === 'string') request.end(Buffer.from(reqBody, 'utf-8'));
+                else if (reqBody instanceof Buffer) request.end(reqBody);
+                else request.end();
+            }).catch((err) => reject(err));
+        });
+    }
+    //emitHttp2RequestAsync triggers hooks
+    emitHttp2RequestAsync(
+        url: URL, reqHeaders: http2.OutgoingHttpHeaders, reqBody: string | Buffer | undefined,
+        cvtBufToStr: boolean
     ): Promise<{ headers: http2.IncomingHttpHeaders & http2.IncomingHttpStatusHeader, respBody: string | Buffer }> {
         return new Promise((resolve, reject) => {
             let tlsSocket = tls.connect({
@@ -799,28 +821,45 @@ export class localServer {
                 session.on('connect', (session) => {
                     let request = session.request(reqHeaders);
                     request.on('error', (err) => reject(err));
-                    request.on('response', (headers, flags) => {
-                        let respHeaders = headers;
-                        let respBodyBuf = Buffer.from(new ArrayBuffer(0)), respBodyStr: string | undefined;
-                        request.on('data', (chunk) => { respBodyBuf = Buffer.concat([respBodyBuf, chunk as Buffer]); });
-                        request.on('end', () => {
-                            try {
-                                const encoding = respHeaders["content-encoding"];
-                                respBodyBuf = localServer.decompress(respBodyBuf, encoding);
-                                const charset = parseCharset.get(respHeaders);
-                                respBodyStr = respBodyBuf.toString(charset);
-                            } catch (e) { // not rejecting
-                                console.error(`http2RequestAsync authority=[${authority}] decompressing or decoding respBodyBuf to string error`, e);
-                            }
-                            let respBody = respBodyStr != null ? respBodyStr : respBodyBuf;
-                            resolve({ headers: respHeaders, respBody: respBody });
-                        });
-                    });
+                    request.on('response', (headers, flags) =>
+                        this.handleHttp2Response(authority, request, headers, flags, resolve, reject, cvtBufToStr)
+                    );
                     if (typeof reqBody === 'string') request.end(Buffer.from(reqBody, 'utf-8'));
                     else if (reqBody instanceof Buffer) request.end(reqBody);
                     else request.end();
                 });
             });
+        });
+    }
+    private handleHttp2Response(
+        authority: string,
+        request: http2.ClientHttp2Stream,
+        headers: http2.IncomingHttpHeaders & http2.IncomingHttpStatusHeader,
+        flags: number,
+        resolve: (value: {
+            headers: http2.IncomingHttpHeaders & http2.IncomingHttpStatusHeader,
+            respBody: string | Buffer,
+        }) => void,
+        reject: (reason?: any) => void,
+        cvtBufToStr: boolean
+    ): void {
+        let respHeaders = headers;
+        let respBodyBuf = Buffer.from(new ArrayBuffer(0)), respBodyStr: string | undefined;
+        request.on('data', (chunk) => { respBodyBuf = Buffer.concat([respBodyBuf, chunk as Buffer]); });
+        request.on('end', () => {
+            try {
+                const encoding = respHeaders["content-encoding"];
+                respBodyBuf = localServer.decompress(respBodyBuf, encoding);
+                if (cvtBufToStr) {
+                    const charset = parseCharset.get(respHeaders);
+                    respBodyStr = respBodyBuf.toString(charset);
+                }
+            } catch (e) {
+                console.error(`handleHttp2Response authority=[${authority}] decompressing or decoding respBodyBuf to string error`, e);
+                reject(e);
+            }
+            let respBody = respBodyStr != null ? respBodyStr : respBodyBuf;
+            resolve({ headers: respHeaders, respBody: respBody });
         });
     }
 
