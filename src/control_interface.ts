@@ -653,7 +653,7 @@ export class controlInterface {
             + `\n      document.getElementById(\"openidticketstatus\").textContent = \"${openIdTicketStatus}\";`
             + `\n      document.getElementById(\"userdatadumpstatus\").textContent = \"${userdataDumpStatus}\";`
             + `\n      document.getElementById(\"crawlingstatus\").textContent = \"${crawlingStatus}\";`
-            + `\n      ${isDownloading ? "setTimeout(() => {confirmRefresh();}, 10000);" : ""}`
+            + `\n      ${isDownloading || isCrawling ? "setTimeout(() => {confirmRefresh();}, 10000);" : ""}`
             + `\n    });`
             + `\n    function unlock_prepare_download_btn() {`
             + `\n      document.getElementById(\"prepare_download_btn\").removeAttribute(\"disabled\");`
