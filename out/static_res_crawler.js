@@ -361,6 +361,7 @@ class crawler {
                 throw new Error(`found duplicate url=${key} in urlList`);
             urlStrSet.add(key);
         });
+        const total = urlList.length;
         concurrent = Math.floor(concurrent);
         if (concurrent < 1 || concurrent > 8)
             throw new Error("concurrent < 1 || concurrent > 8");
@@ -368,7 +369,7 @@ class crawler {
         let hasError = false, stoppedCrawling = false;
         let crawl = async (queueNo) => {
             this._crawlingStatus = `[${stageStr}]`
-                + ` fetched/total=[${resultMap.size}/${urlList.length}] remaining=[${urlStrSet.size - resultMap.size}]`
+                + ` fetched/total=[${resultMap.size}/${total}] remaining=[${urlStrSet.size - resultMap.size}]`
                 + ` not_found=[${currentStaticFile404Set.size}] skipped=[${skippedSet.size}] abandoned=[${abandonedSet.size}]`;
             let item = urlList.shift();
             if (item == null)
@@ -392,6 +393,8 @@ class crawler {
             }
             if (md5 != null) {
                 const fileMeta = this.staticFileMap.get(key);
+                skippedSet.add(key);
+                urlStrSet.delete(key);
                 if (fileMeta != null && fileMeta[0].md5 === md5)
                     return true; // skip downloaded asset
             }
