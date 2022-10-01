@@ -34,6 +34,8 @@ export class crawler {
     private readonly params: parameters.params;
     private readonly localServer: localServer;
 
+    private readonly device_id: string;
+
     static readonly defMimeType = "application/octet-stream";
 
     private readonly staticFileMap: staticFileMap;
@@ -67,6 +69,9 @@ export class crawler {
     constructor(params: parameters.params, localServer: localServer) {
         this.params = params;
         this.localServer = localServer;
+
+        this.device_id = [8, 4, 4, 4, 12].map((len) => crypto.randomBytes(Math.trunc((len + 1) / 2))
+            .toString('hex').substring(0, len)).join("-");
 
         try {
             let json = fs.readFileSync(crawler.staticFileMapPath, 'utf-8');
@@ -360,7 +365,7 @@ export class crawler {
             [http2.constants.HTTP2_HEADER_HOST]: host,
             [http2.constants.HTTP2_HEADER_ACCEPT_ENCODING]: `gzip, deflate`,
             [http2.constants.HTTP2_HEADER_CONTENT_TYPE]: `text/plain; charset=utf-8`,
-            ["Deviceid"]: `d00c434c-4744-46a8-bb66-c2aaec6972cb`,
+            ["Deviceid"]: `${this.device_id}`,
             ["User-Id-Fba9x88mae"]: `magica_`,
             ["X-Platform-Host"]: `https://${host}`,
             ["Ticket"]: "",
