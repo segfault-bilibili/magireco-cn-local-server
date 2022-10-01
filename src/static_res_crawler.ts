@@ -173,7 +173,6 @@ export class crawler {
         console.log(this._crawlingStatus = `crawling assets ...`);
         let assetConfigObj = await this.fetchAssetConfig();
         await this.fetchAssets(assetConfigObj);
-        console.log(this._crawlingStatus = `crawled all assets`);
 
         console.log(this._crawlingStatus = `${this.stopCrawling ? "stopped crawling" : "crawling completed"}`);
         this._isCrawling = false;
