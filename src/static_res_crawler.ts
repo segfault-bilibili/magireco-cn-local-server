@@ -442,7 +442,9 @@ export class crawler {
 
             if (md5 != null) {
                 const fileMeta = this.staticFileMap.get(key);
-                if (fileMeta!= null && fileMeta[0].md5 === md5) return true; // skip downloaded asset
+                skippedSet.add(key);
+                urlStrSet.delete(key);
+                if (fileMeta != null && fileMeta[0].md5 === md5) return true; // skip downloaded asset
             }
 
             try {
