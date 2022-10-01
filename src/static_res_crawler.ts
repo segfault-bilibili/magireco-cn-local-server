@@ -30,11 +30,39 @@ type fileMeta = { md5: string, contentType?: string };
 type staticFileMap = Map<string, Array<fileMeta>>; //path => md5
 type staticFile404Set = Set<string>; //path
 
+
+type fileSizeUrl = Array<{
+    size: number,
+    url: string,
+}>
+type assetListEntry = {
+    file_list: fileSizeUrl,
+    md5: string,
+    path: string,
+}
+type assetConfigObj = {
+    assetver: string,
+    assetConfigVersion: number,
+    assetList: Array<assetListEntry>
+}
+
+
 export class crawler {
     private readonly params: parameters.params;
     private readonly localServer: localServer;
 
+    private static readonly htmlRegEx = /^text\/html(?=(\s|;|$))/i;
+    private static readonly javaScriptRegEx = /^application\/javascript(?=(\s|;|$))/i;
+    private static readonly jsonRegEx = /^application\/json(?=(\s|;|$))/i;
+
+    private static readonly md5RegEx = /^[0-9a-f]{32}$/i;
+
     private readonly device_id: string;
+    private get timeStampSec(): string {
+        let ts = new Date().getTime();
+        let tsSec = Math.trunc(ts / 1000);
+        return String(tsSec);
+    }
 
     static readonly defMimeType = "application/octet-stream";
 
@@ -45,8 +73,10 @@ export class crawler {
     private static readonly staticFileMapPath = path.join(".", "staticFileMap.json");
     private static readonly staticFile404SetPath = path.join(".", "staticFile404Set.json");
 
-    private readonly prodHost = "l3-prod-all-gs-mfsn2.bilibiligame.net";
-    private get httpsProdMagicaNoSlash(): string { return `https://${this.prodHost}/magica`; }
+    private static readonly prodHost = "l3-prod-all-gs-mfsn2.bilibiligame.net";
+    private get httpsProdMagicaNoSlash(): string { return `https://${crawler.prodHost}/magica`; }
+    private static readonly patchHost = "line3-prod-patch-mfsn2.bilibiligame.net";
+    private get httpsPatchMagicaNoSlash(): string { return `https://${crawler.patchHost}/magica`; }
 
     stopCrawling = false;
     get isCrawling(): boolean {
@@ -132,13 +162,18 @@ export class crawler {
         this._crawlingStatus = "";
 
         console.log(this._crawlingStatus = `crawling index.html ...`);
-        let indexHtml = await this.fetchIndexHtml();
+        let indexHtml = await this.fetchSinglePage(crawler.prodHost, "/magica/index.html", crawler.htmlRegEx);
         let matched = indexHtml.match(/<head\s+time="(\d+)"/);
         if (matched == null) throw this._lastError = new Error(`cannot match time in index.html`);
         let headTime = parseInt(matched[1]);
         if (isNaN(headTime)) throw this._lastError = new Error(`headTime is NaN`);
         console.log(this._crawlingStatus = `crawling files in replacement.js ...`);
         await this.fetchFilesInReplacementJs(headTime);
+
+        console.log(this._crawlingStatus = `crawling assets ...`);
+        let assetConfigObj = await this.fetchAssetConfig();
+        await this.fetchAssets(assetConfigObj);
+        console.log(this._crawlingStatus = `crawled all assets`);
 
         console.log(this._crawlingStatus = `${this.stopCrawling ? "stopped crawling" : "crawling completed"}`);
         this._isCrawling = false;
@@ -198,9 +233,9 @@ export class crawler {
             }
         }
     }
-    saveFile(pathInUrl: string, content: Buffer, contentType: string | undefined): void {
+    saveFile(pathInUrl: string, content: Buffer, contentType: string | undefined, preCalcMd5?: string): void {
         let logPrefix = `saveFile`;
-        const md5ToWrite = crypto.createHash("md5").update(content).digest().toString('hex');
+        const md5ToWrite = preCalcMd5 != null ? preCalcMd5 : crypto.createHash("md5").update(content).digest('hex');
         if (this.checkAlreadyExist(pathInUrl, md5ToWrite)) {
             console.log(`${logPrefix} already exist [${pathInUrl}]`);
         } else {
@@ -222,7 +257,7 @@ export class crawler {
         if (!fs.existsSync(writePath)) return false; // file does not exist, just as expected
         // unfortunately, the file already exists, but it would still be okay if the md5 matches
         if (!fs.statSync(writePath).isFile()) throw new Error(`writePath=[${writePath}] exists but it is not a file`);
-        const calculatedMd5 = crypto.createHash("md5").update(fs.readFileSync(writePath)).digest().toString("hex");
+        const calculatedMd5 = crypto.createHash("md5").update(fs.readFileSync(writePath)).digest('hex');
         if (calculatedMd5 === givenMd5) return true; // fortunately the md5 matches!
         // unfortunately the md5 doesn't match, move the mismatched file away
         const pathInConflictDir = path.join(this.localConflictDir, pathInUrl);
@@ -289,9 +324,11 @@ export class crawler {
         return await this.http2Request(url, overrideReqHeaders, false, postData) as http2BufResult;
     }
 
-    private async batchHttp2GetSave(urlList: Array<URL>, concurrent = 8, _retries = 4): Promise<Array<http2BatchGetResultItem>> {
+    private async batchHttp2GetSave(urlList: Array<{ url: URL, md5?: string }>, concurrent = 8
+    ): Promise<Array<http2BatchGetResultItem>> {
         let urlStrSet = new Set<string>();
-        urlList.forEach((url) => {
+        urlList.forEach((item) => {
+            const url = item.url;
             const key = url.href;
             if (urlStrSet.has(key)) throw new Error(`found duplicate url=${key} in urlList`);
         });
@@ -307,7 +344,8 @@ export class crawler {
             if (isNaN(index)) throw new Error("isNaN(index)");
             if (index < 0 || index >= urlList.length) throw new Error("index < 0 || index >= urlList.length");
 
-            let url = urlList[index];
+            let item = urlList[index];
+            let url = item.url, md5 = item.md5;
             let key = url.href;
 
             if (this.stopCrawling) {
@@ -326,7 +364,9 @@ export class crawler {
                     urlStrSet.delete(key);
                     console.log(`HTTP 404 [${url.pathname}${url.search}]`);
                 } else {
-                    this.saveFile(url.pathname, resp.body, resp.contentType);
+                    let calculatedMd5 = crypto.createHash("md5").update(resp.body).digest("hex").toLowerCase();
+                    if (md5 != null && calculatedMd5 !== md5) throw new Error(`md5 mismatch on [${url.pathname}${url.search}]`);
+                    this.saveFile(url.pathname, resp.body, resp.contentType, calculatedMd5);
                     this.staticFile404Set.delete(url.pathname);
                     if (resultMap.has(key)) throw new Error(`resultMap already has key=[${key}]`);
                     resultMap.set(key, { url: url, resp: resp });
@@ -362,11 +402,10 @@ export class crawler {
     }
 
 
-    private async fetchIndexHtml(): Promise<string> {
-        const host = this.prodHost, path = "/magica/index.html";
+    private async fetchSinglePage(host: string, pathpart: string, contentTypeRegEx: RegExp): Promise<string> {
         const reqHeaders: http2.OutgoingHttpHeaders = {
             [http2.constants.HTTP2_HEADER_METHOD]: http2.constants.HTTP2_METHOD_GET,
-            [http2.constants.HTTP2_HEADER_PATH]: path,
+            [http2.constants.HTTP2_HEADER_PATH]: pathpart,
             [http2.constants.HTTP2_HEADER_AUTHORITY]: host,
             [http2.constants.HTTP2_HEADER_HOST]: host,
             [http2.constants.HTTP2_HEADER_ACCEPT_ENCODING]: `gzip, deflate`,
@@ -377,31 +416,117 @@ export class crawler {
             ["Ticket"]: "",
             ["Ticket-Verify"]: `from_cocos`,
         }
-        const indexUrl = new URL(`https://${host}${path}`);
-        const resp = await this.http2GetStr(indexUrl, reqHeaders);
+        const pageUrl = new URL(`https://${host}${pathpart}`);
+        const resp = await this.http2GetStr(pageUrl, reqHeaders);
         const contentType = resp.contentType;
-        if (!contentType?.match(/^text\/html(?=(\s|;|$))/)) throw new Error(`index.html contentType=[${contentType}] not text/html`);
-        this.saveFile(indexUrl.pathname, Buffer.from(resp.body, 'utf-8'), contentType);
+        if (!contentType?.match(contentTypeRegEx)) throw new Error(`[${pathpart}] contentType=[${contentType}] does not match [${contentTypeRegEx}]`);
+        this.saveFile(pageUrl.pathname, Buffer.from(resp.body, 'utf-8'), contentType);
         return resp.body;
     }
     private async fetchFilesInReplacementJs(headTime: number): Promise<void> {
         const replacementJsUrl = new URL(`${this.httpsProdMagicaNoSlash}/js/system/replacement.js?${headTime}`);
         const resp = await this.http2GetStr(replacementJsUrl);
         const contentType = resp.contentType;
-        if (!contentType?.match(/^application\/javascript(?=(\s|;|$))/)) throw new Error(`replacement.js contentType=[${contentType}] not application/javascript`);
+        if (!contentType?.match(crawler.javaScriptRegEx)) throw new Error(`replacement.js contentType=[${contentType}] not application/javascript`);
         const replacementJs = resp.body;
         this.saveFile(replacementJsUrl.pathname, Buffer.from(replacementJs, 'utf-8'), contentType);
         const fileTimeStampObj: Record<string, string> = JSON.parse(
             replacementJs.replace(/^\s*window\.fileTimeStamp\s*=\s*/, "")
         );
-        let urlList: Array<URL> = [];
+        let urlList: Array<{ url: URL }> = [];
         for (let subPath in fileTimeStampObj) {
             let fileTimeStamp = fileTimeStampObj[subPath]; //it's actually unknown what this value is
             if (!subPath?.match(/^([0-9a-z\-\._ \(\)]+\/)+[0-9a-z\-\._ \(\)]+\.[0-9a-z]+$/i)) throw new Error(`invalid subPath=[${subPath}] fileTimeStamp=[${fileTimeStamp}]`);
             if (!fileTimeStamp?.match(/^[0-9a-f]{16}$/)) throw new Error(`subPath=[${subPath}] has invalid fileTimeStamp=[${fileTimeStamp}]`);
-            urlList.push(new URL(`${this.httpsProdMagicaNoSlash}/${subPath}?${headTime}`));
+            urlList.push({
+                url: new URL(`${this.httpsProdMagicaNoSlash}/${subPath}?${headTime}`),
+            });
         }
         await this.batchHttp2GetSave(urlList);
+    }
+
+    private async fetchAssetConfig(): Promise<assetConfigObj> {
+        console.log(this._crawlingStatus = `crawling maintenance config ...`);
+        const maintenanceConfigStr = await this.fetchSinglePage(
+            crawler.prodHost,
+            `/maintenance/magica/config?type=1&platform=2&version=30011&gameid=1&time=${this.timeStampSec}`,
+            crawler.jsonRegEx
+        );
+        const maintenanceConfig = JSON.parse(maintenanceConfigStr);
+        if (maintenanceConfig["status"] != 0) throw new Error("maintenanceConfig.status is not 0");
+        const assetver: string = maintenanceConfig["assetver"]; // "2207081501"
+        if (!assetver?.match(/^\d+$/i)) throw new Error("cannot read assetver from maintenanceConfig");
+
+        console.log(this._crawlingStatus = `crawling asset_config.json ...`);
+        const assetConfigStr = await this.fetchSinglePage(
+            crawler.patchHost,
+            `/magica/resource/download/asset/master/resource/${assetver}/asset_config.json?${this.timeStampSec}`,
+            crawler.jsonRegEx);
+        const assetConfig = JSON.parse(assetConfigStr);
+        const assetConfigVersion: number = assetConfig["version"];
+        if (typeof assetConfigVersion !== 'number') throw new Error("assetConfig.version is not number");
+
+        const assetListFileNameList = [
+            "asset_char_list.json",
+            "asset_main.json",
+            "asset_voice.json",
+            "asset_movie_high.json",
+            "asset_movie_low.json",
+            "zip_asset_main.json",
+            "zip_asset_voice.json",
+            "zip_asset_movie_high.json",
+            "zip_asset_movie_low.json",
+        ];
+        let promises = assetListFileNameList.map(async (fileName: string): Promise<Array<assetListEntry>> => {
+            console.log(this._crawlingStatus = `crawling ${fileName} ...`);
+            const jsonStr = await this.fetchSinglePage(
+                crawler.patchHost,
+                `/magica/resource/download/asset/master/resource/${assetver}/${fileName}?${this.timeStampSec}`,
+                crawler.jsonRegEx
+            );
+            const assetList: Array<assetListEntry> = JSON.parse(jsonStr);
+            if (!Array.isArray(assetList)) throw new Error("assetList is not array");
+            if (assetList.length == 0) throw new Error("assetList is empty");
+            if (!Array.isArray(assetList[0].file_list)) {
+                throw new Error("assetList[0].file_list is not array")
+            }
+            if (typeof assetList[0].md5 !== 'string' || !assetList[0].md5.match(crawler.md5RegEx)) {
+                throw new Error("assetList[0].md5 is not md5");
+            }
+            if (typeof assetList[0].path !== 'string') {
+                throw new Error("assetList[0].path is not string");
+            }
+            return assetList;
+        });
+        let status = await Promise.allSettled(promises);
+        let listOfAssetList = await Promise.all(status);
+        let mergedAssetList: Array<assetListEntry> = [];
+        listOfAssetList.forEach((list) => {
+            if (list.status === 'fulfilled') {
+                list.value.forEach((item) => mergedAssetList.push(item));
+            } else throw new Error("list.status is not fulfilled");
+        });
+
+        return {
+            assetver: assetver,
+            assetConfigVersion: assetConfigVersion,
+            assetList: mergedAssetList,
+        }
+    }
+    private async fetchAssets(assetConfig: assetConfigObj): Promise<void> {
+        console.log(this._crawlingStatus = `crawling asset files ...`);
+        //const assetver = assetConfig.assetver;
+        const assetList = assetConfig.assetList;
+        const urlList: Array<{ url: URL, md5: string }> = assetList.map((item) => {
+            const partialUrl = item.file_list[0].url;
+            const pathname = `/resource/download/asset/master/resource/${partialUrl}`
+            const md5 = item.md5;
+            return {
+                url: new URL(`${this.httpsPatchMagicaNoSlash}${pathname}?${md5}`),
+                md5: md5,
+            }
+        });
+        const responses = await this.batchHttp2GetSave(urlList);
     }
 
 }
