@@ -339,22 +339,21 @@ export class crawler {
         let resultMap = new Map<string, http2BatchGetResultItem>();
 
         let hasError = false, stoppedCrawling = false;
-        let crawl = async (index: number): Promise<number | undefined> => {
-            if (hasError) return undefined;
-            if (isNaN(index)) throw new Error("isNaN(index)");
-            if (index < 0 || index >= urlList.length) throw new Error("index < 0 || index >= urlList.length");
+        let crawl = async (queueNo: number): Promise<boolean> => {
+            if (hasError) return false;
 
-            let item = urlList[index];
+            let item = urlList.shift();
+            if (item == null) return false;
             let url = item.url, md5 = item.md5;
             let key = url.href;
 
             if (this.stopCrawling) {
                 stoppedCrawling = true;
-                console.log(`stop crawling (queue ${index % concurrent})`);
+                console.log(`stop crawling (queue ${queueNo})`);
             }
             if (stoppedCrawling) {
                 urlStrSet.delete(key);
-                return undefined;
+                return false;
             }
 
             try {
@@ -377,18 +376,13 @@ export class crawler {
                 throw e;
             }
 
-            let next = index + concurrent;
-            if (next < urlList.length) return next;
-            else return undefined;
+            return true;
         }
 
         let startPromises = urlList.slice(0, Math.min(concurrent, urlList.length))
             .map(async (_url, index) => {
-                for (
-                    let next: number | undefined = index;
-                    next != null;
-                    next = await crawl(next)
-                );
+                const queueNo = index;
+                while (await crawl(queueNo));
             });
         await Promise.allSettled(startPromises);
         await Promise.all(startPromises);
