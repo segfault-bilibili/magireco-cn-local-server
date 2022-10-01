@@ -929,7 +929,7 @@ export class controlInterface {
             + `\n  <form action=\"/api/crawl_static_data\" method=\"post\">`
             + `\n    <div>`
             + `\n      <input id=\"crawl_web_res\" name=\"crawl_web_res\" value=\"true\" type=\"checkbox\" ${crawlWebRes ? "checked" : ""}>`
-            + `\n      <label for=\"crawl_web_res\">下载Web资源（${isWebResCompleted ? "<b style=\"color: green\">已完成下载</b>" : "未完成下载"}，此部分不能恢复上次进度）</label>`
+            + `\n      <label for=\"crawl_web_res\">下载Web资源（${isWebResCompleted ? "<b style=\"color: green\">已完成下载</b>" : "未完成下载"}，此部分在停止后不能恢复上次进度）</label>`
             + `\n    </div>`
             + `\n    <div>`
             + `\n      <input id=\"crawl_assets\" name=\"crawl_assets\" value=\"true\" type=\"checkbox\" ${crawlAssets ? "checked" : ""}>`
@@ -937,6 +937,7 @@ export class controlInterface {
             + `\n    </div>`
             + `\n    <div>`
             + `\n      <input type=\"submit\" id=\"crawl_static_data_btn\" ${isCrawling ? "disabled" : ""} value=\"开始爬取\">`
+            + `\n      <br><i>请不要反复从官服下载，避免给官服增加压力。</i>`
             + `\n    </div>`
             + `\n  </form>`
             + `\n  <form action=\"/api/stop_crawling\" method=\"post\">`
