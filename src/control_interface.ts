@@ -901,7 +901,6 @@ export class controlInterface {
             + `\n    ${this.userdataDmp.lastSnapshot == null ? "" : aHref(this.userdataDmp.userdataDumpFileName, `/${this.userdataDmp.userdataDumpFileName}`)}`
             + `\n  </fieldset>`
             + `\n  <hr>`
-            /*
             + `\n  <h2 id=\"crawlstaticdata\">爬取游戏静态资源文件</h2>`
             + `\n  <fieldset>`
             + `\n  <legend>爬取进度</legend>`
@@ -924,7 +923,6 @@ export class controlInterface {
             + `\n  </form>`
             + `\n  </fieldset>`
             + `\n  <hr>`
-            */
             /* //FIXME
             + `\n  <h2>Control</h2>`
             + `\n  <form action=\"/api/shutdown\" method=\"get\">`
