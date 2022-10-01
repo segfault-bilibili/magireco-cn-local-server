@@ -261,6 +261,8 @@ export class crawler {
         // unfortunately the md5 doesn't match, move the mismatched file away
         const pathInConflictDir = path.join(this.localConflictDir, pathInUrl);
         const moveToDir = path.join(path.dirname(pathInConflictDir), calculatedMd5);
+        fs.mkdirSync(moveToDir, { recursive: true });
+        if (!fs.statSync(moveToDir).isDirectory()) throw new Error(`moveToDir=[${moveToDir}] is not directory`);
         const moveToPath = path.join(moveToDir, path.basename(pathInUrl));
         fs.renameSync(writePath, moveToPath);
         console.log(`${logPrefix}: moved ${writePath} to ${moveToPath}`);
