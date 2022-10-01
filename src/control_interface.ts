@@ -899,7 +899,7 @@ export class controlInterface {
             + `\n  <legend>${this.userdataDmp.lastSnapshot == null ? "尚未下载，无链接可显示" : "将下载到的数据另存为文件"}</legend>`
             + `\n    ${this.userdataDmp.lastSnapshot == null ? "" : "<b>↓点击下面的链接即可下载↓</b>"}`
             + `\n    ${this.userdataDmp.lastSnapshot == null ? "" : "<br>" + aHref(this.userdataDmp.userdataDumpFileName, `/${this.userdataDmp.userdataDumpFileName}`)}`
-            + `\n    ${this.userdataDmp.lastSnapshot == null ? "" : "<br><i>在某品牌手机上，曾经观察到第一次下载回来是0字节空文件的问题，如果碰到这个问题可以再次点击或长按下面的链接重试下载，或者换个浏览器试试。</i>"}`
+            + `\n    ${this.userdataDmp.lastSnapshot == null ? "" : "<br><i>在某品牌手机上，曾经观察到第一次下载回来是0字节空文件的问题，如果碰到这个问题可以再次点击或长按链接重试下载，或者换个浏览器试试。</i>"}`
             + `\n  </fieldset>`
             + `\n  <hr>`
             /*
