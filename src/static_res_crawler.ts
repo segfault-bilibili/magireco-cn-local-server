@@ -52,6 +52,7 @@ export class crawler {
     private readonly localServer: localServer;
 
     readonly isWebResCompleted: boolean;
+    readonly isAssetsCompleted: boolean;
 
     private static readonly htmlRegEx = /^text\/html(?=(\s|;|$))/i;
     private static readonly javaScriptRegEx = /^application\/javascript(?=(\s|;|$))/i;
@@ -156,6 +157,44 @@ export class crawler {
             console.error(e);
         }
         this.isWebResCompleted = isWebResCompleted != null ? isWebResCompleted : false;
+
+        let isAssetsCompleted: boolean | undefined;
+        try {
+            let completed = true;
+            const maintenanceConfigStr = this.readFile(`/maintenance/magica/config`)?.toString('utf-8');
+            if (maintenanceConfigStr != null) {
+                const assetver = this.readAssetVer(maintenanceConfigStr);
+                const mergedAssetList: Array<assetListEntry> = [];
+                let allAssetListExists = true;
+                crawler.assetListFileNameList.find((fileName) => {
+                    const assetListStr = this.readFile(`/magica/resource/download/asset/master/resource/${assetver}/${fileName}`)
+                        ?.toString('utf-8');
+                    if (assetListStr == null) {
+                        allAssetListExists = false;
+                        return true;
+                    }
+                    const assetList: Array<assetListEntry> = JSON.parse(assetListStr);
+                    assetList.forEach((item) => mergedAssetList.push(item));
+                });
+                if (allAssetListExists) {
+                    mergedAssetList.find((item) => {
+                        const fileName = item.file_list[0].url;
+                        const key = `/magica/resource/download/asset/master/resource/${assetver}/${fileName}`;
+                        if (!this.staticFileMap.has(key) || !this.staticFile404Set.has(key)) {
+                            console.log(`[${key}] is still missing`);
+                            completed = false;
+                            return true;
+                        }
+                    });
+                } else {
+                    completed = false;
+                }
+            }
+        } catch (e) {
+            isAssetsCompleted = false;
+            console.error(e);
+        }
+        this.isAssetsCompleted = isAssetsCompleted != null ? isAssetsCompleted : false;
     }
 
     fetchAllAsync(): Promise<void> {
@@ -504,6 +543,24 @@ export class crawler {
         await this.batchHttp2GetSave(`webRes`, urlList);
     }
 
+    private static readonly assetListFileNameList = [
+        "asset_char_list.json",
+        "asset_main.json",
+        "asset_voice.json",
+        "asset_movie_high.json",
+        "asset_movie_low.json",
+        "zip_asset_main.json",
+        "zip_asset_voice.json",
+        "zip_asset_movie_high.json",
+        "zip_asset_movie_low.json",
+    ];
+    private readAssetVer(maintenanceConfigStr: string): string {
+        const maintenanceConfig = JSON.parse(maintenanceConfigStr);
+        if (maintenanceConfig["status"] != 0) throw new Error("maintenanceConfig.status is not 0");
+        const assetver: string = maintenanceConfig["assetver"]; // "2207081501"
+        if (!assetver?.match(/^\d+$/i)) throw new Error("cannot read assetver from maintenanceConfig");
+        return assetver;
+    }
     private async fetchAssetConfig(): Promise<assetConfigObj> {
         console.log(this._crawlingStatus = `crawling maintenance config ...`);
         const maintenanceConfigStr = await this.fetchSinglePage(
@@ -511,10 +568,7 @@ export class crawler {
             `/maintenance/magica/config?type=1&platform=2&version=30011&gameid=1&time=${this.timeStampSec}`,
             crawler.jsonRegEx
         );
-        const maintenanceConfig = JSON.parse(maintenanceConfigStr);
-        if (maintenanceConfig["status"] != 0) throw new Error("maintenanceConfig.status is not 0");
-        const assetver: string = maintenanceConfig["assetver"]; // "2207081501"
-        if (!assetver?.match(/^\d+$/i)) throw new Error("cannot read assetver from maintenanceConfig");
+        const assetver = this.readAssetVer(maintenanceConfigStr);
 
         console.log(this._crawlingStatus = `crawling asset_config.json ...`);
         const assetConfigStr = await this.fetchSinglePage(
@@ -525,18 +579,7 @@ export class crawler {
         const assetConfigVersion: number = assetConfig["version"];
         if (typeof assetConfigVersion !== 'number') throw new Error("assetConfig.version is not number");
 
-        const assetListFileNameList = [
-            "asset_char_list.json",
-            "asset_main.json",
-            "asset_voice.json",
-            "asset_movie_high.json",
-            "asset_movie_low.json",
-            "zip_asset_main.json",
-            "zip_asset_voice.json",
-            "zip_asset_movie_high.json",
-            "zip_asset_movie_low.json",
-        ];
-        let promises = assetListFileNameList.map(async (fileName: string): Promise<Array<assetListEntry>> => {
+        let promises = crawler.assetListFileNameList.map(async (fileName: string): Promise<Array<assetListEntry>> => {
             console.log(this._crawlingStatus = `crawling ${fileName} ...`);
             const jsonStr = await this.fetchSinglePage(
                 crawler.patchHost,

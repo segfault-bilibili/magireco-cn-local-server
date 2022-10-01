@@ -626,6 +626,7 @@ export class controlInterface {
         const crawlWebRes = this.params.crawlWebRes;
         const crawlAssets = this.params.crawlAssets;
         const isWebResCompleted = this.crawler.isWebResCompleted;
+        const isAssetsCompleted = this.crawler.isAssetsCompleted;
 
         const bsgamesdkIDs = this.params.bsgamesdkIDs;
         const bd_id = bsgamesdkIDs.bd_id, buvid = bsgamesdkIDs.buvid, udid = bsgamesdkIDs.udid;
@@ -932,7 +933,7 @@ export class controlInterface {
             + `\n    </div>`
             + `\n    <div>`
             + `\n      <input id=\"crawl_assets\" name=\"crawl_assets\" value=\"true\" type=\"checkbox\" ${crawlAssets ? "checked" : ""}>`
-            + `\n      <label for=\"crawl_assets\">下载本地资源（此部分可自动恢复上次进度）</label>`
+            + `\n      <label for=\"crawl_assets\">下载本地资源（${isAssetsCompleted ? "<b style=\"color: green\">已完成下载</b>" : "未完成下载"}，此部分可自动恢复上次进度）</label>`
             + `\n    </div>`
             + `\n    <div>`
             + `\n      <input type=\"submit\" id=\"crawl_static_data_btn\" ${isCrawling ? "disabled" : ""} value=\"开始爬取\">`
