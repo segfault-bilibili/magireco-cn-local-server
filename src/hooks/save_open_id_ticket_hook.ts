@@ -1,5 +1,6 @@
 import * as http from "http";
 import * as http2 from "http2";
+import { passOnRequest } from "../local_server";
 import * as parameters from "../parameters";
 import * as userdataDump from "../userdata_dump";
 import { saveResponseBodyHook } from "./save_response_body_hook";
@@ -21,17 +22,26 @@ export class saveOpenIdTicketHook extends saveResponseBodyHook {
         url?: URL,
         httpVersion?: string,
         headers?: http.IncomingHttpHeaders | http2.IncomingHttpHeaders
-    ): boolean {
+    ): passOnRequest {
         const tag = "saveOpenIdTicketHook";
 
-        const isGameLogin = super.matchRequest(method, url, httpVersion, headers);
-        if (isGameLogin) return true;
+        const isGameLogin = super.matchRequest(method, url, httpVersion, headers).interceptResponse;
+        if (isGameLogin) return {
+            nextAction: "passOnRequest",
+            interceptResponse: true,
+        }
 
         const magirecoRegEx = /^(http|https):\/\/l\d+-[0-9a-z\-]+-mfsn\d*\.bilibiligame\.net\//;
-        const isMagiReco = url != null && url.href.match(magirecoRegEx);
-        if (!isMagiReco) return isGameLogin;
+        const isMagiReco = url != null && url.href.match(magirecoRegEx) != null;
+        if (!isMagiReco) return {
+            nextAction: "passOnRequest",
+            interceptResponse: isGameLogin,
+        }
 
-        if (headers == null) return isGameLogin;
+        if (headers == null) return {
+            nextAction: "passOnRequest",
+            interceptResponse: isGameLogin,
+        }
         let open_id: string | undefined, ticket: string | undefined, webSessionId: string | undefined, timestamp: number | undefined;
         for (let key in headers) {
             let val = headers[key];
@@ -42,7 +52,10 @@ export class saveOpenIdTicketHook extends saveResponseBodyHook {
             if (open_id != null && ticket != null) break;
         }
         if (open_id == null || ticket == null) {
-            return isGameLogin;
+            return {
+                nextAction: "passOnRequest",
+                interceptResponse: isGameLogin,
+            }
         }
 
         //console.log(`${tag} got open_id and ticket from request`);//DEBUG
@@ -52,7 +65,10 @@ export class saveOpenIdTicketHook extends saveResponseBodyHook {
             && last.open_id === open_id
             && last.ticket === ticket
         ) {
-            return isGameLogin;//no need to update
+            return {
+                nextAction: "passOnRequest",
+                interceptResponse: isGameLogin, //no need to update
+            }
         }
 
         console.log(`${tag} got open_id and ticket from request`);
@@ -76,7 +92,10 @@ export class saveOpenIdTicketHook extends saveResponseBodyHook {
         if (timestamp != null && !isNaN(timestamp)) val.timestamp = timestamp;
         this.params.save({ key: this.paramKey, val: val })
             .then(() => console.log(`${tag} saved to paramKey=[${this.paramKey}]`));
-        return false; // no need to capture request/response body
+        return {
+            nextAction: "passOnRequest",
+            interceptResponse: false, // no need to capture request/response body
+        }
     }
 
     onMatchedResponse(

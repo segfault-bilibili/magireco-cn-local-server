@@ -14,6 +14,9 @@ import { getStrRep } from "./get_str_rep";
 import * as userdataDump from "./userdata_dump";
 import * as multipart from "parse-multipart-data";
 import * as staticResCrawler from "./static_res_crawler";
+import { fakeMagirecoProdRespHook } from "./hooks/fake_magireco_prod_resp_hook";
+import { saveAccessKeyHook } from "./hooks/save_access_key_hook";
+import { saveOpenIdTicketHook } from "./hooks/save_open_id_ticket_hook";
 
 export class controlInterface {
     private closing = false;
@@ -22,7 +25,7 @@ export class controlInterface {
     private readonly serverList: Array<httpProxy | localServer>;
     private readonly bsgamesdkPwdAuth: bsgamesdkPwdAuthenticate.bsgamesdkPwdAuth;
     private readonly userdataDmp: userdataDump.userdataDmp;
-    private readonly crawler: staticResCrawler.crawler;
+    readonly crawler: staticResCrawler.crawler;
 
     static async launch(): Promise<void> {
         const params = await parameters.params.load();
@@ -81,6 +84,13 @@ export class controlInterface {
         const userdataDmp = new userdataDump.userdataDmp(params, localsvr);
         const crawler = new staticResCrawler.crawler(params, localsvr);
 
+        const hooks = [
+            new saveAccessKeyHook(params),
+            new saveOpenIdTicketHook(params),
+            new fakeMagirecoProdRespHook(params, crawler),
+        ];
+        hooks.forEach((hook) => localsvr.addHook(hook));
+
         const httpServerSelf = http.createServer(async (req, res) => {
             if (req.url == null) {
                 res.writeHead(403, { ["Content-Type"]: "text/plain" });
@@ -92,6 +102,31 @@ export class controlInterface {
                 const apiName = req.url.replace(/(^\/api\/)|(\?.*$)/g, "");
                 console.log(`controlInterface received api request [${apiName}]`);
                 switch (apiName) {
+                    case "set_mode":
+                        try {
+                            let newModeParams = await this.getParsedPostData(req);
+                            let newMode: parameters.mode | undefined;
+                            switch (newModeParams.get("mode")) {
+                                case "online":
+                                    newMode = parameters.mode.ONLINE;
+                                    break;
+                                case "local_offline":
+                                    newMode = parameters.mode.LOCAL_OFFLINE;
+                                    break;
+                            }
+                            if (newMode == null) {
+                                this.sendResultAsync(res, 400, "no mode selected");
+                            } else {
+                                await this.params.save({ key: "mode", val: newMode });
+                                let resultText = `updated mode`;
+                                console.log(resultText);
+                                this.sendResultAsync(res, 200, resultText);
+                            }
+                        } catch (e) {
+                            console.error(`${apiName} error`, e);
+                            this.sendResultAsync(res, 500, e instanceof Error ? e.message : `${apiName} error`);
+                        }
+                        return;
                     /*
                     case "shutdown":
                         this.sendResultAsync(res, 200, "shutting down");
@@ -479,6 +514,9 @@ export class controlInterface {
 
         const aHref = (text: string, url: string, newTab = true) => `<a target=\"${newTab ? "_blank" : "_self"}\" href=${url}>${text}</a>`
 
+        const isOnlineMode = this.params.mode === parameters.mode.ONLINE;
+        const isLocalOfflineMode = this.params.mode === parameters.mode.LOCAL_OFFLINE;
+
         const autoOpenWeb = this.params.autoOpenWeb;
         let httpProxyAddr = "", httpProxyPort = "";
         const listenList = this.params.listenList;
@@ -604,6 +642,8 @@ export class controlInterface {
             + `\n</head>`
             + `\n<body>`
             + `\n  <h1>魔法纪录国服本地服务器</h1>`
+            + `\n  <fieldset>`
+            + `\n  <legend>HTTP代理</legend>`
             + `\n  <div>`
             + `\n    <label for=\"httpproxyaddr\">HTTP代理监听地址</label>`
             + `\n    <input readonly id=\"httpproxyaddr\" value=\"${httpProxyAddr}\">`
@@ -613,17 +653,37 @@ export class controlInterface {
             + `\n    <input readonly id=\"httpproxyport\" value=\"${httpProxyPort}\">`
             + `\n  </div>`
             + `\n  <div>`
-            + `\n    <label for=\"cacrt\">下载CA证书：</label>`
+            + `\n  <ul>`
+            + `\n  <li>`
+            + `\n    若要${aHref("从官服下载个人账号数据", "#dumpuserdata", false)}，可以使用下面的${aHref("Bilibili登录", "#bilibilipwdauth", false)}界面，也可以使用Clash让游戏客户端通过上述HTTP代理联网；`
+            + `\n  </li>`
+            + `\n  <li>`
+            + `\n    或者修改${aHref("工作模式", "#setmode", false)}后，使用Clash让游戏客户端通过上述HTTP代理联网即可成为脱离官服的本地离线服务器（功能暂未实现）。`
+            + `\n  </li>`
+            + `\n  </ul>`
+            + `\n  </div>`
+            + `\n  </fieldset>`
+            + `\n  <fieldset>`
+            + `\n  <legend>下载CA证书</legend>`
+            + `\n  <div>`
             + `\n    ${aHref("ca.crt", "/ca.crt")}`
             + `\n  </div>`
+            + `\n  </fieldset>`
+            + `\n  <fieldset>`
+            + `\n  <legend>下载Clash配置文件</legend>`
             + `\n  <div>`
-            + `\n    <label for=\"cacrt\">下载Clash配置文件：</label>`
             + `\n    ${aHref("magirecolocal.yaml", "/magirecolocal.yaml")}`
             + `\n  </div>`
+            + `\n  </fieldset>`
+            + `\n  <fieldset>`
+            + `\n  <legend>下载配置数据</legend>`
             + `\n  <div>`
-            + `\n    <label for=\"paramsjson\"><b style=\"color: red\">（含有登录密钥等敏感数据，请勿分享）</b>下载备份所有配置数据：</label>`
+            + `\n    <label for=\"paramsjson\"><b style=\"color: red\">（含有登录密钥等敏感数据，请勿分享）</b></label>`
             + `\n    ${aHref("params.json", "/params.json")}`
             + `\n  </div>`
+            + `\n  </fieldset>`
+            + `\n  <fieldset>`
+            + `\n  <legend>上传配置数据</legend>`
             + `\n  <form enctype=\"multipart/form-data\" action=\"/api/upload_params\" method=\"post\">`
             + `\n    <div>`
             + `\n      <input type=\"file\" name=\"uploaded_params\" id=\"params_file\">`
@@ -632,47 +692,7 @@ export class controlInterface {
             + `\n      <input type=\"submit\" value=\"上传配置数据\" id=\"upload_params_btn\">`
             + `\n    </div>`
             + `\n  </form>`
-            + `\n  <hr>`
-            + `\n  <form action=\"/api/set_upstream_proxy\" method=\"post\">`
-            + `\n    <div>`
-            + `\n      <label for=\"upstream_proxy_host\">上游代理地址</label>`
-            + `\n      <input id=\"upstream_proxy_host\" name=\"upstream_proxy_host\" value=\"${upstreamProxyHost}\">`
-            + `\n    </div>`
-            + `\n    <div>`
-            + `\n      <label for=\"upstream_proxy_port\">上游代理端口</label>`
-            + `\n      <input id=\"upstream_proxy_port\" name=\"upstream_proxy_port\" value=\"${upstreamProxyPort}\">`
-            + `\n    </div>`
-            + `\n    <div>`
-            + `\n      <input id=\"upstream_proxy_enabled\" name=\"upstream_proxy_enabled\" value=\"true\" type=\"checkbox\" ${upstreamProxyEnabled ? "checked" : ""}>`
-            + `\n      <label for=\"upstream_proxy_enabled\">启用上游代理</label>`
-            + `\n    </div>`
-            + `\n    <div>`
-            + `\n      <input type=\"submit\" value=\"修改上游代理设置\" id=\"set_upstream_proxy_btn\">`
-            + `\n    </div>`
-            + `\n  </form>`
-            + `\n  <hr>`
-            + `\n  <form enctype=\"multipart/form-data\" action=\"/api/upload_upstream_proxy_cacert\" method=\"post\">`
-            + `\n    <div>`
-            + `\n      <input type=\"file\" name=\"upstream_proxy_cacert\" id=\"upstream_proxy_cacert\">`
-            + `\n    </div>`
-            + `\n    <div>`
-            + `\n      <input type=\"submit\" value=\"上传/清除上游代理CA证书(PEM格式)\" id=\"upload_upstream_proxy_cacert_btn\">`
-            + `\n    </div>`
-            + `\n  </form>`
-            + `\n  <div>`
-            + `\n    <button id=\"refreshbtn1\" onclick=\"window.location.reload(true);\">刷新</button>`
-            + `\n    <label style=\"${upstreamProxyCACertStyle}\" id=\"upstream_proxy_ca_status\" for=\"refreshbtn1\">${upstreamProxyCACertStatus}</label>`
-            + `\n  </div>`
-            + `\n  <hr>`
-            + `\n  <form action=\"/api/set_auto_open_web\" method=\"post\">`
-            + `\n    <div>`
-            + `\n      <input id=\"auto_open_web\" name=\"auto_open_web\" value=\"true\" type=\"checkbox\" ${autoOpenWeb ? "checked" : ""}>`
-            + `\n      <label for=\"auto_open_web\">启动时自动打开浏览器</label>`
-            + `\n    </div>`
-            + `\n    <div>`
-            + `\n      <input type=\"submit\" id=\"set_auto_open_web_btn\" value=\"应用\">`
-            + `\n    </div>`
-            + `\n  </form>`
+            + `\n  </fieldset>`
             + `\n  <hr>`
             + `\n  <h2>说明</h2>`
             + `\n  <ol>`
@@ -697,9 +717,81 @@ export class controlInterface {
             + `\n  </li>`
             + `\n  </ol>`
             + `\n  <hr>`
+            + `\n  <h2>设置</h2>`
+            + `\n  <fieldset id=\"setmode\">`
+            + `\n  <legend>工作模式</legend>`
+            + `\n  <form action=\"/api/set_mode\" method=\"post\">`
+            + `\n    <div>`
+            + `\n      <input ${isOnlineMode ? "checked" : ""} type=\"radio\" id=\"mode_radio1\" name=\"mode\" value=\"online\">`
+            + `\n      <label for=\"mode_radio1\">在线模式</label>`
+            + `\n      <input ${isLocalOfflineMode ? "checked" : ""} type=\"radio\" id=\"mode_radio2\" name=\"mode\" value=\"local_offline\">`
+            + `\n      <label for=\"mode_radio2\">本地离线模式</label>`
+            + `\n    </div>`
+            + `\n    <div>`
+            + `\n      <input type=\"submit\" value=\"应用\" id=\"set_mode_btn\">`
+            + `\n    </div>`
+            + `\n  </form>`
+            + `\n  </fieldset>`
+            + `\n  <fieldset>`
+            + `\n  <legend>上游代理</legend>`
+            + `\n  <form action=\"/api/set_upstream_proxy\" method=\"post\">`
+            + `\n    <div>`
+            + `\n      <label for=\"upstream_proxy_host\">上游代理地址</label>`
+            + `\n      <input id=\"upstream_proxy_host\" name=\"upstream_proxy_host\" value=\"${upstreamProxyHost}\">`
+            + `\n    </div>`
+            + `\n    <div>`
+            + `\n      <label for=\"upstream_proxy_port\">上游代理端口</label>`
+            + `\n      <input id=\"upstream_proxy_port\" name=\"upstream_proxy_port\" value=\"${upstreamProxyPort}\">`
+            + `\n    </div>`
+            + `\n    <div>`
+            + `\n      <input id=\"upstream_proxy_enabled\" name=\"upstream_proxy_enabled\" value=\"true\" type=\"checkbox\" ${upstreamProxyEnabled ? "checked" : ""}>`
+            + `\n      <label for=\"upstream_proxy_enabled\">启用上游代理</label>`
+            + `\n    </div>`
+            + `\n    <div>`
+            + `\n      <input type=\"submit\" value=\"修改上游代理设置\" id=\"set_upstream_proxy_btn\">`
+            + `\n    </div>`
+            + `\n  </form>`
+            + `\n  </fieldset>`
+            + `\n  <fieldset>`
+            + `\n  <legend>上游代理CA证书</legend>`
+            + `\n  <form enctype=\"multipart/form-data\" action=\"/api/upload_upstream_proxy_cacert\" method=\"post\">`
+            + `\n    <div>`
+            + `\n      <input type=\"file\" name=\"upstream_proxy_cacert\" id=\"upstream_proxy_cacert\">`
+            + `\n    </div>`
+            + `\n    <div>`
+            + `\n      <input type=\"submit\" value=\"上传/清除上游代理CA证书(PEM格式)\" id=\"upload_upstream_proxy_cacert_btn\">`
+            + `\n    </div>`
+            + `\n  </form>`
+            + `\n  <div>`
+            + `\n    <button id=\"refreshbtn1\" onclick=\"window.location.reload(true);\">刷新</button>`
+            + `\n    <label style=\"${upstreamProxyCACertStyle}\" id=\"upstream_proxy_ca_status\" for=\"refreshbtn1\">${upstreamProxyCACertStatus}</label>`
+            + `\n  </div>`
+            + `\n  </fieldset>`
+            + `\n  <fieldset>`
+            + `\n  <legend>启动时自动打开浏览器</legend>`
+            + `\n  <form action=\"/api/set_auto_open_web\" method=\"post\">`
+            + `\n    <div>`
+            + `\n      <input id=\"auto_open_web\" name=\"auto_open_web\" value=\"true\" type=\"checkbox\" ${autoOpenWeb ? "checked" : ""}>`
+            + `\n      <label for=\"auto_open_web\">启动时自动打开浏览器</label>`
+            + `\n    </div>`
+            + `\n    <div>`
+            + `\n      <input type=\"submit\" id=\"set_auto_open_web_btn\" value=\"应用\">`
+            + `\n    </div>`
+            + `\n  </form>`
+            + `\n  </fieldset>`
+            + `\n  <hr>`
             + `\n  <h2 id=\"bilibilipwdauth\">Bilibili登录</h2>`
             + `\n  <i>下面这个登录界面只是快捷省事的途径，不一定可靠。</i><br>`
             + `\n  <b>如果你不记得密码，强烈建议不要反复试错，以免触发这里无法应对的二次验证。</b>可以直接<b>重置密码</b>，或者尝试上述让游戏走代理这个折腾的办法。<br>`
+            + `\n  <fieldset>`
+            + `\n  <legend>登录状态</legend>`
+            + `\n  <div>`
+            + `\n    <button id=\"refreshbtn2\" onclick=\"window.location.reload(true);\">刷新</button>`
+            + `\n    <label style=\"${loginStatusStyle}\" id=\"loginstatus\" for=\"refreshbtn2\">TO_BE_FILLED_BY_JAVASCRIPT</label>`
+            + `\n  </div>`
+            + `\n  </fieldset>`
+            + `\n  <fieldset>`
+            + `\n  <legend>用户名密码登录</legend>`
             + `\n  <form action=\"/api/pwdlogin\" method=\"post\">`
             + `\n    <div>`
             + `\n      <label for=\"username\">账户</label>`
@@ -713,10 +805,9 @@ export class controlInterface {
             + `\n      <input type=\"submit\" id=\"loginbtn\" value=\"${loginBtnText}\">`
             + `\n    </div>`
             + `\n  </form>`
-            + `\n  <div>`
-            + `\n    <button id=\"refreshbtn2\" onclick=\"window.location.reload(true);\">刷新</button>`
-            + `\n    <label style=\"${loginStatusStyle}\" id=\"loginstatus\" for=\"refreshbtn2\">TO_BE_FILLED_BY_JAVASCRIPT</label>`
-            + `\n  </div>`
+            + `\n  </fieldset>`
+            + `\n  <fieldset>`
+            + `\n  <legend>清除登录状态</legend>`
             + `\n  <form action=\"/api/clear_bilibili_login\" method=\"post\">`
             + `\n    <div>`
             + `\n      <input type=\"submit\" id=\"clear_bilibili_login_btn\" value=\"清除B站登录状态\">`
@@ -730,12 +821,18 @@ export class controlInterface {
             + `\n      <br><code>udid=[${udid}]</code>`
             + `\n    </div>`
             + `\n  </form>`
+            + `\n  </fieldset>`
             + `\n  <hr>`
             + `\n  <h2 id=\"dumpuserdata\">下载个人账号数据</h2>`
+            + `\n  <fieldset>`
+            + `\n  <legend>登录状态</legend>`
             + `\n  <div>`
             + `\n    <button id=\"refreshbtn3\" onclick=\"window.location.reload(true);\">刷新</button>`
             + `\n    <label style=\"${openIdTicketStatusStyle}\" id=\"openidticketstatus\" for=\"refreshbtn3\">TO_BE_FILLED_BY_JAVASCRIPT</label>`
             + `\n  </div>`
+            + `\n  </fieldset>`
+            + `\n  <fieldset>`
+            + `\n  <legend>下载选项</legend>`
             + `\n  <form action=\"/api/dump_userdata\" method=\"post\">`
             + `\n    <div>`
             + `\n      <input id=\"fetch_chara_enhance_tree_checkbox\" name=\"fetch_chara_enhance_tree\" value=\"true\" type=\"checkbox\" ${this.params.fetchCharaEnhancementTree ? "checked" : ""}>`
@@ -745,6 +842,9 @@ export class controlInterface {
             + `\n      <input id=\"concurrent_checkbox\" name=\"concurrent\" value=\"true\" type=\"checkbox\" ${this.params.concurrentFetch ? "checked" : ""}>`
             + `\n      <label for=\"concurrent_checkbox\">开启并行下载</label>`
             + `\n    </div>`
+            + `\n  </fieldset>`
+            + `\n  <fieldset>`
+            + `\n  <legend>开始下载</legend>`
             + `\n    <div>`
             + `\n      <input id=\"new_download_checkbox\" name=\"new\" value=\"true\" type=\"checkbox\" ${this.userdataDmp.lastError != null ? "checked" : ""}>`
             + `\n      <label for=\"new_download_checkbox\" onclick=\"unlock_prepare_download_btn();\">重新从官服下载</label>`
@@ -756,10 +856,16 @@ export class controlInterface {
             + `\n      <br><b style=\"color: red\">因为可能含有隐私敏感数据，请勿分享下载到的个人数据。</b>`
             + `\n    </div>`
             + `\n  </form>`
+            + `\n  </fieldset>`
+            + `\n  <fieldset>`
+            + `\n  <legend>下载进度</legend>`
             + `\n  <div>`
             + `\n    <button id=\"refreshbtn4\" onclick=\"window.location.reload(true);\">刷新</button>`
             + `\n    <label id=\"userdatadumpstatus\" style=\"${userdataDumpStatusStyle}\" for=\"refreshbtn4\">TO_BE_FILLED_BY_JAVASCRIPT</label>`
             + `\n  </div>`
+            + `\n  </fieldset>`
+            + `\n  <fieldset>`
+            + `\n  <legend>清除登录状态</legend>`
             + `\n  <form action=\"/api/clear_game_login\" method=\"post\">`
             + `\n    <div>`
             + `\n      <input type=\"submit\" id=\"clear_game_login_btn\" value=\"清除游戏登录状态\">`
@@ -771,10 +877,16 @@ export class controlInterface {
             + `\n      <br><code>device_id=[${device_id}]</code>`
             + `\n    </div>`
             + `\n  </form>`
+            + `\n  </fieldset>`
+            + `\n  <fieldset>`
+            + `\n  <legend>${this.userdataDmp.lastSnapshot == null ? "尚未下载，无链接可显示" : "将下载到的数据另存为文件"}</legend>`
             + `\n    ${this.userdataDmp.lastSnapshot == null ? "" : "<br><b>在某品牌手机上，曾经观察到第一次下载回来是0字节空文件的问题，如果碰到这个问题可以再次点击或长按下面的链接重试下载，或者换个浏览器试试。</b><br>"}`
             + `\n    ${this.userdataDmp.lastSnapshot == null ? "" : aHref(this.userdataDmp.userdataDumpFileName, `/${this.userdataDmp.userdataDumpFileName}`)}`
+            + `\n  </fieldset>`
             + `\n  <hr>`
             + `\n  <h2 id=\"crawlstaticdata\">爬取游戏静态资源文件</h2>`
+            + `\n  <fieldset>`
+            + `\n  <legend>控制</legend>`
             + `\n  <form action=\"/api/crawl_static_data\" method=\"post\">`
             + `\n    <div>`
             + `\n      <input type=\"submit\" id=\"crawl_static_data_btn\" ${isCrawling ? "disabled" : ""} value=\"开始爬取\">`
@@ -785,6 +897,7 @@ export class controlInterface {
             + `\n      <input type=\"submit\" id=\"stop_crawling_btn\" ${isCrawling ? "" : "disabled"} value=\"停止爬取\">`
             + `\n    </div>`
             + `\n  </form>`
+            + `\n  </fieldset>`
             + `\n  <hr>`
             /* //FIXME
             + `\n  <h2>Control</h2>`

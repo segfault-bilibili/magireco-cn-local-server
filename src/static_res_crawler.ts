@@ -34,6 +34,8 @@ export class crawler {
     private readonly params: parameters.params;
     private readonly localServer: localServer;
 
+    static readonly defMimeType = "application/octet-stream";
+
     private readonly staticFileMap: staticFileMap;
     private readonly staticFile404Set: staticFile404Set;
     private readonly localRootDir: string;
@@ -125,6 +127,13 @@ export class crawler {
         this._isCrawling = false;
     }
 
+    getContentType(pathInUrl: string): string {
+        const fileMetaArray = this.staticFileMap.get(pathInUrl);
+        if (fileMetaArray == null || fileMetaArray.length == 0) return crawler.defMimeType;
+        const contentType = fileMetaArray[0].contentType;
+        if (contentType != null) return contentType;
+        else return crawler.defMimeType;
+    }
     readFile(pathInUrl: string, specifiedMd5?: string): Buffer | undefined {
         let logPrefix = `readFile`;
         const readPath = path.join(this.localRootDir, pathInUrl);
@@ -132,7 +141,7 @@ export class crawler {
             if (fs.existsSync(readPath)) {
                 if (fs.statSync(readPath).isFile()) {
                     const content = fs.readFileSync(readPath);
-                    console.log(`${logPrefix}: [${pathInUrl}]`);
+                    if (parameters.params.VERBOSE) console.log(`${logPrefix}: [${pathInUrl}]`);
                     return content;
                 }
                 else throw new Error(`readPath=[${readPath}] exists but it is not a file`);
@@ -147,7 +156,7 @@ export class crawler {
             if (fs.existsSync(readPath)) {
                 if (fs.statSync(readPath).isFile()) {
                     const content = fs.readFileSync(readPath);
-                    console.log(`${logPrefix}: [${pathInUrl}]`);
+                    if (parameters.params.VERBOSE) console.log(`${logPrefix}: [${pathInUrl}]`);
                     return content;
                 }
                 else throw new Error(`readPath=[${readPath}] exists but it is not a file`);
@@ -160,7 +169,7 @@ export class crawler {
                 if (fs.existsSync(conflictReadPath)) {
                     if (fs.statSync(conflictReadPath).isFile()) {
                         const content = fs.readFileSync(readPath);
-                        console.log(`${logPrefix} (in conflict dir) : [${pathInUrl}]`);
+                        if (parameters.params.VERBOSE) console.log(`${logPrefix} (in conflict dir) : [${pathInUrl}]`);
                         return content;
                     }
                     else throw new Error(`conflictReadPath=[${conflictReadPath}] exists but it is not a file`);
@@ -172,46 +181,38 @@ export class crawler {
         }
     }
     saveFile(pathInUrl: string, content: Buffer, contentType: string | undefined): void {
-        const logPrefix = `saveFile`;
-        const md5 = crypto.createHash("md5").update(content).digest().toString('hex');
-        const writePath = path.join(this.localRootDir, pathInUrl);
-        if (this.checkExistOrMkdir(writePath)) {
-            const existingMd5 = crypto.createHash("md5")
-                .update(fs.readFileSync(writePath))
-                .digest().toString('hex');
-            if (md5 === existingMd5) {
-                this.updateFileMeta(pathInUrl, md5, contentType); // should not be necessary
-                console.log(`${logPrefix} already saved: [${pathInUrl}]`);
-                return; // existing file already has the content to write
-            }
-            const conflictDirNameWithoutMd5 = path.dirname(path.join(this.localConflictDir, pathInUrl));
-            const conflictDirName = path.join(conflictDirNameWithoutMd5, md5);
-            const conflictWritePath = path.join(conflictDirName, path.basename(pathInUrl));
-            if (this.checkExistOrMkdir(conflictWritePath)) {
-                const existingConflictMd5 = crypto.createHash("md5")
-                    .update(fs.readFileSync(conflictWritePath))
-                    .digest().toString('hex');
-                if (md5 === existingConflictMd5) {
-                    fs.renameSync(conflictWritePath, writePath);
-                    fs.rmdirSync(conflictDirName);
-                    this.updateFileMeta(pathInUrl, md5, contentType);
-                    console.log(`${logPrefix} saved (to conflict dir): [${pathInUrl}]`);
-                    return; // existing file on conflictWritePath already has the content to write, no need to continue to write
-                } else throw new Error(`md5 mismatch on conflictWritePath=[${conflictWritePath}]`);
-            } // else both writePath and conflictWritePath does not exist, continue to write to writePath
-        } // else writePath does not exist, continue to write to writePath (same as above)
-        if (fs.existsSync(writePath)) throw new Error(`writePath=[${writePath}] already exists`);
-        fs.writeFileSync(writePath, content);
-        this.updateFileMeta(pathInUrl, md5, contentType);
-        console.log(`${logPrefix} saved: [${pathInUrl}]`);
+        let logPrefix = `saveFile`;
+        const md5ToWrite = crypto.createHash("md5").update(content).digest().toString('hex');
+        if (this.checkAlreadyExist(pathInUrl, md5ToWrite)) {
+            console.log(`${logPrefix} already exist [${pathInUrl}]`);
+        } else {
+            // file does not exist or it's moved away just now
+            const writePath = path.join(this.localRootDir, pathInUrl);
+            fs.writeFileSync(writePath, content);
+            console.log(`${logPrefix} written to [${pathInUrl}]`);
+        }
+        this.updateFileMeta(pathInUrl, md5ToWrite, contentType);
     }
-    private checkExistOrMkdir(writePath: string): boolean {
+    private checkAlreadyExist(pathInUrl: string, givenMd5: string): boolean {
+        let logPrefix = `checkAlreadyExist`;
+        const writePath = path.join(this.localRootDir, pathInUrl);
+        // firstly mkdir -p
         const dirName = path.dirname(writePath);
         if (!fs.existsSync(dirName)) fs.mkdirSync(dirName, { recursive: true });
         if (!fs.statSync(dirName).isDirectory()) throw new Error(`dirName=[${dirName}] is not directory`);
-        if (!fs.existsSync(writePath)) return false; // wanted result
+        // if the file does not exist, then it's okay to write
+        if (!fs.existsSync(writePath)) return false; // file does not exist, just as expected
+        // unfortunately, the file already exists, but it would still be okay if the md5 matches
         if (!fs.statSync(writePath).isFile()) throw new Error(`writePath=[${writePath}] exists but it is not a file`);
-        return true; // unwanted result
+        const calculatedMd5 = crypto.createHash("md5").update(fs.readFileSync(writePath)).digest().toString("hex");
+        if (calculatedMd5 === givenMd5) return true; // fortunately the md5 matches!
+        // unfortunately the md5 doesn't match, move the mismatched file away
+        const pathInConflictDir = path.join(this.localConflictDir, pathInUrl);
+        const moveToDir = path.join(path.dirname(pathInConflictDir), calculatedMd5);
+        const moveToPath = path.join(moveToDir, path.basename(pathInUrl));
+        fs.renameSync(writePath, moveToPath);
+        console.log(`${logPrefix}: moved ${writePath} to ${moveToPath}`);
+        return false; // don't know how to updateFileMeta without known contentType, let saveFile do this
     }
     private updateFileMeta(pathInUrl: string, md5: string, contentType: string | undefined): void {
         const meta: fileMeta = { md5: md5 };

@@ -1,6 +1,6 @@
 import * as http from "http";
 import * as http2 from "http2";
-import { hook } from "../local_server";
+import { hook, passOnRequest, passOnRequestBody } from "../local_server";
 import * as parameters from "../parameters";
 
 export class saveResponseBodyHook implements hook {
@@ -20,9 +20,11 @@ export class saveResponseBodyHook implements hook {
         url?: URL,
         httpVersion?: string,
         headers?: http.IncomingHttpHeaders | http2.IncomingHttpHeaders
-    ): boolean {
-        if (url == null) return false;
-        return url.href.match(this.urlRegEx) ? true : false;
+    ): passOnRequest {
+        return {
+            nextAction: "passOnRequest",
+            interceptResponse: url?.href.match(this.urlRegEx) ? true : false,
+        }
     }
 
     onMatchedRequest(
@@ -31,7 +33,11 @@ export class saveResponseBodyHook implements hook {
         httpVersion?: string,
         headers?: http.IncomingHttpHeaders | http2.IncomingHttpHeaders,
         body?: string | Buffer
-    ): void {
+    ): passOnRequestBody {
+        return {
+            nextAction: "passOnRequestBody",
+            interceptResponse: true,
+        }
     }
 
     onMatchedResponse(
@@ -45,7 +51,7 @@ export class saveResponseBodyHook implements hook {
         const key = this.paramKey;
         const val = body;
         if (typeof val === 'string') {
-            this.params.save({key: key, val: val}).then(() => console.log(`${tag} saved paramKey=[${key}]`));
+            this.params.save({ key: key, val: val }).then(() => console.log(`${tag} saved paramKey=[${key}]`));
         } else {
             if (val == null) {
                 console.error(`${tag} nothing to save paramKey=[${key}]`);

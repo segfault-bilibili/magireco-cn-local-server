@@ -7,12 +7,34 @@ import * as parameters from "./parameters";
 import * as certGenerator from "./cert_generator";
 import { URL } from "url";
 import { parseCharset } from "./parse_charset";
-import { saveAccessKeyHook } from "./hooks/save_access_key_hook";
-import { saveOpenIdTicketHook } from "./hooks/save_open_id_ticket_hook";
 
 export enum constants {
     DOWNGRADE_TO_HTTP1 = "DOWNGRADE_TO_HTTP1",
     IS_SELF_IP = "IS_SELF_IP",
+}
+
+interface hookNextAction {
+    nextAction: string,
+    interceptResponse: boolean,
+}
+export interface fakeResponse extends hookNextAction {
+    nextAction: "fakeResponse",
+    fakeResponse: {
+        statusCode: number,
+        statusMessage: string,
+        headers: http.IncomingHttpHeaders | (http2.IncomingHttpHeaders & http2.IncomingHttpStatusHeader),
+        body?: string | Buffer
+    },
+}
+export interface passOnRequest extends hookNextAction {
+    nextAction: "passOnRequest",
+    replaceRequest?: {
+        method?: string,
+        path?: string,
+    },
+}
+export interface passOnRequestBody extends hookNextAction {
+    nextAction: "passOnRequestBody",
 }
 
 export interface hook {
@@ -22,7 +44,7 @@ export interface hook {
         url?: URL,
         httpVersion?: string,
         headers?: http.IncomingHttpHeaders | http2.IncomingHttpHeaders
-    ) => boolean;
+    ) => fakeResponse | passOnRequest;
 
     onMatchedRequest: (
         method?: string,
@@ -30,7 +52,7 @@ export interface hook {
         httpVersion?: string,
         headers?: http.IncomingHttpHeaders | http2.IncomingHttpHeaders,
         body?: string | Buffer
-    ) => void;
+    ) => fakeResponse | passOnRequestBody;
 
     onMatchedResponse: (
         statusCode?: number,
@@ -99,9 +121,30 @@ export class localServer {
                 const method = cliReq.method;
                 const url = new URL(cliReq.url, `https://${host}/`);
                 const reqHttpVer = cliReq.httpVersion;
+                let methodToSend = method, pathToSend = cliReq.url;
+                let fakedResponse = false;
                 let reqBodyBuf = Buffer.from(new ArrayBuffer(0)), reqBodyStr: string | undefined;
 
-                const matchedHooks = this.hooks.filter((item) => item.matchRequest(method, url, reqHttpVer, reqHeaders));
+                let matchedHooks = this.hooks.filter((item): boolean => {
+                    let nextAction = item.matchRequest(method, url, reqHttpVer, cliReq.headers);
+                    switch (nextAction.nextAction) {
+                        case "fakeResponse":
+                            fakedResponse = true;
+                            const fakeResponse = nextAction.fakeResponse;
+                            cliRes.writeHead(fakeResponse.statusCode, fakeResponse.statusMessage, reqHeaders);
+                            if (fakeResponse.body != null) cliRes.end(fakeResponse.body);
+                            else cliRes.end();
+                            break;
+                        case "passOnRequest":
+                            const replaceRequest = nextAction.replaceRequest;
+                            if (replaceRequest != null) {
+                                if (replaceRequest.method != null) methodToSend = replaceRequest.method;
+                                if (replaceRequest.path != null) pathToSend = replaceRequest.path;
+                            }
+                            break;
+                    }
+                    return nextAction.interceptResponse;
+                });
 
                 let statusCode: number | undefined;
                 let statusMessage: string | undefined;
@@ -118,15 +161,17 @@ export class localServer {
                     socket = await localServer.getTlsSocketAsync(this.params, true, new URL(`https://${host}/`), alpn, sni);
                 }
 
-                let svrReq = http.request({
-                    method: cliReq.method,
-                    path: cliReq.url,
+                let svrReq: http.ClientRequest | undefined;
+                if (fakedResponse) svrReq = undefined;
+                else svrReq = http.request({
+                    method: methodToSend,
+                    path: pathToSend,
                     createConnection: (options, onCreate) => {
                         return socket;
                     },
                     headers: reqHeaders,
                 });
-                svrReq.on('continue', () => {
+                svrReq?.on('continue', () => {
                     try {
                         cliRes.writeHead(100);
                     } catch (e) {
@@ -134,7 +179,7 @@ export class localServer {
                         console.error(`http1 host=[${host}] cliRes.writeHead() error`, e);
                     }
                 });
-                svrReq.on('response', (svrRes) => {
+                svrReq?.on('response', (svrRes) => {
                     // hook
                     statusCode = svrRes.statusCode;
                     statusMessage = svrRes.statusMessage;
@@ -189,7 +234,7 @@ export class localServer {
                         console.error(`http1 host=[${host}] svrRes.writeHead() error`, e);
                     }
                 });
-                svrReq.on('end', () => {
+                svrReq?.on('end', () => {
                     if (parameters.params.VERBOSE) console.log(`ending cliRes downlink: host=[${host}] alpn=[${alpn}] sni=[${sni}]`);
                     try {
                         cliRes.end();
@@ -198,7 +243,7 @@ export class localServer {
                         console.error(`http1 host=[${host}] cliRes.end() error`, e);
                     }
                 });
-                svrReq.on('error', (err) => {
+                svrReq?.on('error', (err) => {
                     console.error(`svrReq error: host=[${host}] alpn=[${alpn}] sni=[${sni}]`, err);
                     try {
                         cliRes.writeHead(502, { ["Content-Type"]: "text/plain" });
@@ -214,7 +259,7 @@ export class localServer {
                     if (matchedHooks.length > 0) reqBodyBuf = Buffer.concat([reqBodyBuf, chunk as Buffer]);
 
                     try {
-                        svrReq.write(chunk);
+                        svrReq?.write(chunk);
                     } catch (e) {
                         //FIXME temporary workaround to avoid ERR_HTTP2_INVALID_STREAM crash
                         console.error(`http1 host=[${host}] svrReq.write() error`, e);
@@ -234,11 +279,25 @@ export class localServer {
                             console.error(`http1 hook host=[${host}] decompressing or decoding reqBodyBuf to string error`, e);
                         }
                         const body = reqBodyStr != null ? reqBodyStr : reqBodyBuf;
-                        matchedHooks.forEach((item) => item.onMatchedRequest(method, url, reqHttpVer, reqHeaders, body));
+                        matchedHooks = matchedHooks.filter((item): boolean => {
+                            let nextAction = item.onMatchedRequest(method, url, reqHttpVer, reqHeaders, body);
+                            switch (nextAction.nextAction) {
+                                case "fakeResponse":
+                                    fakedResponse = true;
+                                    const fakeResponse = nextAction.fakeResponse;
+                                    cliRes.writeHead(fakeResponse.statusCode, fakeResponse.statusMessage, fakeResponse.headers);
+                                    if (fakeResponse.body != null) cliRes.end(fakeResponse.body);
+                                    else cliRes.end();
+                                    break;
+                                case "passOnRequestBody":
+                                    break;
+                            }
+                            return nextAction.interceptResponse;
+                        });
                     }
 
                     try {
-                        svrReq.end();
+                        svrReq?.end();
                     } catch (e) {
                         //FIXME temporary workaround to avoid ERR_HTTP2_INVALID_STREAM crash
                         console.error(`http1 host=[${host}] svrReq.end() error`, e);
@@ -304,9 +363,31 @@ export class localServer {
                 const method = reqHeaders[":method"];
                 const url = reqHeaders[":path"] == null ? undefined : new URL(reqHeaders[":path"], `https://${authority}/`);
                 const reqHttpVer = "2.0"; //FIXME
+                let fakedResponse = false;
                 let reqBodyBuf = Buffer.from(new ArrayBuffer(0)), reqBodyStr: string | undefined;
 
-                const matchedHooks = this.hooks.filter((item) => item.matchRequest(method, url, reqHttpVer, reqHeaders));
+                let matchedHooks = this.hooks.filter((item): boolean => {
+                    let nextAction = item.matchRequest(method, url, reqHttpVer, reqHeaders);
+                    switch (nextAction.nextAction) {
+                        case "fakeResponse":
+                            fakedResponse = true;
+                            const fakeResponse = nextAction.fakeResponse;
+                            fakeResponse.headers[":status"] = fakeResponse.statusCode;
+                            // Status message is not supported by HTTP/2 (RFC 7540 8.1.2.4)
+                            cliReqStream.respond(fakeResponse.headers);
+                            if (fakeResponse.body != null) cliReqStream.end(fakeResponse.body);
+                            else cliReqStream.end();
+                            break;
+                        case "passOnRequest":
+                            const replaceRequest = nextAction.replaceRequest;
+                            if (replaceRequest != null) {
+                                if (replaceRequest.method != null) reqHeaders[":method"] = replaceRequest.method;
+                                if (replaceRequest.path != null) reqHeaders[":path"] = replaceRequest.path;
+                            }
+                            break;
+                    }
+                    return nextAction.interceptResponse;
+                });
 
                 let statusCode: number | undefined;
                 let statusMessage: string | undefined;
@@ -315,8 +396,10 @@ export class localServer {
                 let respBodyBuf = Buffer.from(new ArrayBuffer(0)), respBodyStr: string | undefined;
 
                 let sess = await this.getH2SessionAsync(authorityURL, alpn, sni);
-                let svrReq = sess.request(reqHeaders);
-                svrReq.on('continue', () => {
+                let svrReq: http2.ClientHttp2Stream | undefined;
+                if (fakedResponse) svrReq = undefined;
+                else svrReq = sess.request(reqHeaders);
+                svrReq?.on('continue', () => {
                     try {
                         cliReqStream.respond({
                             [http2.constants.HTTP2_HEADER_STATUS]: http2.constants.HTTP_STATUS_CONTINUE,
@@ -326,7 +409,7 @@ export class localServer {
                         console.error(`http2 authority=[${authority}] cliReqStream.respond() error`, e);
                     }
                 });
-                svrReq.on('response', (headers, flags) => {
+                svrReq?.on('response', (headers, flags) => {
                     // hook
                     respHeaders = headers;
                     statusCode = respHeaders[":status"];
@@ -340,7 +423,7 @@ export class localServer {
                         console.error(`http2 authority=[${authority}] cliReqStream.respond() error`, e);
                     }
                 });
-                svrReq.on('data', (chunk) => {
+                svrReq?.on('data', (chunk) => {
                     // hook
                     if (matchedHooks.length > 0) respBodyBuf = Buffer.concat([respBodyBuf, chunk as Buffer]);
 
@@ -351,7 +434,7 @@ export class localServer {
                         console.error(`http2 authority=[${authority}] cliReqStream.write() error`, e);
                     }
                 });
-                svrReq.on('end', () => {
+                svrReq?.on('end', () => {
                     if (parameters.params.VERBOSE) console.log(`ending cliReqStream downlink: authority=[${authority}] alpn=[${alpn}] sni=[${sni}]`);
 
                     // hook
@@ -375,7 +458,7 @@ export class localServer {
                         console.error(`http2 authority=[${authority}] cliReqStream.end() error`, e);
                     }
                 });
-                svrReq.on('error', (err) => {
+                svrReq?.on('error', (err) => {
                     console.error(`svrReq error: authority=[${authority}] alpn=[${alpn}] sni=[${sni}]`, err);
                     try {
                         cliReqStream.respond({
@@ -394,7 +477,7 @@ export class localServer {
                     if (matchedHooks.length > 0) reqBodyBuf = Buffer.concat([reqBodyBuf, chunk as Buffer]);
 
                     try {
-                        svrReq.write(chunk);
+                        svrReq?.write(chunk);
                     } catch (e) {
                         //FIXME temporary workaround to avoid ERR_HTTP2_INVALID_STREAM crash
                         console.error(`http2 authority=[${authority}] svrReq.write() error`, e);
@@ -414,11 +497,25 @@ export class localServer {
                             console.error(`http2 hook authority=[${authority}] decompressing or decoding reqBodyBuf to string error`, e);
                         }
                         const body = reqBodyStr != null ? reqBodyStr : reqBodyBuf;
-                        matchedHooks.forEach((item) => item.onMatchedRequest(method, url, reqHttpVer, reqHeaders, body));
+                        matchedHooks = matchedHooks.filter((item): boolean => {
+                            let nextAction = item.onMatchedRequest(method, url, reqHttpVer, reqHeaders, body);
+                            switch (nextAction.nextAction) {
+                                case "fakeResponse":
+                                    fakedResponse = true;
+                                    const fakeResponse = nextAction.fakeResponse;
+                                    cliReqStream.respond(fakeResponse.headers);
+                                    if (fakeResponse.body != null) cliReqStream.end(fakeResponse.body);
+                                    else cliReqStream.end();
+                                    break;
+                                case "passOnRequestBody":
+                                    break;
+                            }
+                            return nextAction.interceptResponse;
+                        });
                     }
 
                     try {
-                        svrReq.end();
+                        svrReq?.end();
                     } catch (e) {
                         //FIXME temporary workaround to avoid ERR_HTTP2_INVALID_STREAM crash
                         console.error(`http2 authority=[${authority}] svrReq.end() error`, e);
@@ -513,18 +610,13 @@ export class localServer {
         http1TlsServer.listen(http1ListenAddr.port, http1ListenAddr.host);
         console.log(`localHttp1Server listening on [${http1ListenAddr.host}:${http1ListenAddr.port}]`);
 
-        const hooks = [
-            new saveAccessKeyHook(params),
-            new saveOpenIdTicketHook(params),
-        ]
-
         this.params = params;
         this.certGen = certGen;
         this.http2SecureServer = http2SecureServer;
         this.http1TlsServer = http1TlsServer;
         this.openSess = new Map<string, http2.ClientHttp2Session>();
         this.pendingSess = new Map<string, Promise<http2.ClientHttp2Session>>();
-        this.hooks = hooks;
+        this.hooks = [];
     }
     async close(): Promise<void> {
         this.openSess.forEach((val, key) => val.destroyed || val.destroy());
@@ -535,6 +627,10 @@ export class localServer {
                 server.close();
             })
         }));
+    }
+
+    addHook(newHook: hook) {
+        if (this.hooks.find((hook) => hook === newHook) == null) this.hooks.push(newHook);
     }
 
     private static async isHostSelfAsync(host: string | net.Socket, listenList: parameters.listenList): Promise<boolean> {

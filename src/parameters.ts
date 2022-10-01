@@ -22,9 +22,8 @@ export type listenList = Record<string, listenAddr> & {
 }
 
 export enum mode {
-    ACCOUNT_DUMP = 1,
-    TAP_PROXY = 2,
-    LOCAL_OFFLINE = 3,
+    ONLINE = 1,
+    LOCAL_OFFLINE = 2,
 }
 
 const persistParams: {
@@ -42,7 +41,7 @@ const persistParams: {
     fetchCharaEnhancementTree: boolean,
     concurrentFetch: boolean,
 } = {
-    mode: mode.ACCOUNT_DUMP,
+    mode: mode.ONLINE,
     autoOpenWeb: true,
     listenList: {
         controlInterface: { port: 10000, host: "127.0.0.1" },
