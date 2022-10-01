@@ -327,11 +327,12 @@ export class crawler {
 
     private async batchHttp2GetSave(urlList: Array<{ url: URL, md5?: string }>, concurrent = 8
     ): Promise<Array<http2BatchGetResultItem>> {
-        let urlStrSet = new Set<string>();
+        let urlStrSet = new Set<string>(), abandonedSet = new Set<string>(), currentStaticFile404Set = new Set<string>();
         urlList.forEach((item) => {
             const url = item.url;
             const key = url.href;
             if (urlStrSet.has(key)) throw new Error(`found duplicate url=${key} in urlList`);
+            urlStrSet.add(key);
         });
 
         concurrent = Math.floor(concurrent);
@@ -341,26 +342,33 @@ export class crawler {
 
         let hasError = false, stoppedCrawling = false;
         let crawl = async (queueNo: number): Promise<boolean> => {
-            if (hasError) return false;
-
             let item = urlList.shift();
             if (item == null) return false;
+
             let url = item.url, md5 = item.md5;
             let key = url.href;
 
+            if (hasError) {
+                abandonedSet.add(key);
+                urlStrSet.delete(key);
+                return true;
+            }
+
             if (this.stopCrawling) {
                 stoppedCrawling = true;
-                console.log(`stop crawling (queue ${queueNo})`);
+                if (!stoppedCrawling) console.log(`stop crawling (queue ${queueNo})`);
             }
             if (stoppedCrawling) {
+                abandonedSet.add(key);
                 urlStrSet.delete(key);
-                return false;
+                return true;
             }
 
             try {
                 let resp = await this.http2GetBuf(url);
                 if (resp.is404) {
                     this.staticFile404Set.add(url.pathname);
+                    currentStaticFile404Set.add(url.pathname);
                     urlStrSet.delete(key);
                     console.log(`HTTP 404 [${url.pathname}${url.search}]`);
                 } else {
@@ -368,6 +376,7 @@ export class crawler {
                     if (md5 != null && calculatedMd5 !== md5) throw new Error(`md5 mismatch on [${url.pathname}${url.search}]`);
                     this.saveFile(url.pathname, resp.body, resp.contentType, calculatedMd5);
                     this.staticFile404Set.delete(url.pathname);
+                    currentStaticFile404Set.delete(url.pathname);
                     if (resultMap.has(key)) throw new Error(`resultMap already has key=[${key}]`);
                     resultMap.set(key, { url: url, resp: resp });
                 }
@@ -389,7 +398,10 @@ export class crawler {
         await Promise.all(startPromises);
 
         urlStrSet.forEach((urlStr) => {
-            if (!resultMap.has(urlStr)) throw new Error(`resultMap does not have key=[${urlStr}]`); // should never happen
+            if (!resultMap.has(urlStr) && !abandonedSet.has(urlStr) && !currentStaticFile404Set.has(urlStr)) {
+                // should never happen
+                throw new Error(`key=[${urlStr}] is missing in both resultMap/abandonedSet/currentStaticFile404Set`);
+            }
         });
         let results: Array<http2BatchGetResultItem> = [];
         resultMap.forEach((val) => results.push(val));
@@ -512,16 +524,23 @@ export class crawler {
         console.log(this._crawlingStatus = `crawling asset files ...`);
         //const assetver = assetConfig.assetver;
         const assetList = assetConfig.assetList;
-        const urlList: Array<{ url: URL, md5: string }> = assetList.map((item) => {
+        const urlMap = new Map<string, { url: URL, md5: string }>();
+        assetList.forEach((item) => {
             const partialUrl = item.file_list[0].url;
-            const pathname = `/resource/download/asset/master/resource/${partialUrl}`
+            const pathname = `/resource/download/asset/master/resource/${partialUrl}`;
             const md5 = item.md5;
-            return {
-                url: new URL(`${this.httpsPatchMagicaNoSlash}${pathname}?${md5}`),
-                md5: md5,
+            const url = new URL(`${this.httpsPatchMagicaNoSlash}${pathname}?${md5}`);
+            if (urlMap.has(url.href)) {
+                console.warn(`skipping duplicate url=[${url.href}]`);
+            } else {
+                urlMap.set(url.href, {
+                    url: url,
+                    md5: md5,
+                });
             }
         });
-        const responses = await this.batchHttp2GetSave(urlList);
+        const urlList: Array<{ url: URL, md5: string }> = Array.from(urlMap.values());
+        await this.batchHttp2GetSave(urlList);
     }
 
 }
