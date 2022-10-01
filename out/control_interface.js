@@ -44,6 +44,16 @@ class controlInterface {
                 const apiName = req.url.replace(/(^\/api\/)|(\?.*$)/g, "");
                 console.log(`controlInterface received api request [${apiName}]`);
                 switch (apiName) {
+                    case "get_download_status":
+                        try {
+                            let gameUid = this.getGameUid(this.params.openIdTicket);
+                            this.sendResultAsync(res, 200, JSON.stringify(this.getDownloadStatus(gameUid)), true);
+                        }
+                        catch (e) {
+                            console.error(`${apiName} error`, e);
+                            this.sendResultAsync(res, 500, e instanceof Error ? e.message : `${apiName} error`);
+                        }
+                        return;
                     case "set_mode":
                         try {
                             let newModeParams = await this.getParsedPostData(req);
@@ -272,10 +282,21 @@ class controlInterface {
                         }
                         else {
                             try {
-                                await this.getParsedPostData(req);
-                                this.crawler.fetchAllAsync()
-                                    .catch((e) => console.error(`${apiName} error`, e)); // prevent crash
-                                this.sendResultAsync(res, 200, "crawling started");
+                                let crawlingParams = await this.getParsedPostData(req);
+                                let crawlWebRes = crawlingParams.get("crawl_web_res") != null;
+                                let crawlAssets = crawlingParams.get("crawl_assets") != null;
+                                if (!crawlWebRes && !crawlAssets) {
+                                    this.sendResultAsync(res, 400, "must crawl at least one part");
+                                }
+                                else {
+                                    await this.params.save([
+                                        { key: "crawlWebRes", val: crawlWebRes },
+                                        { key: "crawlAssets", val: crawlAssets },
+                                    ]);
+                                    this.crawler.fetchAllAsync()
+                                        .catch((e) => console.error(`${apiName} error`, e)); // prevent crash
+                                    this.sendResultAsync(res, 200, "crawling started");
+                                }
                             }
                             catch (e) {
                                 console.error(`${apiName} error`, e);
@@ -580,8 +601,7 @@ class controlInterface {
             }
             const uname = openIdTicket.uname;
             const open_id = openIdTicket.open_id;
-            const uidMatched = open_id.match(/\d+$/);
-            const uid = uidMatched != null && !isNaN(Number(uidMatched[0])) ? (Number(uidMatched[0])) : undefined;
+            const uid = this.getGameUid(openIdTicket);
             gameUid = uid;
             let inconsistent = (bsgamesdkResponse === null || bsgamesdkResponse === void 0 ? void 0 : bsgamesdkResponse.uid) !== uid;
             openIdTicketStatus = `${inconsistent ? "游戏账户与B站不一致" : "游戏已登录"}`;
@@ -599,40 +619,17 @@ class controlInterface {
             upstreamProxyCACertStatus = "已上传";
             upstreamProxyCACertStyle = "color: green";
         }
-        let userdataDumpStatus = "尚未开始从官服下载", userdataDumpStatusStyle = "color: red";
-        ;
-        const isDownloading = this.userdataDmp.isDownloading;
-        const lastSnapshot = this.userdataDmp.lastSnapshot;
-        if (isDownloading)
-            userdataDumpStatus = `从官服下载中 ${this.userdataDmp.fetchStatus}`, userdataDumpStatusStyle = "color: blue";
-        else if (lastSnapshot != null) {
-            const lastUid = lastSnapshot.uid;
-            if (lastUid != null && lastUid === gameUid) {
-                userdataDumpStatus = "从官服下载数据完毕", userdataDumpStatusStyle = "color: green";
-            }
-            else {
-                userdataDumpStatus = `从官服下载数据完毕（uid=[${lastUid}]，不属于当前登录账号uid=[${gameUid}]）`, userdataDumpStatusStyle = "color: orange";
-            }
-        }
-        else if (this.userdataDmp.lastError != null)
-            userdataDumpStatus = `从官服下载数据过程中出错  ${this.userdataDmp.fetchStatus}`, userdataDumpStatusStyle = "color: red";
-        userdataDumpStatus = (0, get_str_rep_1.getStrRep)(userdataDumpStatus);
-        let crawlingStatus = this.crawler.crawlingStatus, crawlingStatusStyle = "color: grey";
-        const isCrawling = this.crawler.isCrawling;
-        if (this.crawler.isCrawlingFullyCompleted) {
-            crawlingStatus = "爬取已成功完成";
-            crawlingStatusStyle = "color: green";
-        }
-        else if (this.crawler.isCrawling) {
-            crawlingStatusStyle = "color: blue";
-        }
-        else {
-            if (crawlingStatus == null || crawlingStatus === "") {
-                crawlingStatus = "本次启动以来尚未开始爬取";
-            }
-            if (this.crawler.lastError != null)
-                crawlingStatusStyle = "color: red";
-        }
+        const downloadingStatus = this.getDownloadStatus(gameUid);
+        const isDownloading = downloadingStatus.isDownloading;
+        const userdataDumpStatus = downloadingStatus.userdataDumpStatus;
+        const userdataDumpStatusStyle = downloadingStatus.userdataDumpStatusStyle;
+        const isCrawling = downloadingStatus.isCrawling;
+        const crawlingStatus = downloadingStatus.crawlingStatus;
+        const crawlingStatusStyle = downloadingStatus.crawlingStatusStyle;
+        const crawlWebRes = this.params.crawlWebRes;
+        const crawlAssets = this.params.crawlAssets;
+        const isWebResCompleted = this.crawler.isWebResCompleted;
+        const isAssetsCompleted = this.crawler.isAssetsCompleted;
         const bsgamesdkIDs = this.params.bsgamesdkIDs;
         const bd_id = bsgamesdkIDs.bd_id, buvid = bsgamesdkIDs.buvid, udid = bsgamesdkIDs.udid;
         const magirecoIDs = this.params.magirecoIDs;
@@ -649,17 +646,30 @@ class controlInterface {
             + `\n        window.location.reload(true);/*refresh on back or forward*/`
             + `\n      }`
             + `\n    });`
-            + `\n    function confirmRefresh() {`
-            + `\n      if (confirm(\"即将刷新页面\")) {`
+            + `\n    function autoRefresh() {`
+            + `\n      if (isDownloading) {`
             + `\n        window.location.reload(true);`
             + `\n      }`
             + `\n    }`
             + `\n    window.addEventListener('load', (ev) => {`
             + `\n      document.getElementById(\"loginstatus\").textContent = \"${loginStatus}\";`
             + `\n      document.getElementById(\"openidticketstatus\").textContent = \"${openIdTicketStatus}\";`
-            + `\n      document.getElementById(\"userdatadumpstatus\").textContent = \"${userdataDumpStatus}\";`
-            + `\n      document.getElementById(\"crawlingstatus\").textContent = \"${crawlingStatus}\";`
-            + `\n      ${isDownloading ? "setTimeout(() => {confirmRefresh();}, 10000);" : ""}`
+            + `\n      let initialCountdown = ${isDownloading || isCrawling ? "20" : "0"};`
+            + `\n      async function autoRefresh(countdown) {`
+            + `\n          let status = {isDownloading: true, isCrawling: true};`
+            + `\n          try {`
+            + `\n              status = await (await fetch(new URL(\"/api/get_download_status\", document.baseURI))).json();`
+            + `\n              countdown = initialCountdown;`
+            + `\n          } catch (e) {`
+            + `\n              console.error(e);`
+            + `\n          }`
+            + `\n          let el = document.getElementById(\"userdatadumpstatus\");`
+            + `\n          el.textContent = status.userdataDumpStatus; el.style = status.userdataDumpStatusStyle;`
+            + `\n          el = document.getElementById(\"crawlingstatus\");`
+            + `\n          el.textContent = status.crawlingStatus; el.style = status.crawlingStatusStyle;`
+            + `\n          if (countdown > 0 && (status.isDownloading || status.isCrawling)) setTimeout(() => autoRefresh(--countdown), 500);`
+            + `\n      }`
+            + `\n      autoRefresh(initialCountdown);`
             + `\n    });`
             + `\n    function unlock_prepare_download_btn() {`
             + `\n      document.getElementById(\"prepare_download_btn\").removeAttribute(\"disabled\");`
@@ -920,7 +930,6 @@ class controlInterface {
             + `\n    ${this.userdataDmp.lastSnapshot == null ? "" : "<br><i>在某品牌手机上，曾经观察到第一次下载回来是0字节空文件的问题，如果碰到这个问题可以再次点击或长按链接重试下载，或者换个浏览器试试。</i>"}`
             + `\n  </fieldset>`
             + `\n  <hr>`
-            /*
             + `\n  <h2 id=\"crawlstaticdata\">爬取游戏静态资源文件</h2>`
             + `\n  <fieldset>`
             + `\n  <legend>爬取进度</legend>`
@@ -933,7 +942,16 @@ class controlInterface {
             + `\n  <legend>控制</legend>`
             + `\n  <form action=\"/api/crawl_static_data\" method=\"post\">`
             + `\n    <div>`
+            + `\n      <input id=\"crawl_web_res\" name=\"crawl_web_res\" value=\"true\" type=\"checkbox\" ${crawlWebRes ? "checked" : ""}>`
+            + `\n      <label for=\"crawl_web_res\">下载Web资源（${isWebResCompleted ? "<b style=\"color: green\">已完成下载</b>" : "未完成下载"}，此部分在停止后不能恢复上次进度）</label>`
+            + `\n    </div>`
+            + `\n    <div>`
+            + `\n      <input id=\"crawl_assets\" name=\"crawl_assets\" value=\"true\" type=\"checkbox\" ${crawlAssets ? "checked" : ""}>`
+            + `\n      <label for=\"crawl_assets\">下载本地资源（${isAssetsCompleted ? "<b style=\"color: green\">已完成下载</b>" : "未完成下载"}，此部分可自动恢复上次进度）</label>`
+            + `\n    </div>`
+            + `\n    <div>`
             + `\n      <input type=\"submit\" id=\"crawl_static_data_btn\" ${isCrawling ? "disabled" : ""} value=\"开始爬取\">`
+            + `\n      <br><i>请不要反复从官服下载，避免给官服增加压力。</i>`
             + `\n    </div>`
             + `\n  </form>`
             + `\n  <form action=\"/api/stop_crawling\" method=\"post\">`
@@ -943,7 +961,6 @@ class controlInterface {
             + `\n  </form>`
             + `\n  </fieldset>`
             + `\n  <hr>`
-            */
             /* //FIXME
             + `\n  <h2>Control</h2>`
             + `\n  <form action=\"/api/shutdown\" method=\"get\">`
@@ -958,42 +975,93 @@ class controlInterface {
             + `\n</html>`;
         return html;
     }
-    async sendResultAsync(res, statusCode, result) {
+    getGameUid(openIdTicket) {
+        const open_id = openIdTicket === null || openIdTicket === void 0 ? void 0 : openIdTicket.open_id;
+        const uidMatched = open_id === null || open_id === void 0 ? void 0 : open_id.match(/\d+$/);
+        return uidMatched != null && !isNaN(Number(uidMatched[0])) ? (Number(uidMatched[0])) : undefined;
+    }
+    getDownloadStatus(gameUid) {
+        let userdataDumpStatus = "尚未开始从官服下载", userdataDumpStatusStyle = "color: red";
+        ;
+        const isDownloading = this.userdataDmp.isDownloading;
+        const lastSnapshot = this.userdataDmp.lastSnapshot;
+        if (isDownloading)
+            userdataDumpStatus = `从官服下载中 ${this.userdataDmp.fetchStatus}`, userdataDumpStatusStyle = "color: blue";
+        else if (lastSnapshot != null) {
+            const lastUid = lastSnapshot.uid;
+            if (lastUid != null && lastUid === gameUid) {
+                userdataDumpStatus = "从官服下载数据完毕", userdataDumpStatusStyle = "color: green";
+            }
+            else {
+                userdataDumpStatus = `从官服下载数据完毕（uid=[${lastUid}]，不属于当前登录账号uid=[${gameUid}]）`, userdataDumpStatusStyle = "color: orange";
+            }
+        }
+        else if (this.userdataDmp.lastError != null)
+            userdataDumpStatus = `从官服下载数据过程中出错  ${this.userdataDmp.fetchStatus}`, userdataDumpStatusStyle = "color: red";
+        let crawlingStatus = this.crawler.crawlingStatus, crawlingStatusStyle = "color: grey";
+        const isCrawling = this.crawler.isCrawling;
+        if (this.crawler.isCrawlingFullyCompleted) {
+            crawlingStatus = "爬取已成功完成";
+            crawlingStatusStyle = "color: green";
+        }
+        else if (this.crawler.isCrawling) {
+            crawlingStatusStyle = "color: blue";
+        }
+        else {
+            if (crawlingStatus == null || crawlingStatus === "") {
+                crawlingStatus = "本次启动以来尚未开始爬取";
+            }
+            if (this.crawler.lastError != null)
+                crawlingStatusStyle = "color: red";
+        }
+        return {
+            isDownloading: isDownloading,
+            userdataDumpStatus: userdataDumpStatus,
+            userdataDumpStatusStyle: userdataDumpStatusStyle,
+            isCrawling: isCrawling,
+            crawlingStatus: crawlingStatus,
+            crawlingStatusStyle: crawlingStatusStyle,
+        };
+    }
+    async sendResultAsync(res, statusCode, result, isJson = false) {
         return new Promise((resolve, reject) => {
-            let strRep = (0, get_str_rep_1.getStrRep)(result);
-            let html = `<!doctype html>`
-                + `\n<html>`
-                + `\n<head>`
-                + `\n  <meta charset =\"utf-8\">`
-                + `\n  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>`
-                + `\n  <title>Magireco CN Local Server - API Result</title>`
-                + `\n  <script>`
-                + `\n    window.onload =() => {`
-                + `\n      document.getElementById(\"httpstatus\").textContent = \"${statusCode}\";`
-                + `\n      document.getElementById(\"result\").textContent = \"${strRep}\";`
-                + `\n    };`
-                + `\n  </script>`
-                + `\n  <style>`
-                + `\n    label,input {`
-                + `\n      display:flex;`
-                + `\n      flex-direction:column;`
-                + `\n    }`
-                + `\n  </style>`
-                + `\n</head>`
-                + `\n<body>`
-                + `\n  <label for=\"backbtn\">${statusCode == 200 ? "操作成功，请返回" : "错误"}</label>`
-                + `\n  <button id=\"backbtn\" onclick=\"window.history.back();\">返回 Back</button>`
-                + `\n  <hr>`
-                + `\n  <label for=\"httpstatus\">HTTP Status Code</label>`
-                + `\n  <textarea id=\"httpstatus\" readonly rows=\"1\" cols=\"64\">TO_BE_FILLED_BY_JAVASCRIPT</textarea>`
-                + `\n  <br>`
-                + `\n  <label for=\"result\">${statusCode == 200 ? "结果 Result" : "错误消息 Error Message"}</label>`
-                + `\n  <textarea id=\"result\" readonly rows=\"20\" cols=\"64\">TO_BE_FILLED_BY_JAVASCRIPT</textarea>`
-                + `\n</body>`
-                + `\n</html>`;
+            if (!isJson) {
+                let strRep = (0, get_str_rep_1.getStrRep)(result);
+                let html = `<!doctype html>`
+                    + `\n<html>`
+                    + `\n<head>`
+                    + `\n  <meta charset =\"utf-8\">`
+                    + `\n  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>`
+                    + `\n  <title>Magireco CN Local Server - API Result</title>`
+                    + `\n  <script>`
+                    + `\n    window.onload =() => {`
+                    + `\n      document.getElementById(\"httpstatus\").textContent = \"${statusCode}\";`
+                    + `\n      document.getElementById(\"result\").textContent = \"${strRep}\";`
+                    + `\n    };`
+                    + `\n  </script>`
+                    + `\n  <style>`
+                    + `\n    label,input {`
+                    + `\n      display:flex;`
+                    + `\n      flex-direction:column;`
+                    + `\n    }`
+                    + `\n  </style>`
+                    + `\n</head>`
+                    + `\n<body>`
+                    + `\n  <label for=\"backbtn\">${statusCode == 200 ? "操作成功，请返回" : "错误"}</label>`
+                    + `\n  <button id=\"backbtn\" onclick=\"window.history.back();\">返回 Back</button>`
+                    + `\n  <hr>`
+                    + `\n  <label for=\"httpstatus\">HTTP Status Code</label>`
+                    + `\n  <textarea id=\"httpstatus\" readonly rows=\"1\" cols=\"64\">TO_BE_FILLED_BY_JAVASCRIPT</textarea>`
+                    + `\n  <br>`
+                    + `\n  <label for=\"result\">${statusCode == 200 ? "结果 Result" : "错误消息 Error Message"}</label>`
+                    + `\n  <textarea id=\"result\" readonly rows=\"20\" cols=\"64\">TO_BE_FILLED_BY_JAVASCRIPT</textarea>`
+                    + `\n</body>`
+                    + `\n</html>`;
+                result = html;
+            }
             res.on('error', (err) => { console.error(err); resolve(); }); // prevent crash
-            res.writeHead(statusCode, { 'Content-Type': 'text/html' });
-            res.end(html, () => resolve());
+            res.writeHead(statusCode, { 'Content-Type': isJson ? 'application/json' : 'text/html' });
+            res.end(result, () => resolve());
         });
     }
 }

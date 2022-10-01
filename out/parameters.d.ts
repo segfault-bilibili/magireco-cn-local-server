@@ -47,6 +47,8 @@ export declare class params {
     get openIdTicket(): userdataDump.openIdTicket | undefined;
     get fetchCharaEnhancementTree(): boolean;
     get concurrentFetch(): boolean;
+    get crawlWebRes(): boolean;
+    get crawlAssets(): boolean;
     get CACertPEM(): string;
     get CACertSubjectHashOld(): string;
     readonly CACerts: Array<string>;

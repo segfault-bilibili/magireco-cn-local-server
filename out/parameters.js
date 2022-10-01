@@ -39,6 +39,8 @@ const persistParams = {
     magirecoIDs: undefined,
     fetchCharaEnhancementTree: false,
     concurrentFetch: true,
+    crawlWebRes: true,
+    crawlAssets: true,
 };
 class params {
     constructor(mapData, lastSaved, path) {
@@ -188,6 +190,8 @@ class params {
     get openIdTicket() { return this.mapData.get("openIdTicket"); }
     get fetchCharaEnhancementTree() { return this.mapData.get("fetchCharaEnhancementTree"); }
     get concurrentFetch() { return this.mapData.get("concurrentFetch"); }
+    get crawlWebRes() { return this.mapData.get("crawlWebRes"); }
+    get crawlAssets() { return this.mapData.get("crawlAssets"); }
     get CACertPEM() { return this.CACertAndKey.cert; }
     get CACertSubjectHashOld() { return "9489bdaf"; } //FIXME
     refreshCACert() {

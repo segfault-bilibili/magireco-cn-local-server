@@ -4,7 +4,14 @@ import * as parameters from "./parameters";
 export declare class crawler {
     private readonly params;
     private readonly localServer;
+    readonly isWebResCompleted: boolean;
+    readonly isAssetsCompleted: boolean;
+    private static readonly htmlRegEx;
+    private static readonly javaScriptRegEx;
+    private static readonly jsonRegEx;
+    private static readonly md5RegEx;
     private readonly device_id;
+    private get timeStampSec();
     static readonly defMimeType = "application/octet-stream";
     private readonly staticFileMap;
     private readonly staticFile404Set;
@@ -12,8 +19,10 @@ export declare class crawler {
     private readonly localConflictDir;
     private static readonly staticFileMapPath;
     private static readonly staticFile404SetPath;
-    private readonly prodHost;
+    private static readonly prodHost;
     private get httpsProdMagicaNoSlash();
+    private static readonly patchHost;
+    private get httpsPatchMagicaNoSlash();
     stopCrawling: boolean;
     get isCrawling(): boolean;
     private _isCrawling;
@@ -28,7 +37,7 @@ export declare class crawler {
     getFetchAllPromise(): Promise<void>;
     getContentType(pathInUrl: string): string;
     readFile(pathInUrl: string, specifiedMd5?: string): Buffer | undefined;
-    saveFile(pathInUrl: string, content: Buffer, contentType: string | undefined): void;
+    saveFile(pathInUrl: string, content: Buffer, contentType: string | undefined, preCalcMd5?: string): void;
     private checkAlreadyExist;
     private updateFileMeta;
     private http2Request;
@@ -37,6 +46,10 @@ export declare class crawler {
     private http2PostRetStr;
     private http2PostRetBuf;
     private batchHttp2GetSave;
-    private fetchIndexHtml;
+    private fetchSinglePage;
     private fetchFilesInReplacementJs;
+    private static readonly assetListFileNameList;
+    private readAssetVer;
+    private fetchAssetConfig;
+    private fetchAssets;
 }
