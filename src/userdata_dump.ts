@@ -624,6 +624,18 @@ export class userdataDmp {
         }
         return list;
     }
+    static readonly fakeFriends = [
+        "87a24321-6c49-11e7-a958-0600870902db",
+        "2979c9c3-6c45-11e7-a337-0671507456ff",
+        "399b7919-6c85-11e7-8d60-0600870902db",
+        "825a7c41-6c49-11e7-a337-0671507456ff",
+        "f333fb92-6c46-11e7-a958-0600870902db",
+        "319e4655-6c4c-11e7-a958-0600870902db",
+        "0092c036-6c45-11e7-a958-0600870902db",
+        "6ddce439-6c47-11e7-a337-0671507456ff",
+        "3cc2ec68-6c45-11e7-a958-0600870902db",
+        "056a8707-6c45-11e7-a958-0600870902db"
+    ]
     private getSecondRoundRequests(map: Map<string, snapshotRespEntry>): Array<httpApiRequest> {
         const requests: Array<httpApiRequest> = [];
 
@@ -721,23 +733,11 @@ export class userdataDmp {
         }));
         //助战选择
         //看上去来自这里：https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/json/friend_search/_search.json?72e447c0eff8c6a7
-        const fakeFriends = [
-            "87a24321-6c49-11e7-a958-0600870902db",
-            "2979c9c3-6c45-11e7-a337-0671507456ff",
-            "399b7919-6c85-11e7-8d60-0600870902db",
-            "825a7c41-6c49-11e7-a337-0671507456ff",
-            "f333fb92-6c46-11e7-a958-0600870902db",
-            "319e4655-6c4c-11e7-a958-0600870902db",
-            "0092c036-6c45-11e7-a958-0600870902db",
-            "6ddce439-6c47-11e7-a337-0671507456ff",
-            "3cc2ec68-6c45-11e7-a958-0600870902db",
-            "056a8707-6c45-11e7-a958-0600870902db"
-        ]
         requests.push({
             url: new URL(`https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/SupportSelect`),
             postData: {
                 obj: {
-                    strUserIds: fakeFriends.join(","),
+                    strUserIds: userdataDmp.fakeFriends.join(","),
                     strNpcHelpIds: "102",//214水波的NPC桃子
                 }
             }
@@ -839,6 +839,40 @@ export class userdataDmp {
             return {
                 url: new URL(`https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/gacha/result/${id}`),
             };
+        });
+
+        //好友
+        const friendList: Set<string> = new Set<string>();
+        //好友推荐
+        const friend_search = httpPostMap.get(
+            `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/search/friend_search/_search`
+        )?.get(JSON.stringify({ type: 0, }))?.body;
+        if (friend_search == null || !Array.isArray(friend_search)) throw new Error("unable to read friend_search type 0");
+        friend_search.forEach((item) => {
+            const id = item["id"];
+            if (typeof id !== 'string') throw new Error("unable to read id from friend_search type 0");
+            if (!id.match(guidRegEx)) throw new Error("id (from friend_search type 0) must be guid");
+            friendList.add(id);
+        });
+        //214水波
+        const SupportSelect = httpPostMap.get(
+            `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/SupportSelect`
+        )?.get(JSON.stringify({
+            strUserIds: userdataDmp.fakeFriends.join(","),
+            strNpcHelpIds: "102",//214水波的NPC桃子
+        }))?.body;
+        const supportUserList = SupportSelect["supportUserList"];
+        if (supportUserList == null || !Array.isArray(supportUserList)) throw new Error("unable to read supportUserList");
+        supportUserList.forEach((item) => {
+            const userId = item["userId"];
+            if (typeof userId !== 'string') throw new Error("unable to read id from supportUserList");
+            if (!userId.match(guidRegEx)) throw new Error("id (from supportUserList) must be guid");
+            friendList.add(userId);
+        });
+        //把好友推荐和214水波合并
+        friendList.forEach((id) => {
+            let urlStr = new URL(`https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/friend/user/${id}`);
+            if (!httpGetMap.has(urlStr.href)) requests.push({ url: urlStr }); //跳过之前下载过的
         });
 
         return requests;
