@@ -625,6 +625,7 @@ export class controlInterface {
         }
         const crawlWebRes = this.params.crawlWebRes;
         const crawlAssets = this.params.crawlAssets;
+        const isWebResCompleted = this.crawler.isWebResCompleted;
 
         const bsgamesdkIDs = this.params.bsgamesdkIDs;
         const bd_id = bsgamesdkIDs.bd_id, buvid = bsgamesdkIDs.buvid, udid = bsgamesdkIDs.udid;
@@ -927,7 +928,7 @@ export class controlInterface {
             + `\n  <form action=\"/api/crawl_static_data\" method=\"post\">`
             + `\n    <div>`
             + `\n      <input id=\"crawl_web_res\" name=\"crawl_web_res\" value=\"true\" type=\"checkbox\" ${crawlWebRes ? "checked" : ""}>`
-            + `\n      <label for=\"crawl_web_res\">下载Web资源（此部分不能恢复上次进度）</label>`
+            + `\n      <label for=\"crawl_web_res\">下载Web资源（${isWebResCompleted ? "<b style=\"color: green\">已完成下载</b>" : "未完成下载"}，此部分不能恢复上次进度）</label>`
             + `\n    </div>`
             + `\n    <div>`
             + `\n      <input id=\"crawl_assets\" name=\"crawl_assets\" value=\"true\" type=\"checkbox\" ${crawlAssets ? "checked" : ""}>`

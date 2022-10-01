@@ -51,6 +51,8 @@ export class crawler {
     private readonly params: parameters.params;
     private readonly localServer: localServer;
 
+    readonly isWebResCompleted: boolean;
+
     private static readonly htmlRegEx = /^text\/html(?=(\s|;|$))/i;
     private static readonly javaScriptRegEx = /^application\/javascript(?=(\s|;|$))/i;
     private static readonly jsonRegEx = /^application\/json(?=(\s|;|$))/i;
@@ -130,6 +132,30 @@ export class crawler {
 
         this.localRootDir = path.join(".", "static");
         this.localConflictDir = path.join(".", "conflict");
+
+        let isWebResCompleted: boolean | undefined;
+        try {
+            const replacementJs = this.readFile("/magica/js/system/replacement.js")?.toString('utf-8');
+            if (replacementJs != null) {
+                const fileTimeStampObj: Record<string, string> = JSON.parse(
+                    replacementJs.replace(/^\s*window\.fileTimeStamp\s*=\s*/, "")
+                );
+                let completed = true;
+                for (let subPath in fileTimeStampObj) {
+                    let key = `/magica/${subPath}`.split("/").map((s) => encodeURIComponent(s)).join("/");
+                    if (!this.staticFileMap.has(key) && !this.staticFile404Set.has(key)) {
+                        console.log(`[${key}] is still missing`);
+                        completed = false;
+                        break;
+                    }
+                }
+                isWebResCompleted = completed;
+            }
+        } catch (e) {
+            isWebResCompleted = false;
+            console.error(e);
+        }
+        this.isWebResCompleted = isWebResCompleted != null ? isWebResCompleted : false;
     }
 
     fetchAllAsync(): Promise<void> {
