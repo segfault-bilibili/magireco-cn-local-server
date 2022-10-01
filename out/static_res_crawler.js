@@ -15,28 +15,40 @@ class crawler {
         this.isCrawlingCompleted = false;
         this.params = params;
         this.localServer = localServer;
-        try {
-            let json = fs.readFileSync(crawler.staticFileMapPath, 'utf-8');
-            let map = JSON.parse(json, parameters.reviver);
-            if (!(map instanceof Map))
-                throw new Error(`not instance of map`);
-            this.staticFileMap = map;
-        }
-        catch (e) {
-            console.error(`error loading staticFileMap, creating new one`, e);
+        this.device_id = [8, 4, 4, 4, 12].map((len) => crypto.randomBytes(Math.trunc((len + 1) / 2))
+            .toString('hex').substring(0, len)).join("-");
+        if (!fs.existsSync(crawler.staticFileMapPath)) {
+            console.error(`creating new staticFileMap`);
             this.staticFileMap = new Map();
         }
-        try {
-            let json = fs.readFileSync(crawler.staticFile404SetPath, 'utf-8');
-            let set = JSON.parse(json, parameters.reviver);
-            if (!(set instanceof Set))
-                throw new Error(`not instance of set`);
-            this.staticFile404Set = set;
-        }
-        catch (e) {
-            console.error(`error loading staticFile404Set, creating new one`, e);
+        else
+            try {
+                let json = fs.readFileSync(crawler.staticFileMapPath, 'utf-8');
+                let map = JSON.parse(json, parameters.reviver);
+                if (!(map instanceof Map))
+                    throw new Error(`not instance of map`);
+                this.staticFileMap = map;
+            }
+            catch (e) {
+                console.error(`error loading staticFileMap, creating new one`, e);
+                this.staticFileMap = new Map();
+            }
+        if (!fs.existsSync(crawler.staticFile404SetPath)) {
+            console.error(`creating new staticFile404Set`);
             this.staticFile404Set = new Set();
         }
+        else
+            try {
+                let json = fs.readFileSync(crawler.staticFile404SetPath, 'utf-8');
+                let set = JSON.parse(json, parameters.reviver);
+                if (!(set instanceof Set))
+                    throw new Error(`not instance of set`);
+                this.staticFile404Set = set;
+            }
+            catch (e) {
+                console.error(`error loading staticFile404Set, creating new one`, e);
+                this.staticFile404Set = new Set();
+            }
         this.localRootDir = path.join(".", "static");
         this.localConflictDir = path.join(".", "conflict");
     }
@@ -337,7 +349,7 @@ class crawler {
             [http2.constants.HTTP2_HEADER_HOST]: host,
             [http2.constants.HTTP2_HEADER_ACCEPT_ENCODING]: `gzip, deflate`,
             [http2.constants.HTTP2_HEADER_CONTENT_TYPE]: `text/plain; charset=utf-8`,
-            ["Deviceid"]: `d00c434c-4744-46a8-bb66-c2aaec6972cb`,
+            ["Deviceid"]: `${this.device_id}`,
             ["User-Id-Fba9x88mae"]: `magica_`,
             ["X-Platform-Host"]: `https://${host}`,
             ["Ticket"]: "",

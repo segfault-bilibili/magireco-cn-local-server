@@ -902,6 +902,7 @@ export class controlInterface {
             + `\n    ${this.userdataDmp.lastSnapshot == null ? "" : "<br><i>在某品牌手机上，曾经观察到第一次下载回来是0字节空文件的问题，如果碰到这个问题可以再次点击或长按下面的链接重试下载，或者换个浏览器试试。</i>"}`
             + `\n  </fieldset>`
             + `\n  <hr>`
+            /*
             + `\n  <h2 id=\"crawlstaticdata\">爬取游戏静态资源文件</h2>`
             + `\n  <fieldset>`
             + `\n  <legend>爬取进度</legend>`
@@ -924,6 +925,7 @@ export class controlInterface {
             + `\n  </form>`
             + `\n  </fieldset>`
             + `\n  <hr>`
+            */
             /* //FIXME
             + `\n  <h2>Control</h2>`
             + `\n  <form action=\"/api/shutdown\" method=\"get\">`

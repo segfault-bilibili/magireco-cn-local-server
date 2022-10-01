@@ -4,6 +4,7 @@ import * as parameters from "./parameters";
 export declare class crawler {
     private readonly params;
     private readonly localServer;
+    private readonly device_id;
     static readonly defMimeType = "application/octet-stream";
     private readonly staticFileMap;
     private readonly staticFile404Set;

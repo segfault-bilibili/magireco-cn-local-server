@@ -199,7 +199,7 @@ class controlInterface {
                             if (!isDownloading && (requestingNewDownload || !hasDownloadResultOrError)) {
                                 this.userdataDmp.getSnapshotAsync()
                                     .catch((e) => console.error(`${apiName} error`, e)); // prevent crash
-                                this.sendResultAsync(res, 200, "downloading, pleses wait...");
+                                this.sendResultAsync(res, 200, "downloading");
                             }
                             else {
                                 if (alreadyDownloaded) {
@@ -566,7 +566,7 @@ class controlInterface {
             openIdTicketStatus = "游戏未登录（将自动使用B站账号登录）";
         }
         else {
-            openIdTicketStatus = "游戏未登录";
+            openIdTicketStatus = "游戏未登录（请先登录B站账号）";
         }
         const openIdTicket = this.params.openIdTicket;
         let gameUid;
@@ -915,8 +915,9 @@ class controlInterface {
             + `\n  </fieldset>`
             + `\n  <fieldset>`
             + `\n  <legend>${this.userdataDmp.lastSnapshot == null ? "尚未下载，无链接可显示" : "将下载到的数据另存为文件"}</legend>`
-            + `\n    ${this.userdataDmp.lastSnapshot == null ? "" : "<br><b>在某品牌手机上，曾经观察到第一次下载回来是0字节空文件的问题，如果碰到这个问题可以再次点击或长按下面的链接重试下载，或者换个浏览器试试。</b><br>"}`
-            + `\n    ${this.userdataDmp.lastSnapshot == null ? "" : aHref(this.userdataDmp.userdataDumpFileName, `/${this.userdataDmp.userdataDumpFileName}`)}`
+            + `\n    ${this.userdataDmp.lastSnapshot == null ? "" : "<b>↓点击下面的链接即可下载↓</b>"}`
+            + `\n    ${this.userdataDmp.lastSnapshot == null ? "" : "<br>" + aHref(this.userdataDmp.userdataDumpFileName, `/${this.userdataDmp.userdataDumpFileName}`)}`
+            + `\n    ${this.userdataDmp.lastSnapshot == null ? "" : "<br><i>在某品牌手机上，曾经观察到第一次下载回来是0字节空文件的问题，如果碰到这个问题可以再次点击或长按下面的链接重试下载，或者换个浏览器试试。</i>"}`
             + `\n  </fieldset>`
             + `\n  <hr>`
             /*
@@ -980,7 +981,7 @@ class controlInterface {
                 + `\n  </style>`
                 + `\n</head>`
                 + `\n<body>`
-                + `\n  <label for=\"backbtn\">${statusCode == 200 ? "操作成功" : "错误"}</label>`
+                + `\n  <label for=\"backbtn\">${statusCode == 200 ? "操作成功，请返回" : "错误"}</label>`
                 + `\n  <button id=\"backbtn\" onclick=\"window.history.back();\">返回 Back</button>`
                 + `\n  <hr>`
                 + `\n  <label for=\"httpstatus\">HTTP Status Code</label>`
