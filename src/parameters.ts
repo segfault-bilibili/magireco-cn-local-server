@@ -40,6 +40,8 @@ const persistParams: {
     magirecoIDs?: userdataDump.magirecoIDs,
     fetchCharaEnhancementTree: boolean,
     concurrentFetch: boolean,
+    crawlWebRes: boolean,
+    crawlAssets: boolean,
 } = {
     mode: mode.ONLINE,
     autoOpenWeb: true,
@@ -63,6 +65,8 @@ const persistParams: {
     magirecoIDs: undefined,
     fetchCharaEnhancementTree: false,
     concurrentFetch: true,
+    crawlWebRes: true,
+    crawlAssets: true,
 }
 
 export class params {
@@ -186,6 +190,9 @@ export class params {
 
     get fetchCharaEnhancementTree(): boolean { return this.mapData.get("fetchCharaEnhancementTree"); }
     get concurrentFetch(): boolean { return this.mapData.get("concurrentFetch"); }
+
+    get crawlWebRes(): boolean { return this.mapData.get("crawlWebRes"); }
+    get crawlAssets(): boolean { return this.mapData.get("crawlAssets"); }
 
     get CACertPEM(): string { return this.CACertAndKey.cert; }
     get CACertSubjectHashOld(): string { return "9489bdaf"; }//FIXME

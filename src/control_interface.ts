@@ -310,10 +310,20 @@ export class controlInterface {
                             this.sendResultAsync(res, 429, "crawling not yet finished");
                         } else {
                             try {
-                                await this.getParsedPostData(req);
-                                this.crawler.fetchAllAsync()
-                                    .catch((e) => console.error(`${apiName} error`, e)); // prevent crash
-                                this.sendResultAsync(res, 200, "crawling started");
+                                let crawlingParams = await this.getParsedPostData(req);
+                                let crawlWebRes = crawlingParams.get("crawl_web_res") != null;
+                                let crawlAssets = crawlingParams.get("crawl_assets") != null;
+                                if (!crawlWebRes && !crawlAssets) {
+                                    this.sendResultAsync(res, 400, "must crawl at least one part");
+                                } else {
+                                    await this.params.save([
+                                        { key: "crawlWebRes", val: crawlWebRes },
+                                        { key: "crawlAssets", val: crawlAssets },
+                                    ]);
+                                    this.crawler.fetchAllAsync()
+                                        .catch((e) => console.error(`${apiName} error`, e)); // prevent crash
+                                    this.sendResultAsync(res, 200, "crawling started");
+                                }
                             } catch (e) {
                                 console.error(`${apiName} error`, e);
                                 this.sendResultAsync(res, 500, e instanceof Error ? e.message : `${apiName} error`);
@@ -613,6 +623,8 @@ export class controlInterface {
             }
             if (this.crawler.lastError != null) crawlingStatusStyle = "color: red";
         }
+        const crawlWebRes = this.params.crawlWebRes;
+        const crawlAssets = this.params.crawlAssets;
 
         const bsgamesdkIDs = this.params.bsgamesdkIDs;
         const bd_id = bsgamesdkIDs.bd_id, buvid = bsgamesdkIDs.buvid, udid = bsgamesdkIDs.udid;
@@ -913,6 +925,14 @@ export class controlInterface {
             + `\n  <fieldset>`
             + `\n  <legend>控制</legend>`
             + `\n  <form action=\"/api/crawl_static_data\" method=\"post\">`
+            + `\n    <div>`
+            + `\n      <input id=\"crawl_web_res\" name=\"crawl_web_res\" value=\"true\" type=\"checkbox\" ${crawlWebRes ? "checked" : ""}>`
+            + `\n      <label for=\"crawl_web_res\">下载Web资源（此部分不能恢复上次进度）</label>`
+            + `\n    </div>`
+            + `\n    <div>`
+            + `\n      <input id=\"crawl_assets\" name=\"crawl_assets\" value=\"true\" type=\"checkbox\" ${crawlAssets ? "checked" : ""}>`
+            + `\n      <label for=\"crawl_assets\">下载本地资源（此部分可自动恢复上次进度）</label>`
+            + `\n    </div>`
             + `\n    <div>`
             + `\n      <input type=\"submit\" id=\"crawl_static_data_btn\" ${isCrawling ? "disabled" : ""} value=\"开始爬取\">`
             + `\n    </div>`

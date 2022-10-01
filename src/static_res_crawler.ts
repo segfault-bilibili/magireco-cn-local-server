@@ -161,18 +161,23 @@ export class crawler {
         this._lastError = undefined;
         this._crawlingStatus = "";
 
-        console.log(this._crawlingStatus = `crawling index.html ...`);
-        let indexHtml = await this.fetchSinglePage(crawler.prodHost, "/magica/index.html", crawler.htmlRegEx);
-        let matched = indexHtml.match(/<head\s+time="(\d+)"/);
-        if (matched == null) throw this._lastError = new Error(`cannot match time in index.html`);
-        let headTime = parseInt(matched[1]);
-        if (isNaN(headTime)) throw this._lastError = new Error(`headTime is NaN`);
-        console.log(this._crawlingStatus = `crawling files in replacement.js ...`);
-        await this.fetchFilesInReplacementJs(headTime);
+        const crawlWebRes = this.params.crawlWebRes, crawlAssets = this.params.crawlAssets;
+        if (crawlWebRes) {
+            console.log(this._crawlingStatus = `crawling index.html ...`);
+            let indexHtml = await this.fetchSinglePage(crawler.prodHost, "/magica/index.html", crawler.htmlRegEx);
+            let matched = indexHtml.match(/<head\s+time="(\d+)"/);
+            if (matched == null) throw this._lastError = new Error(`cannot match time in index.html`);
+            let headTime = parseInt(matched[1]);
+            if (isNaN(headTime)) throw this._lastError = new Error(`headTime is NaN`);
+            console.log(this._crawlingStatus = `crawling files in replacement.js ...`);
+            await this.fetchFilesInReplacementJs(headTime);
+        }
 
-        console.log(this._crawlingStatus = `crawling assets ...`);
-        let assetConfigObj = await this.fetchAssetConfig();
-        await this.fetchAssets(assetConfigObj);
+        if (crawlAssets) {
+            console.log(this._crawlingStatus = `crawling assets ...`);
+            let assetConfigObj = await this.fetchAssetConfig();
+            await this.fetchAssets(assetConfigObj);
+        }
 
         console.log(this._crawlingStatus = `${this.stopCrawling ? "stopped crawling" : "crawling completed"}`);
         this._isCrawling = false;
@@ -199,7 +204,7 @@ export class crawler {
                 }
                 else throw new Error(`readPath=[${readPath}] exists but it is not a file`);
             } else {
-                console.log(`${logPrefix} (not found) : [${pathInUrl}]`);
+                if (parameters.params.VERBOSE) console.log(`${logPrefix} (not found) : [${pathInUrl}]`);
                 return undefined;
             }
         } // else specifiedMd5 != null
@@ -228,7 +233,7 @@ export class crawler {
                     else throw new Error(`conflictReadPath=[${conflictReadPath}] exists but it is not a file`);
                 } else throw new Error(`staticFileMap has the record of conflictReadPath=[${conflictReadPath}] but that file does not exist`);
             } else {
-                console.log(`${logPrefix} (not found) : [${pathInUrl}]`);
+                if (parameters.params.VERBOSE) console.log(`${logPrefix} (not found) : [${pathInUrl}]`);
                 return undefined;
             }
         }
@@ -326,9 +331,10 @@ export class crawler {
         return await this.http2Request(url, overrideReqHeaders, false, postData) as http2BufResult;
     }
 
-    private async batchHttp2GetSave(urlList: Array<{ url: URL, md5?: string }>, concurrent = 8
+    private async batchHttp2GetSave(stageStr: string, urlList: Array<{ url: URL, md5?: string }>, concurrent = 8
     ): Promise<Array<http2BatchGetResultItem>> {
-        let urlStrSet = new Set<string>(), abandonedSet = new Set<string>(), currentStaticFile404Set = new Set<string>();
+        let urlStrSet = new Set<string>(), abandonedSet = new Set<string>(), skippedSet = new Set<string>();
+        let currentStaticFile404Set = new Set<string>();
         urlList.forEach((item) => {
             const url = item.url;
             const key = url.href;
@@ -343,6 +349,10 @@ export class crawler {
 
         let hasError = false, stoppedCrawling = false;
         let crawl = async (queueNo: number): Promise<boolean> => {
+            this._crawlingStatus = `[${stageStr}]`
+                + ` fetched/total=[${resultMap.size}/${urlList.length}] remaining=[${urlStrSet.size - resultMap.size}]`
+                + ` not_found=[${currentStaticFile404Set.size}] skipped=[${skippedSet.size}] abandoned=[${abandonedSet.size}]`;
+
             let item = urlList.shift();
             if (item == null) return false;
 
@@ -369,7 +379,11 @@ export class crawler {
                 let existingContent = this.readFile(url.pathname);
                 if (existingContent != null) {
                     let calculatedMd5 = crypto.createHash("md5").update(existingContent).digest('hex');
-                    if (calculatedMd5 === md5) return true; // skip downloaded asset
+                    if (calculatedMd5 === md5) {
+                        skippedSet.add(key);
+                        urlStrSet.delete(key);
+                        return true; // skip downloaded asset
+                    }
                 }
             }
 
@@ -407,9 +421,12 @@ export class crawler {
         await Promise.all(startPromises);
 
         urlStrSet.forEach((urlStr) => {
-            if (!resultMap.has(urlStr) && !abandonedSet.has(urlStr) && !currentStaticFile404Set.has(urlStr)) {
+            if (
+                !resultMap.has(urlStr) && !skippedSet.has(urlStr) && !abandonedSet.has(urlStr)
+                && !currentStaticFile404Set.has(urlStr)
+            ) {
                 // should never happen
-                throw new Error(`key=[${urlStr}] is missing in both resultMap/abandonedSet/currentStaticFile404Set`);
+                throw new Error(`key=[${urlStr}] is missing in both resultMap/skippedSet/abandonedSet/currentStaticFile404Set`);
             }
         });
         let results: Array<http2BatchGetResultItem> = [];
@@ -458,7 +475,7 @@ export class crawler {
                 url: new URL(`${this.httpsProdMagicaNoSlash}/${subPath}?${headTime}`),
             });
         }
-        await this.batchHttp2GetSave(urlList);
+        await this.batchHttp2GetSave(`webRes`, urlList);
     }
 
     private async fetchAssetConfig(): Promise<assetConfigObj> {
@@ -549,7 +566,7 @@ export class crawler {
             }
         });
         const urlList: Array<{ url: URL, md5: string }> = Array.from(urlMap.values());
-        await this.batchHttp2GetSave(urlList);
+        await this.batchHttp2GetSave(`assets`, urlList);
     }
 
 }
