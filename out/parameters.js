@@ -13,12 +13,11 @@ const fs = require("fs");
 const fsPromises = require("fs/promises");
 var mode;
 (function (mode) {
-    mode[mode["ACCOUNT_DUMP"] = 1] = "ACCOUNT_DUMP";
-    mode[mode["TAP_PROXY"] = 2] = "TAP_PROXY";
-    mode[mode["LOCAL_OFFLINE"] = 3] = "LOCAL_OFFLINE";
+    mode[mode["ONLINE"] = 1] = "ONLINE";
+    mode[mode["LOCAL_OFFLINE"] = 2] = "LOCAL_OFFLINE";
 })(mode = exports.mode || (exports.mode = {}));
 const persistParams = {
-    mode: mode.ACCOUNT_DUMP,
+    mode: mode.ONLINE,
     autoOpenWeb: true,
     listenList: {
         controlInterface: { port: 10000, host: "127.0.0.1" },

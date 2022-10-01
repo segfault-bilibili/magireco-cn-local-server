@@ -14,15 +14,24 @@ class saveOpenIdTicketHook extends save_response_body_hook_1.saveResponseBodyHoo
     }
     matchRequest(method, url, httpVersion, headers) {
         const tag = "saveOpenIdTicketHook";
-        const isGameLogin = super.matchRequest(method, url, httpVersion, headers);
+        const isGameLogin = super.matchRequest(method, url, httpVersion, headers).interceptResponse;
         if (isGameLogin)
-            return true;
+            return {
+                nextAction: "passOnRequest",
+                interceptResponse: true,
+            };
         const magirecoRegEx = /^(http|https):\/\/l\d+-[0-9a-z\-]+-mfsn\d*\.bilibiligame\.net\//;
-        const isMagiReco = url != null && url.href.match(magirecoRegEx);
+        const isMagiReco = url != null && url.href.match(magirecoRegEx) != null;
         if (!isMagiReco)
-            return isGameLogin;
+            return {
+                nextAction: "passOnRequest",
+                interceptResponse: isGameLogin,
+            };
         if (headers == null)
-            return isGameLogin;
+            return {
+                nextAction: "passOnRequest",
+                interceptResponse: isGameLogin,
+            };
         let open_id, ticket, webSessionId, timestamp;
         for (let key in headers) {
             let val = headers[key];
@@ -38,14 +47,20 @@ class saveOpenIdTicketHook extends save_response_body_hook_1.saveResponseBodyHoo
                 break;
         }
         if (open_id == null || ticket == null) {
-            return isGameLogin;
+            return {
+                nextAction: "passOnRequest",
+                interceptResponse: isGameLogin,
+            };
         }
         //console.log(`${tag} got open_id and ticket from request`);//DEBUG
         let last = this.params.openIdTicket;
         if (last != null
             && last.open_id === open_id
             && last.ticket === ticket) {
-            return isGameLogin; //no need to update
+            return {
+                nextAction: "passOnRequest",
+                interceptResponse: isGameLogin, //no need to update
+            };
         }
         console.log(`${tag} got open_id and ticket from request`);
         if (webSessionId != null && webSessionId.match(this.webSessionIdValueRegEx))
@@ -71,7 +86,10 @@ class saveOpenIdTicketHook extends save_response_body_hook_1.saveResponseBodyHoo
             val.timestamp = timestamp;
         this.params.save({ key: this.paramKey, val: val })
             .then(() => console.log(`${tag} saved to paramKey=[${this.paramKey}]`));
-        return false; // no need to capture request/response body
+        return {
+            nextAction: "passOnRequest",
+            interceptResponse: false, // no need to capture request/response body
+        };
     }
     onMatchedResponse(statusCode, statusMessage, httpVersion, headers, body) {
         const tag = "saveOpenIdTicketHook";

@@ -59,6 +59,7 @@ export declare class userdataDmp {
     private magirecoJsonRequst;
     private gameLogin;
     private get firstRoundUrlList();
+    static readonly fakeFriends: string[];
     private getSecondRoundRequests;
     private getThirdRoundRequests;
     private readonly tsRegEx;

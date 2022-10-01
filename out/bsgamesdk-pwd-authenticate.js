@@ -31,7 +31,8 @@ class bsgamesdkPwdAuth {
                 [http2.constants.HTTP2_HEADER_CONTENT_TYPE]: "application/x-www-form-urlencoded",
                 [http2.constants.HTTP2_HEADER_ACCEPT_ENCODING]: "gzip, deflate",
             };
-            this.localServer.http2RequestAsync(url, reqHeaders, postData).then((result) => {
+            const cvtBufToStr = true;
+            this.localServer.emitHttp2RequestAsync(url, reqHeaders, postData, cvtBufToStr).then((result) => {
                 const statusCode = result.headers[":status"];
                 if (statusCode != 200)
                     reject(new Error(`status=[${statusCode}]`));

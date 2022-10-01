@@ -9,11 +9,16 @@ class saveResponseBodyHook {
     }
     // if matched, keep a copy of request/response data in memory
     matchRequest(method, url, httpVersion, headers) {
-        if (url == null)
-            return false;
-        return url.href.match(this.urlRegEx) ? true : false;
+        return {
+            nextAction: "passOnRequest",
+            interceptResponse: (url === null || url === void 0 ? void 0 : url.href.match(this.urlRegEx)) ? true : false,
+        };
     }
     onMatchedRequest(method, url, httpVersion, headers, body) {
+        return {
+            nextAction: "passOnRequestBody",
+            interceptResponse: true,
+        };
     }
     onMatchedResponse(statusCode, statusMessage, httpVersion, headers, body) {
         const tag = "saveResponseBodyHook";

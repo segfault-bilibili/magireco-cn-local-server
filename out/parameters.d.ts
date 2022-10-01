@@ -12,9 +12,8 @@ export declare type listenList = Record<string, listenAddr> & {
     localHttp1Server: listenAddr;
 };
 export declare enum mode {
-    ACCOUNT_DUMP = 1,
-    TAP_PROXY = 2,
-    LOCAL_OFFLINE = 3
+    ONLINE = 1,
+    LOCAL_OFFLINE = 2
 }
 export declare class params {
     static VERBOSE: boolean;
