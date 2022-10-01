@@ -406,6 +406,7 @@ export class crawler {
             if (urlStrSet.has(key)) throw new Error(`found duplicate url=${key} in urlList`);
             urlStrSet.add(key);
         });
+        const total = urlList.length;
 
         concurrent = Math.floor(concurrent);
         if (concurrent < 1 || concurrent > 8) throw new Error("concurrent < 1 || concurrent > 8");
@@ -415,7 +416,7 @@ export class crawler {
         let hasError = false, stoppedCrawling = false;
         let crawl = async (queueNo: number): Promise<boolean> => {
             this._crawlingStatus = `[${stageStr}]`
-                + ` fetched/total=[${resultMap.size}/${urlList.length}] remaining=[${urlStrSet.size - resultMap.size}]`
+                + ` fetched/total=[${resultMap.size}/${total}] remaining=[${urlStrSet.size - resultMap.size}]`
                 + ` not_found=[${currentStaticFile404Set.size}] skipped=[${skippedSet.size}] abandoned=[${abandonedSet.size}]`;
 
             let item = urlList.shift();
