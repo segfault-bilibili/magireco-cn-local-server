@@ -59,6 +59,10 @@ export class crawler {
         return this._crawlingStatus;
     }
     private _crawlingStatus = "";
+    get isCrawlingFullyCompleted(): boolean {
+        return !this._isCrawling && this.isCrawlingCompleted && !this.stopCrawling;
+    }
+    private isCrawlingCompleted = false;
 
     constructor(params: parameters.params, localServer: localServer) {
         this.params = params;
@@ -98,6 +102,7 @@ export class crawler {
                             reject(this._lastError = err);
                         });
                 }).finally(() => {
+                    // not changing this._crawlingStatus
                     console.log(`saving stringifiedMap and stringified404Set ...`);
                     let stringifiedMap = JSON.stringify(this.staticFileMap, parameters.replacer);
                     fs.writeFileSync(crawler.staticFileMapPath, stringifiedMap, 'utf-8');
@@ -111,6 +116,7 @@ export class crawler {
         if (this._isCrawling) throw new Error("previous crawling has not finished");
         this.stopCrawling = false;
         this._isCrawling = true;
+        this.isCrawlingCompleted = false;
         this._lastError = undefined;
         this._crawlingStatus = "";
 
@@ -123,8 +129,9 @@ export class crawler {
         console.log(this._crawlingStatus = `crawling files in replacement.js ...`);
         await this.fetchFilesInReplacementJs(headTime);
 
-        console.log(this._crawlingStatus = `crawling completed`);
+        console.log(this._crawlingStatus = `${this.stopCrawling ? "stopped crawling" : "crawling completed"}`);
         this._isCrawling = false;
+        this.isCrawlingCompleted = true;
     }
 
     getContentType(pathInUrl: string): string {

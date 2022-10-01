@@ -600,8 +600,19 @@ export class controlInterface {
         } else if (this.userdataDmp.lastError != null) userdataDumpStatus = `从官服下载数据过程中出错  ${this.userdataDmp.fetchStatus}`, userdataDumpStatusStyle = "color: red";
         userdataDumpStatus = getStrRep(userdataDumpStatus);
 
-        const crawler = this.crawler;
-        const isCrawling = crawler.isCrawling;
+        let crawlingStatus = this.crawler.crawlingStatus, crawlingStatusStyle = "color: grey";
+        const isCrawling = this.crawler.isCrawling;
+        if (this.crawler.isCrawlingFullyCompleted) {
+            crawlingStatus = "爬取已成功完成";
+            crawlingStatusStyle = "color: green";
+        } else if (this.crawler.isCrawling) {
+            crawlingStatusStyle = "color: blue";
+        } else {
+            if (crawlingStatus == null || crawlingStatus === "") {
+                crawlingStatus = "本次启动以来尚未开始爬取";
+            }
+            if (this.crawler.lastError != null) crawlingStatusStyle = "color: red";
+        }
 
         const bsgamesdkIDs = this.params.bsgamesdkIDs;
         const bd_id = bsgamesdkIDs.bd_id, buvid = bsgamesdkIDs.buvid, udid = bsgamesdkIDs.udid;
@@ -629,6 +640,7 @@ export class controlInterface {
             + `\n      document.getElementById(\"loginstatus\").textContent = \"${loginStatus}\";`
             + `\n      document.getElementById(\"openidticketstatus\").textContent = \"${openIdTicketStatus}\";`
             + `\n      document.getElementById(\"userdatadumpstatus\").textContent = \"${userdataDumpStatus}\";`
+            + `\n      document.getElementById(\"crawlingstatus\").textContent = \"${crawlingStatus}\";`
             + `\n      ${isDownloading ? "setTimeout(() => {confirmRefresh();}, 10000);" : ""}`
             + `\n    });`
             + `\n    function unlock_prepare_download_btn() {`
@@ -890,6 +902,13 @@ export class controlInterface {
             + `\n  </fieldset>`
             + `\n  <hr>`
             + `\n  <h2 id=\"crawlstaticdata\">爬取游戏静态资源文件</h2>`
+            + `\n  <fieldset>`
+            + `\n  <legend>爬取进度</legend>`
+            + `\n  <div>`
+            + `\n    <button id=\"refreshbtn5\" onclick=\"window.location.reload(true);\">刷新</button>`
+            + `\n    <label id=\"crawlingstatus\" style=\"${crawlingStatusStyle}\" for=\"refreshbtn5\">TO_BE_FILLED_BY_JAVASCRIPT</label>`
+            + `\n  </div>`
+            + `\n  </fieldset>`
             + `\n  <fieldset>`
             + `\n  <legend>控制</legend>`
             + `\n  <form action=\"/api/crawl_static_data\" method=\"post\">`
