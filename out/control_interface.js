@@ -665,8 +665,11 @@ class controlInterface {
             + `\n          }`
             + `\n          let el = document.getElementById(\"userdatadumpstatus\");`
             + `\n          el.textContent = status.userdataDumpStatus; el.style = status.userdataDumpStatusStyle;`
+            + `\n          document.getElementById(\"prepare_download_btn\").disabled = status.isDownloading;`
             + `\n          el = document.getElementById(\"crawlingstatus\");`
             + `\n          el.textContent = status.crawlingStatus; el.style = status.crawlingStatusStyle;`
+            + `\n          document.getElementById(\"crawl_static_data_btn\").disabled = status.isCrawling;`
+            + `\n          document.getElementById(\"stop_crawling_btn\").disabled = !status.isCrawling;`
             + `\n          if (countdown > 0 && (status.isDownloading || status.isCrawling)) setTimeout(() => autoRefresh(--countdown), 500);`
             + `\n      }`
             + `\n      autoRefresh(initialCountdown);`
