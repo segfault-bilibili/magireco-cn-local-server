@@ -441,15 +441,8 @@ export class crawler {
             }
 
             if (md5 != null) {
-                let existingContent = this.readFile(url.pathname);
-                if (existingContent != null) {
-                    let calculatedMd5 = crypto.createHash("md5").update(existingContent).digest('hex');
-                    if (calculatedMd5 === md5) {
-                        skippedSet.add(key);
-                        urlStrSet.delete(key);
-                        return true; // skip downloaded asset
-                    }
-                }
+                const fileMeta = this.staticFileMap.get(key);
+                if (fileMeta!= null && fileMeta[0].md5 === md5) return true; // skip downloaded asset
             }
 
             try {
