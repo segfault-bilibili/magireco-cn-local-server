@@ -187,6 +187,7 @@ export class crawler {
         else return crawler.defMimeType;
     }
     readFile(pathInUrl: string, specifiedMd5?: string): Buffer | undefined {
+        // not checking md5 here
         let logPrefix = `readFile`;
         const readPath = path.join(this.localRootDir, pathInUrl);
         if (specifiedMd5 == null) {
@@ -362,6 +363,14 @@ export class crawler {
                 abandonedSet.add(key);
                 urlStrSet.delete(key);
                 return true;
+            }
+
+            if (md5 != null) {
+                let existingContent = this.readFile(url.pathname);
+                if (existingContent != null) {
+                    let calculatedMd5 = crypto.createHash("md5").update(existingContent).digest('hex');
+                    if (calculatedMd5 === md5) return true; // skip downloaded asset
+                }
             }
 
             try {
