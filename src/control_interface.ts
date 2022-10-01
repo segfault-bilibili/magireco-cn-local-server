@@ -547,7 +547,12 @@ export class controlInterface {
             loginBtnText = "重新登录";
         }
 
-        let openIdTicketStatus = "游戏未登录", openIdTicketStatusStyle = "color: red";
+        let openIdTicketStatus: string, openIdTicketStatusStyle = "color: red";
+        if (bsgamesdkResponse != null && bsgamesdkResponse.access_key != null) {
+            openIdTicketStatus = "游戏未登录（将自动使用B站账号登录）"
+        } else {
+            openIdTicketStatus = "游戏未登录";
+        }
         const openIdTicket = this.params.openIdTicket;
         let gameUid: number | undefined;
         if (
