@@ -73,7 +73,10 @@ export class crawler {
         this.device_id = [8, 4, 4, 4, 12].map((len) => crypto.randomBytes(Math.trunc((len + 1) / 2))
             .toString('hex').substring(0, len)).join("-");
 
-        try {
+        if (!fs.existsSync(crawler.staticFileMapPath)) {
+            console.error(`creating new staticFileMap`);
+            this.staticFileMap = new Map<string, Array<fileMeta>>();
+        } else try {
             let json = fs.readFileSync(crawler.staticFileMapPath, 'utf-8');
             let map = JSON.parse(json, parameters.reviver);
             if (!(map instanceof Map)) throw new Error(`not instance of map`);
@@ -82,7 +85,10 @@ export class crawler {
             console.error(`error loading staticFileMap, creating new one`, e);
             this.staticFileMap = new Map<string, Array<fileMeta>>();
         }
-        try {
+        if (!fs.existsSync(crawler.staticFile404SetPath)) {
+            console.error(`creating new staticFile404Set`);
+            this.staticFile404Set = new Set<string>();
+        } else try {
             let json = fs.readFileSync(crawler.staticFile404SetPath, 'utf-8');
             let set = JSON.parse(json, parameters.reviver);
             if (!(set instanceof Set)) throw new Error(`not instance of set`);
