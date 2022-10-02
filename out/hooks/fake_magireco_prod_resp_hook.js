@@ -8,7 +8,7 @@ class fakeMagirecoProdRespHook {
     constructor(params, crawler) {
         this.params = params;
         this.crawler = crawler;
-        this.magirecoProdUrlRegEx = /^(http|https):\/\/l\d+-prod-[0-9a-z\-]+-mfsn\d*\.bilibiligame\.net\/magica\/.+$/;
+        this.magirecoProdUrlRegEx = /^(http|https):\/\/l\d+-prod-[0-9a-z\-]+-mfsn\d*\.bilibiligame\.net\/(|maintenance\/)magica\/.+$/;
         this.magirecoPatchUrlRegEx = /^(http|https):\/\/line\d+-prod-patch-mfsn\d*\.bilibiligame\.net\/magica\/.+$/;
         this.apiPathNameRegEx = /^\/magica\/api\/.+$/;
     }
@@ -46,6 +46,8 @@ class fakeMagirecoProdRespHook {
             if (body == null) {
                 statusCode = 404;
                 body = Buffer.from(new ArrayBuffer(0));
+                if (!this.crawler.isKnown404(url.pathname))
+                    console.error(`responding 404 [${url.pathname}]`);
             }
             else {
                 statusCode = 200;

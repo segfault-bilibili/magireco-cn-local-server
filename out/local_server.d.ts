@@ -69,7 +69,7 @@ export declare class localServer {
         respBody: string | Buffer;
     }>;
     private handleHttp2Response;
-    static compress(data: Buffer, encoding?: string): Buffer;
+    static compress(data: Buffer, encoding?: string, quality?: number): Buffer;
     static decompress(data: Buffer, encoding?: string): Buffer;
 }
 export {};

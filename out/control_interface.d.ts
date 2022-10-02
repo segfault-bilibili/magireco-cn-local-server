@@ -20,6 +20,6 @@ export declare class controlInterface {
     private getPostData;
     private homepageHTML;
     private getGameUid;
-    private getDownloadStatus;
+    private getStatus;
     private sendResultAsync;
 }

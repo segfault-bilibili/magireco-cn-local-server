@@ -1,11 +1,16 @@
 /// <reference types="node" />
 import { localServer } from "./local_server";
 import * as parameters from "./parameters";
+declare type fsckStatus = {
+    passed: number;
+    remaining: number;
+    notPassed: number;
+};
 export declare class crawler {
     private readonly params;
     private readonly localServer;
-    readonly isWebResCompleted: boolean;
-    readonly isAssetsCompleted: boolean;
+    isWebResCompleted: boolean;
+    isAssetsCompleted: boolean;
     private static readonly htmlRegEx;
     private static readonly javaScriptRegEx;
     private static readonly jsonRegEx;
@@ -20,7 +25,10 @@ export declare class crawler {
     private readonly localRootDir;
     private readonly localConflictDir;
     private static readonly staticFileMapPath;
+    private static readonly staticFileMapPathUncomp;
     private static readonly staticFile404SetPath;
+    private static readonly staticFile404SetPathUncomp;
+    private static readonly brotliQuality;
     private static readonly prodHost;
     private get httpsProdMagicaNoSlash();
     private static readonly patchHost;
@@ -34,7 +42,11 @@ export declare class crawler {
     private _crawlingStatus;
     get isCrawlingFullyCompleted(): boolean;
     private isCrawlingCompleted;
-    constructor(params: parameters.params, localServer: localServer);
+    get isFscking(): boolean;
+    get lastFsckResult(): string;
+    get fsckStatus(): fsckStatus | undefined;
+    private _fsckStatus?;
+    constructor(params: parameters.params, localsvr: localServer);
     fetchAllAsync(): Promise<void>;
     getFetchAllPromise(): Promise<void>;
     getContentType(pathInUrl: string): string;
@@ -42,6 +54,10 @@ export declare class crawler {
     saveFile(pathInUrl: string, content: Buffer, contentType: string | undefined, preCalcMd5?: string): void;
     private checkAlreadyExist;
     private updateFileMeta;
+    private saveFileMeta;
+    fsck(): Promise<boolean>;
+    isKnown404(pathInUrl: string): boolean;
+    private checkStaticCompleted;
     private http2Request;
     private http2GetStr;
     private http2GetBuf;
@@ -55,3 +71,4 @@ export declare class crawler {
     private fetchAssetConfig;
     private fetchAssets;
 }
+export {};
