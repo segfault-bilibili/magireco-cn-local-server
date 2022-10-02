@@ -8,7 +8,8 @@ class fakeMagirecoProdRespHook {
     constructor(params, crawler) {
         this.params = params;
         this.crawler = crawler;
-        this.magirecoProdUrlRegEx = /^(http|https):\/\/l\d+-[0-9a-z\-]+-mfsn\d*\.bilibiligame\.net\/magica\/.+$/;
+        this.magirecoProdUrlRegEx = /^(http|https):\/\/l\d+-prod-[0-9a-z\-]+-mfsn\d*\.bilibiligame\.net\/magica\/.+$/;
+        this.magirecoPatchUrlRegEx = /^(http|https):\/\/line\d+-prod-patch-mfsn\d*\.bilibiligame\.net\/magica\/.+$/;
         this.apiPathNameRegEx = /^\/magica\/api\/.+$/;
     }
     // if matched, keep a copy of request/response data in memory
@@ -20,7 +21,8 @@ class fakeMagirecoProdRespHook {
                 interceptResponse: false,
             };
         const isMagiRecoProd = (url === null || url === void 0 ? void 0 : url.href.match(this.magirecoProdUrlRegEx)) != null;
-        if (!isMagiRecoProd)
+        const isMagiRecoPatch = (url === null || url === void 0 ? void 0 : url.href.match(this.magirecoPatchUrlRegEx)) != null;
+        if (!isMagiRecoProd && !isMagiRecoPatch)
             return {
                 nextAction: "passOnRequest",
                 interceptResponse: false,

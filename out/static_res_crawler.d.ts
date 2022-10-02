@@ -10,6 +10,8 @@ export declare class crawler {
     private static readonly javaScriptRegEx;
     private static readonly jsonRegEx;
     private static readonly md5RegEx;
+    private static readonly fileExtRegEx;
+    private static readonly compressableFileExtSet;
     private readonly device_id;
     private get timeStampSec();
     static readonly defMimeType = "application/octet-stream";

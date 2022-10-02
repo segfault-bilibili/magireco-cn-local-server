@@ -10,6 +10,7 @@ export declare class fakeMagirecoProdRespHook implements hook {
     private readonly params;
     private readonly crawler;
     private readonly magirecoProdUrlRegEx;
+    private readonly magirecoPatchUrlRegEx;
     private readonly apiPathNameRegEx;
     constructor(params: parameters.params, crawler: staticResCrawler.crawler);
     matchRequest(method?: string, url?: URL, httpVersion?: string, headers?: http.IncomingHttpHeaders | http2.IncomingHttpHeaders): fakeResponse | passOnRequest;

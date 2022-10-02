@@ -51,12 +51,18 @@ class crawler {
             }
         this.localRootDir = path.join(".", "static");
         this.localConflictDir = path.join(".", "conflict");
+        const unsortedFileExtSet = new Set();
         let isWebResCompleted;
         try {
             const replacementJs = (_a = this.readFile("/magica/js/system/replacement.js")) === null || _a === void 0 ? void 0 : _a.toString('utf-8');
             if (replacementJs != null) {
                 const fileTimeStampObj = JSON.parse(replacementJs.replace(/^\s*window\.fileTimeStamp\s*=\s*/, ""));
                 let completed = true;
+                for (let subPath in fileTimeStampObj) {
+                    let matched = subPath.match(crawler.fileExtRegEx);
+                    if (matched)
+                        unsortedFileExtSet.add(matched[0]);
+                }
                 for (let subPath in fileTimeStampObj) {
                     let key = `/magica/${subPath}`.split("/").map((s) => encodeURIComponent(s)).join("/");
                     if (!this.staticFileMap.has(key) && !this.staticFile404Set.has(key)) {
@@ -92,6 +98,11 @@ class crawler {
                     assetList.forEach((item) => mergedAssetList.push(item));
                 });
                 if (allAssetListExists) {
+                    mergedAssetList.forEach((item) => {
+                        let matched = item.file_list[0].url.match(crawler.fileExtRegEx);
+                        if (matched)
+                            unsortedFileExtSet.add(matched[0]);
+                    });
                     mergedAssetList.find((item) => {
                         const fileName = item.file_list[0].url;
                         const key = `/magica/resource/download/asset/master/resource/${assetver}/${fileName}`;
@@ -109,6 +120,23 @@ class crawler {
         }
         catch (e) {
             isAssetsCompleted = false;
+            console.error(e);
+        }
+        try {
+            const writePath = path.join(".", "fileExtSet.json");
+            const fileExtArray = Array.from(unsortedFileExtSet.keys()).sort();
+            const fileExtSet = new Set(fileExtArray);
+            const stringified = JSON.stringify(fileExtSet, parameters.replacer, 4);
+            let noChange = false;
+            if (fs.existsSync(writePath) && fs.statSync(writePath).isFile()) {
+                const content = fs.readFileSync(writePath, 'utf-8');
+                if (content === stringified)
+                    noChange = true;
+            }
+            if (!noChange)
+                fs.writeFileSync(writePath, stringified);
+        }
+        catch (e) {
             console.error(e);
         }
         this.isAssetsCompleted = isAssetsCompleted != null ? isAssetsCompleted : false;
@@ -319,10 +347,13 @@ class crawler {
             [http2.constants.HTTP2_HEADER_USER_AGENT]: `Mozilla/5.0 (Linux; Android 6.0.1; MuMu Build/V417IR; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/66.0.3359.158 Mobile Safari/537.36`,
             [http2.constants.HTTP2_HEADER_ACCEPT]: "*/*",
             [http2.constants.HTTP2_HEADER_REFERER]: `https://${host}/magica/index.html`,
-            [http2.constants.HTTP2_HEADER_ACCEPT_ENCODING]: `gzip, deflate`,
             [http2.constants.HTTP2_HEADER_ACCEPT_LANGUAGE]: `zh-CN,en-US;q=0.9`,
             ["X-Requested-With"]: `com.bilibili.madoka.bilibili`,
         };
+        const fileExtMatched = url.pathname.match(crawler.fileExtRegEx);
+        if (fileExtMatched != null && crawler.compressableFileExtSet.has(fileExtMatched[0])) {
+            reqHeaders[http2.constants.HTTP2_HEADER_ACCEPT_ENCODING] = `gzip, deflate`;
+        }
         const resp = await this.localServer.sendHttp2RequestAsync(authorityURL, reqHeaders, postData, cvtBufToStr);
         const respHeaders = resp.headers;
         const statusCode = respHeaders[":status"];
@@ -356,7 +387,7 @@ class crawler {
         let currentStaticFile404Set = new Set();
         urlList.forEach((item) => {
             const url = item.url;
-            const key = url.href;
+            const key = url.pathname;
             if (urlStrSet.has(key))
                 throw new Error(`found duplicate url=${key} in urlList`);
             urlStrSet.add(key);
@@ -375,7 +406,7 @@ class crawler {
             if (item == null)
                 return false;
             let url = item.url, md5 = item.md5;
-            let key = url.href;
+            let key = url.pathname;
             if (hasError) {
                 abandonedSet.add(key);
                 urlStrSet.delete(key);
@@ -393,16 +424,17 @@ class crawler {
             }
             if (md5 != null) {
                 const fileMeta = this.staticFileMap.get(key);
-                skippedSet.add(key);
-                urlStrSet.delete(key);
-                if (fileMeta != null && fileMeta[0].md5 === md5)
+                if (fileMeta != null && fileMeta[0].md5 === md5) {
+                    skippedSet.add(key);
+                    urlStrSet.delete(key);
                     return true; // skip downloaded asset
+                }
             }
             try {
                 let resp = await this.http2GetBuf(url);
                 if (resp.is404) {
-                    this.staticFile404Set.add(url.pathname);
-                    currentStaticFile404Set.add(url.pathname);
+                    this.staticFile404Set.add(key);
+                    currentStaticFile404Set.add(key);
                     urlStrSet.delete(key);
                     console.log(`HTTP 404 [${url.pathname}${url.search}]`);
                 }
@@ -410,9 +442,9 @@ class crawler {
                     let calculatedMd5 = crypto.createHash("md5").update(resp.body).digest("hex").toLowerCase();
                     if (md5 != null && calculatedMd5 !== md5)
                         throw new Error(`md5 mismatch on [${url.pathname}${url.search}]`);
-                    this.saveFile(url.pathname, resp.body, resp.contentType, calculatedMd5);
-                    this.staticFile404Set.delete(url.pathname);
-                    currentStaticFile404Set.delete(url.pathname);
+                    this.saveFile(key, resp.body, resp.contentType, calculatedMd5);
+                    this.staticFile404Set.delete(key);
+                    currentStaticFile404Set.delete(key);
                     if (resultMap.has(key))
                         throw new Error(`resultMap already has key=[${key}]`);
                     resultMap.set(key, { url: url, resp: resp });
@@ -571,6 +603,29 @@ crawler.htmlRegEx = /^text\/html(?=(\s|;|$))/i;
 crawler.javaScriptRegEx = /^application\/javascript(?=(\s|;|$))/i;
 crawler.jsonRegEx = /^application\/json(?=(\s|;|$))/i;
 crawler.md5RegEx = /^[0-9a-f]{32}$/i;
+crawler.fileExtRegEx = /\.[^\.]+$/;
+crawler.compressableFileExtSet = new Set([
+    ".ExportJson",
+    ".bytes",
+    //".canx",
+    ".css",
+    ".db",
+    //".hca",
+    ".html",
+    //".jpg",
+    ".js",
+    ".json",
+    ".moc",
+    //".mp4",
+    ".mtn",
+    ".plist",
+    //".png",
+    //".usm",
+    ".vfx",
+    ".vfxb",
+    ".vfxj",
+    //".zip",
+]);
 crawler.defMimeType = "application/octet-stream";
 crawler.staticFileMapPath = path.join(".", "staticFileMap.json");
 crawler.staticFile404SetPath = path.join(".", "staticFile404Set.json");
