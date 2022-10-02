@@ -642,7 +642,7 @@ export class crawler {
                     }
                 } catch (e) {
                     console.error(`batchHttp2Get error on url=[${url.href}]`, e);
-                    if (retries - i > 0) {
+                    if (retries - i > 0 && !stoppedCrawling) {
                         const delay = 3000 + Math.trunc((i * 2 + Math.random()) * 1000);
                         console.warn(`retry in ${delay}ms...`);
                         await new Promise<void>((resolve) => setTimeout(() => resolve(), delay));
