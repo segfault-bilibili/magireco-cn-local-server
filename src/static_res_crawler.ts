@@ -821,6 +821,27 @@ export class crawler {
             } else throw new Error("list.status is not fulfilled");
         });
 
+        // guess asset_section_[event_]1068.json filenames
+        let assetFullVoiceIndex = crawler.assetListFileNameList.findIndex((name) => name === "asset_fullvoice.json");
+        let sectionNameSet = new Set<string>();
+        listOfAssetList.forEach((list, index) => {
+            if (list.status === 'fulfilled') {
+                if (index == assetFullVoiceIndex) {
+                    list.value.forEach((item) => {
+                        let matched = item.file_list[0].url.match(/(?<=^\d+\/sound_native\/fullvoice\/)section_[^\/]+/);
+                        if (matched != null) sectionNameSet.add(matched[0]);
+                    });
+                }
+            } else throw new Error("list.status is not fulfilled");
+        });
+        let guessedAssetSectionUrlList: Array<{ url: URL }> = [];
+        sectionNameSet.forEach((sectionName) => guessedAssetSectionUrlList.push({
+            url: new URL(
+                `${this.httpsPatchMagicaNoSlash}/resource/download/asset/master/resource/${assetver}/asset_${sectionName}.json`
+            )
+        }));
+        await this.batchHttp2GetSave(`guessedAssetSection`, guessedAssetSectionUrlList);
+
         return {
             assetver: assetver,
             assetConfigVersion: assetConfigVersion,
