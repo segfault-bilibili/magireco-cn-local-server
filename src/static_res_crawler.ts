@@ -411,6 +411,10 @@ export class crawler {
         });
     }
 
+    isKnown404(pathInUrl: string): boolean {
+        return this.staticFile404Set.has(pathInUrl);
+    }
+
     private checkStaticCompleted(): { isWebResCompleted: boolean, isAssetsCompleted: boolean } {
         const unsortedFileExtSet = new Set<string>();
         let isWebResCompleted: boolean | undefined;

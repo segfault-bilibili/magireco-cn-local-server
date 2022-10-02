@@ -58,6 +58,7 @@ export class fakeMagirecoProdRespHook implements hook {
             if (body == null) {
                 statusCode = 404;
                 body = Buffer.from(new ArrayBuffer(0));
+                if (!this.crawler.isKnown404(url.pathname)) console.error(`responding 404 [${url.pathname}]`);
             } else {
                 statusCode = 200;
             }
