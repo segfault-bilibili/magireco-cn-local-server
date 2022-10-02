@@ -1,7 +1,7 @@
 import * as http from "http";
 import * as http2 from "http2";
 import * as crypto from "crypto";
-import { fakeResponse, hook, passOnRequest, passOnRequestBody } from "../local_server";
+import { fakeResponse, hook, localServer, passOnRequest, passOnRequestBody } from "../local_server";
 import * as parameters from "../parameters";
 import * as staticResCrawler from "../static_res_crawler";
 
@@ -48,12 +48,26 @@ export class fakeMagirecoProdRespHook implements hook {
         } else {
             let statusCode: number;
             let contentType = this.crawler.getContentType(url.pathname);
+            let contentEncoding: string | undefined;
             let body: Buffer | undefined;
             try {
                 body = this.crawler.readFile(url.pathname);
             } catch (e) {
                 console.error(`error serving [${url.pathname}]`, e);
                 body = undefined;
+            }
+            if (body == null && url.pathname.endsWith(".gz")) {
+                try {
+                    let uncompressed = this.crawler.readFile(url.pathname.replace(/\.gz$/, ""));
+                    if (uncompressed != null) {
+                        contentType = this.crawler.getContentType(url.pathname);
+                        body = localServer.compress(uncompressed, "gzip");
+                        contentEncoding = "gzip";
+                    }
+                } catch (e) {
+                    console.error(`error retrying generating gz`, e);
+                    body = undefined;
+                }
             }
             if (body == null) {
                 // imitated xml response but it still doesn't trigger error dialog (which then leads to toppage) as expected
@@ -66,6 +80,9 @@ export class fakeMagirecoProdRespHook implements hook {
             }
             const headers = {
                 [http2.constants.HTTP2_HEADER_CONTENT_TYPE]: contentType,
+            }
+            if (contentEncoding != null) {
+                headers[http2.constants.HTTP2_HEADER_CONTENT_ENCODING] = contentEncoding;
             }
             if (parameters.params.VERBOSE) console.log(`serving static ${url.pathname}${url.search} (ignored query part)`);
             return {
