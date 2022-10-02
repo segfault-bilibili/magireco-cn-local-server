@@ -467,8 +467,8 @@ export class crawler {
                     completed = true;
                     mergedAssetList.find((item) => {
                         const fileName = item.file_list[0].url;
-                        const key = `/magica/resource/download/asset/master/resource/${assetver}/${fileName}`;
-                        if (!this.staticFileMap.has(key) || !this.staticFile404Set.has(key)) {
+                        const key = `/magica/resource/download/asset/master/resource/${fileName}`;
+                        if (!this.staticFileMap.has(key) && !this.staticFile404Set.has(key)) {
                             console.log(`[${key}] is still missing`);
                             completed = false;
                             return true;
