@@ -224,6 +224,9 @@ export class crawler {
             if (matched == null) throw this._lastError = new Error(`cannot match time in index.html`);
             let headTime = parseInt(matched[1]);
             if (isNaN(headTime)) throw this._lastError = new Error(`headTime is NaN`);
+            console.log(this._crawlingStatus = `crawling baseConfig.js ...`);
+            await this.fetchSinglePage(crawler.prodHost, `/magica/js/_common/baseConfig.js?v=${headTime}`,
+                crawler.javaScriptRegEx);
             console.log(this._crawlingStatus = `crawling files in replacement.js ...`);
             await this.fetchFilesInReplacementJs(headTime);
         }
