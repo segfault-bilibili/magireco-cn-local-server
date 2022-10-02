@@ -964,7 +964,7 @@ export class localServer {
         });
     }
 
-    static compress(data: Buffer, encoding?: string): Buffer {
+    static compress(data: Buffer, encoding?: string, quality = 8): Buffer {
         if (encoding == null) return data = Buffer.concat([data]);
         let compressed: Buffer;
         switch (encoding) {
@@ -978,7 +978,7 @@ export class localServer {
                 compressed = zlib.brotliCompressSync(data, {
                     params: {
                         [zlib.constants.BROTLI_PARAM_MODE]: zlib.constants.BROTLI_MODE_TEXT,
-                        [zlib.constants.BROTLI_PARAM_QUALITY]: 8,
+                        [zlib.constants.BROTLI_PARAM_QUALITY]: quality,
                         [zlib.constants.BROTLI_PARAM_SIZE_HINT]: data.byteLength,
                     },
                 });

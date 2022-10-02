@@ -107,6 +107,7 @@ export class crawler {
     private static readonly staticFileMapPathUncomp = this.staticFileMapPath.replace(/\.br$/, "");
     private static readonly staticFile404SetPath = path.join(".", "staticFile404Set.json.br");
     private static readonly staticFile404SetPathUncomp = this.staticFile404SetPath.replace(/\.br$/, "");
+    private static readonly brotliQuality = 0;
 
     private static readonly prodHost = "l3-prod-all-gs-mfsn2.bilibiligame.net";
     private get httpsProdMagicaNoSlash(): string { return `https://${crawler.prodHost}/magica`; }
@@ -161,7 +162,7 @@ export class crawler {
             if (fs.existsSync(crawler.staticFileMapPathUncomp) && fs.statSync(crawler.staticFileMapPathUncomp).isFile()) {
                 let uncompressed = fs.readFileSync(crawler.staticFileMapPathUncomp);
                 json = uncompressed.toString('utf-8');
-                let compressed = localServer.compress(uncompressed, "br");
+                let compressed = localServer.compress(uncompressed, 'br', crawler.brotliQuality);
                 fs.writeFileSync(crawler.staticFileMapPath, compressed);
                 fs.rmSync(crawler.staticFileMapPathUncomp);
             } else {
@@ -183,7 +184,7 @@ export class crawler {
             if (fs.existsSync(crawler.staticFile404SetPathUncomp) && fs.statSync(crawler.staticFile404SetPathUncomp).isFile()) {
                 let uncompressed = fs.readFileSync(crawler.staticFile404SetPathUncomp);
                 json = uncompressed.toString('utf-8');
-                let compressed = localServer.compress(uncompressed, "br");
+                let compressed = localServer.compress(uncompressed, 'br', crawler.brotliQuality);
                 fs.writeFileSync(crawler.staticFile404SetPath, compressed);
                 fs.rmSync(crawler.staticFile404SetPathUncomp);
             } else {
@@ -364,12 +365,12 @@ export class crawler {
     private saveFileMeta(): void {
         console.log(`saving stringifiedMap ...`);
         let stringifiedMap = JSON.stringify(this.staticFileMap, parameters.replacer);
-        let compressedMap = localServer.compress(Buffer.from(stringifiedMap, 'utf-8'), 'br');
+        let compressedMap = localServer.compress(Buffer.from(stringifiedMap, 'utf-8'), 'br', crawler.brotliQuality);
         fs.writeFileSync(crawler.staticFileMapPath, compressedMap);
         console.log(`saved stringifiedMap`);
         console.log(`saving stringified404Set ...`);
         let stringified404Set = JSON.stringify(this.staticFile404Set, parameters.replacer);
-        let compressed404Set = localServer.compress(Buffer.from(stringified404Set, 'utf-8'), 'br');
+        let compressed404Set = localServer.compress(Buffer.from(stringified404Set, 'utf-8'), 'br', crawler.brotliQuality);
         fs.writeFileSync(crawler.staticFile404SetPath, compressed404Set);
         console.log(`saved stringified404Set`);
     }
@@ -608,7 +609,7 @@ export class crawler {
         let resultSet = new Set<string>();
 
         let hasError = false, stoppedCrawling = false;
-        const saveFileMetaInterval = 5000;
+        const saveFileMetaInterval = 10000;
         let lastSavedFileMeta = 0;
         let crawl = async (queueNo: number): Promise<boolean> => {
             this._crawlingStatus = `[${stageStr}]`
