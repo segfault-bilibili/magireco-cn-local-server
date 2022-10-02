@@ -1,5 +1,6 @@
 import * as http from "http";
 import * as http2 from "http2";
+import * as crypto from "crypto";
 import { fakeResponse, hook, passOnRequest, passOnRequestBody } from "../local_server";
 import * as parameters from "../parameters";
 import * as staticResCrawler from "../static_res_crawler";
@@ -52,12 +53,13 @@ export class fakeMagirecoProdRespHook implements hook {
                 body = this.crawler.readFile(url.pathname);
             } catch (e) {
                 console.error(`error serving [${url.pathname}]`, e);
-                contentType = staticResCrawler.crawler.defMimeType;
                 body = undefined;
             }
             if (body == null) {
+                // imitated xml response but it still doesn't trigger error dialog (which then leads to toppage) as expected
                 statusCode = 404;
-                body = Buffer.from(new ArrayBuffer(0));
+                contentType = "application/xml";
+                body = Buffer.from(this.get404xml(url.hostname, url.pathname), 'utf-8');
                 if (!this.crawler.isKnown404(url.pathname)) console.error(`responding 404 [${url.pathname}]`);
             } else {
                 statusCode = 200;
@@ -105,4 +107,17 @@ export class fakeMagirecoProdRespHook implements hook {
         body?: string | Buffer
     ): void {
     }
+
+    private get404xml(host: string, key: string): string {
+        return `<?xml version="1.0" encoding="UTF-8"?>`
+            + `\n<Error>`
+            + `\n  <Code>NoSuchKey</Code>`
+            + `\n  <Message>The specified key does not exist.</Message>`
+            + `\n  <RequestId>${crypto.randomBytes(12).toString('hex').toUpperCase()}</RequestId>`
+            + `\n  <HostId>${host}</HostId>`
+            + `\n  <Key>${key}</Key>`
+            + `\n</Error>`
+            + `\n`;
+    }
+
 }
