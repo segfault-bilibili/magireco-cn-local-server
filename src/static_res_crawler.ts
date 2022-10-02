@@ -758,10 +758,12 @@ export class crawler {
         "asset_voice.json",
         "asset_movie_high.json",
         "asset_movie_low.json",
+        "asset_fullvoice.json",
         "zip_asset_main.json",
         "zip_asset_voice.json",
         "zip_asset_movie_high.json",
         "zip_asset_movie_low.json",
+        "zip_asset_fullvoice.json",
     ];
     private readAssetVer(maintenanceConfigStr: string): string {
         const maintenanceConfig = JSON.parse(maintenanceConfigStr);
