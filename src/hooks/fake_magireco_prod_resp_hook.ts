@@ -9,13 +9,15 @@ export class fakeMagirecoProdRespHook implements hook {
     private readonly crawler: staticResCrawler.crawler;
 
     private readonly magirecoProdUrlRegEx: RegExp;
+    private readonly magirecoPatchUrlRegEx: RegExp;
     private readonly apiPathNameRegEx: RegExp;
 
     constructor(params: parameters.params, crawler: staticResCrawler.crawler) {
         this.params = params;
         this.crawler = crawler;
 
-        this.magirecoProdUrlRegEx = /^(http|https):\/\/l\d+-[0-9a-z\-]+-mfsn\d*\.bilibiligame\.net\/magica\/.+$/;
+        this.magirecoProdUrlRegEx = /^(http|https):\/\/l\d+-prod-[0-9a-z\-]+-mfsn\d*\.bilibiligame\.net\/magica\/.+$/;
+        this.magirecoPatchUrlRegEx = /^(http|https):\/\/line\d+-prod-patch-mfsn\d*\.bilibiligame\.net\/magica\/.+$/;
         this.apiPathNameRegEx = /^\/magica\/api\/.+$/;
     }
 
@@ -33,7 +35,8 @@ export class fakeMagirecoProdRespHook implements hook {
         }
 
         const isMagiRecoProd = url?.href.match(this.magirecoProdUrlRegEx) != null;
-        if (!isMagiRecoProd) return {
+        const isMagiRecoPatch = url?.href.match(this.magirecoPatchUrlRegEx) != null;
+        if (!isMagiRecoProd && !isMagiRecoPatch) return {
             nextAction: "passOnRequest",
             interceptResponse: false,
         }
