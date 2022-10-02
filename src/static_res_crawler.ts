@@ -451,7 +451,8 @@ export class crawler {
         return await this.http2Request(url, overrideReqHeaders, false, postData) as http2BufResult;
     }
 
-    private async batchHttp2GetSave(stageStr: string, urlList: Array<{ url: URL, md5?: string }>, concurrent = 8
+    private async batchHttp2GetSave(stageStr: string, urlList: Array<{ url: URL, md5?: string }>,
+        concurrent = 8, retries = 5
     ): Promise<Array<http2BatchGetResultItem>> {
         let urlStrSet = new Set<string>(), abandonedSet = new Set<string>(), skippedSet = new Set<string>();
         let currentStaticFile404Set = new Set<string>();
@@ -465,6 +466,8 @@ export class crawler {
 
         concurrent = Math.floor(concurrent);
         if (concurrent < 1 || concurrent > 8) throw new Error("concurrent < 1 || concurrent > 8");
+        retries = Math.floor(retries);
+        if (retries < 0 || retries > 8) throw new Error("retries < 0 || retries > 8");
 
         let resultMap = new Map<string, http2BatchGetResultItem>();
 
@@ -513,28 +516,38 @@ export class crawler {
                 }
             }
 
-            try {
-                let resp = await this.http2GetBuf(url);
-                if (resp.is404) {
-                    this.staticFile404Set.add(key);
-                    currentStaticFile404Set.add(key);
-                    urlStrSet.delete(key);
-                    console.log(`HTTP 404 [${url.pathname}${url.search}]`);
-                } else {
-                    let calculatedMd5 = crypto.createHash("md5").update(resp.body).digest("hex").toLowerCase();
-                    if (md5 != null && calculatedMd5 !== md5) throw new Error(`md5 mismatch on [${url.pathname}${url.search}]`);
-                    this.saveFile(key, resp.body, resp.contentType, calculatedMd5);
-                    this.staticFile404Set.delete(key);
-                    currentStaticFile404Set.delete(key);
-                    if (resultMap.has(key)) throw new Error(`resultMap already has key=[${key}]`);
-                    resultMap.set(key, { url: url, resp: resp });
+            for (let i = 0; i <= retries; i++) {
+                try {
+                    let resp = await this.http2GetBuf(url);
+                    if (resp.is404) {
+                        this.staticFile404Set.add(key);
+                        currentStaticFile404Set.add(key);
+                        urlStrSet.delete(key);
+                        console.log(`HTTP 404 [${url.pathname}${url.search}]`);
+                        break;
+                    } else {
+                        let calculatedMd5 = crypto.createHash("md5").update(resp.body).digest("hex").toLowerCase();
+                        if (md5 != null && calculatedMd5 !== md5) throw new Error(`md5 mismatch on [${url.pathname}${url.search}]`);
+                        if (resultMap.has(key)) throw new Error(`resultMap already has key=[${key}]`);
+                        resultMap.set(key, { url: url, resp: resp });
+                        this.saveFile(key, resp.body, resp.contentType, calculatedMd5);
+                        this.staticFile404Set.delete(key);
+                        currentStaticFile404Set.delete(key);
+                        break;
+                    }
+                } catch (e) {
+                    console.error(`batchHttp2Get error on url=[${url.href}]`, e);
+                    if (retries - i > 0) {
+                        const delay = 3000 + Math.trunc((i * 2 + Math.random()) * 1000);
+                        console.warn(`retry in ${delay}ms...`);
+                        await new Promise<void>((resolve) => setTimeout(() => resolve(), delay));
+                    } else {
+                        abandonedSet.add(key);
+                        urlStrSet.delete(key);
+                        hasError = true;
+                        throw e;
+                    }
                 }
-            } catch (e) {
-                abandonedSet.add(key);
-                urlStrSet.delete(key);
-                hasError = true;
-                console.error(`batchHttp2Get error on url=[${url.href}]`, e);
-                throw e;
             }
 
             return true;
