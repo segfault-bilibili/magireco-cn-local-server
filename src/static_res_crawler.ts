@@ -402,7 +402,7 @@ export class crawler {
         let currentStaticFile404Set = new Set<string>();
         urlList.forEach((item) => {
             const url = item.url;
-            const key = url.href;
+            const key = url.pathname;
             if (urlStrSet.has(key)) throw new Error(`found duplicate url=${key} in urlList`);
             urlStrSet.add(key);
         });
@@ -423,7 +423,7 @@ export class crawler {
             if (item == null) return false;
 
             let url = item.url, md5 = item.md5;
-            let key = url.href;
+            let key = url.pathname;
 
             if (hasError) {
                 abandonedSet.add(key);
@@ -443,24 +443,26 @@ export class crawler {
 
             if (md5 != null) {
                 const fileMeta = this.staticFileMap.get(key);
-                skippedSet.add(key);
-                urlStrSet.delete(key);
-                if (fileMeta != null && fileMeta[0].md5 === md5) return true; // skip downloaded asset
+                if (fileMeta != null && fileMeta[0].md5 === md5) {
+                    skippedSet.add(key);
+                    urlStrSet.delete(key);
+                    return true; // skip downloaded asset
+                }
             }
 
             try {
                 let resp = await this.http2GetBuf(url);
                 if (resp.is404) {
-                    this.staticFile404Set.add(url.pathname);
-                    currentStaticFile404Set.add(url.pathname);
+                    this.staticFile404Set.add(key);
+                    currentStaticFile404Set.add(key);
                     urlStrSet.delete(key);
                     console.log(`HTTP 404 [${url.pathname}${url.search}]`);
                 } else {
                     let calculatedMd5 = crypto.createHash("md5").update(resp.body).digest("hex").toLowerCase();
                     if (md5 != null && calculatedMd5 !== md5) throw new Error(`md5 mismatch on [${url.pathname}${url.search}]`);
-                    this.saveFile(url.pathname, resp.body, resp.contentType, calculatedMd5);
-                    this.staticFile404Set.delete(url.pathname);
-                    currentStaticFile404Set.delete(url.pathname);
+                    this.saveFile(key, resp.body, resp.contentType, calculatedMd5);
+                    this.staticFile404Set.delete(key);
+                    currentStaticFile404Set.delete(key);
                     if (resultMap.has(key)) throw new Error(`resultMap already has key=[${key}]`);
                     resultMap.set(key, { url: url, resp: resp });
                 }
