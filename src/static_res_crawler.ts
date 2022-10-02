@@ -60,6 +60,30 @@ export class crawler {
 
     private static readonly md5RegEx = /^[0-9a-f]{32}$/i;
 
+    private static readonly fileExtRegEx = /\.[^\.]+$/;
+    private static readonly compressableFileExtSet = new Set<string>([
+        ".ExportJson",
+        ".bytes",
+        //".canx",
+        ".css",
+        ".db",
+        //".hca",
+        ".html",
+        //".jpg",
+        ".js",
+        ".json",
+        ".moc",
+        //".mp4",
+        ".mtn",
+        ".plist",
+        //".png",
+        //".usm",
+        ".vfx",
+        ".vfxb",
+        ".vfxj",
+        //".zip",
+    ]);
+
     private readonly device_id: string;
     private get timeStampSec(): string {
         let ts = new Date().getTime();
@@ -134,6 +158,7 @@ export class crawler {
         this.localRootDir = path.join(".", "static");
         this.localConflictDir = path.join(".", "conflict");
 
+        const unsortedFileExtSet = new Set<string>();
         let isWebResCompleted: boolean | undefined;
         try {
             const replacementJs = this.readFile("/magica/js/system/replacement.js")?.toString('utf-8');
@@ -142,6 +167,10 @@ export class crawler {
                     replacementJs.replace(/^\s*window\.fileTimeStamp\s*=\s*/, "")
                 );
                 let completed = true;
+                for (let subPath in fileTimeStampObj) {
+                    let matched = subPath.match(crawler.fileExtRegEx);
+                    if (matched) unsortedFileExtSet.add(matched[0]);
+                }
                 for (let subPath in fileTimeStampObj) {
                     let key = `/magica/${subPath}`.split("/").map((s) => encodeURIComponent(s)).join("/");
                     if (!this.staticFileMap.has(key) && !this.staticFile404Set.has(key)) {
@@ -177,6 +206,10 @@ export class crawler {
                     assetList.forEach((item) => mergedAssetList.push(item));
                 });
                 if (allAssetListExists) {
+                    mergedAssetList.forEach((item) => {
+                        let matched = item.file_list[0].url.match(crawler.fileExtRegEx);
+                        if (matched) unsortedFileExtSet.add(matched[0]);
+                    });
                     mergedAssetList.find((item) => {
                         const fileName = item.file_list[0].url;
                         const key = `/magica/resource/download/asset/master/resource/${assetver}/${fileName}`;
@@ -192,6 +225,20 @@ export class crawler {
             }
         } catch (e) {
             isAssetsCompleted = false;
+            console.error(e);
+        }
+        try {
+            const writePath = path.join(".", "fileExtSet.json");
+            const fileExtArray = Array.from(unsortedFileExtSet.keys()).sort();
+            const fileExtSet = new Set<string>(fileExtArray);
+            const stringified = JSON.stringify(fileExtSet, parameters.replacer, 4);
+            let noChange = false;
+            if (fs.existsSync(writePath) && fs.statSync(writePath).isFile()) {
+                const content = fs.readFileSync(writePath, 'utf-8');
+                if (content === stringified) noChange = true;
+            }
+            if (!noChange) fs.writeFileSync(writePath, stringified);
+        } catch (e) {
             console.error(e);
         }
         this.isAssetsCompleted = isAssetsCompleted != null ? isAssetsCompleted : false;
@@ -362,9 +409,12 @@ export class crawler {
             [http2.constants.HTTP2_HEADER_USER_AGENT]: `Mozilla/5.0 (Linux; Android 6.0.1; MuMu Build/V417IR; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/66.0.3359.158 Mobile Safari/537.36`,
             [http2.constants.HTTP2_HEADER_ACCEPT]: "*/*",
             [http2.constants.HTTP2_HEADER_REFERER]: `https://${host}/magica/index.html`,
-            [http2.constants.HTTP2_HEADER_ACCEPT_ENCODING]: `gzip, deflate`,
             [http2.constants.HTTP2_HEADER_ACCEPT_LANGUAGE]: `zh-CN,en-US;q=0.9`,
             ["X-Requested-With"]: `com.bilibili.madoka.bilibili`,
+        }
+        const fileExtMatched = url.pathname.match(crawler.fileExtRegEx);
+        if (fileExtMatched != null && crawler.compressableFileExtSet.has(fileExtMatched[0])) {
+            reqHeaders[http2.constants.HTTP2_HEADER_ACCEPT_ENCODING] = `gzip, deflate`;
         }
         const resp = await this.localServer.sendHttp2RequestAsync(authorityURL, reqHeaders, postData, cvtBufToStr);
         const respHeaders = resp.headers;

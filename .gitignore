@@ -112,3 +112,4 @@ static/
 conflict/
 staticFileMap.json
 staticFile404Set.json
+fileExtSet.json
