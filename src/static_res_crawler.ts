@@ -558,7 +558,7 @@ export class crawler {
 
     private async batchHttp2GetSave(stageStr: string, urlList: Array<{ url: URL, md5?: string }>,
         concurrent = 8, retries = 5
-    ): Promise<Array<http2BatchGetResultItem>> {
+    ): Promise<void> {
         let urlStrSet = new Set<string>(), abandonedSet = new Set<string>(), skippedSet = new Set<string>();
         let currentStaticFile404Set = new Set<string>();
         urlList.forEach((item) => {
@@ -574,14 +574,14 @@ export class crawler {
         retries = Math.floor(retries);
         if (retries < 0 || retries > 8) throw new Error("retries < 0 || retries > 8");
 
-        let resultMap = new Map<string, http2BatchGetResultItem>();
+        let resultSet = new Set<string>();
 
         let hasError = false, stoppedCrawling = false;
         const saveFileMetaInterval = 5000;
         let lastSavedFileMeta = 0;
         let crawl = async (queueNo: number): Promise<boolean> => {
             this._crawlingStatus = `[${stageStr}]`
-                + ` fetched/total=[${resultMap.size}/${total}] remaining=[${urlStrSet.size - resultMap.size}]`
+                + ` fetched/total=[${resultSet.size}/${total}] remaining=[${urlStrSet.size - resultSet.size}]`
                 + ` not_found=[${currentStaticFile404Set.size}] skipped=[${skippedSet.size}] abandoned=[${abandonedSet.size}]`;
 
             let item = urlList.shift();
@@ -633,8 +633,8 @@ export class crawler {
                     } else {
                         let calculatedMd5 = crypto.createHash("md5").update(resp.body).digest("hex").toLowerCase();
                         if (md5 != null && calculatedMd5 !== md5) throw new Error(`md5 mismatch on [${url.pathname}${url.search}]`);
-                        if (resultMap.has(key)) throw new Error(`resultMap already has key=[${key}]`);
-                        resultMap.set(key, { url: url, resp: resp });
+                        if (resultSet.has(key)) throw new Error(`resultSet already has key=[${key}]`);
+                        resultSet.add(key);
                         this.saveFile(key, resp.body, resp.contentType, calculatedMd5);
                         this.staticFile404Set.delete(key);
                         currentStaticFile404Set.delete(key);
@@ -668,16 +668,13 @@ export class crawler {
 
         urlStrSet.forEach((urlStr) => {
             if (
-                !resultMap.has(urlStr) && !skippedSet.has(urlStr) && !abandonedSet.has(urlStr)
+                !resultSet.has(urlStr) && !skippedSet.has(urlStr) && !abandonedSet.has(urlStr)
                 && !currentStaticFile404Set.has(urlStr)
             ) {
                 // should never happen
-                throw new Error(`key=[${urlStr}] is missing in both resultMap/skippedSet/abandonedSet/currentStaticFile404Set`);
+                throw new Error(`key=[${urlStr}] is missing in both resultSet/skippedSet/abandonedSet/currentStaticFile404Set`);
             }
         });
-        let results: Array<http2BatchGetResultItem> = [];
-        resultMap.forEach((val) => results.push(val));
-        return results;
     }
 
 
