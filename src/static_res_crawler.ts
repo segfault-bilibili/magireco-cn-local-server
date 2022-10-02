@@ -46,13 +46,19 @@ type assetConfigObj = {
     assetList: Array<assetListEntry>
 }
 
+type fsckStatus = {
+    passed: number,
+    remaining: number,
+    notPassed: number,
+}
+
 
 export class crawler {
     private readonly params: parameters.params;
     private readonly localServer: localServer;
 
-    readonly isWebResCompleted: boolean;
-    readonly isAssetsCompleted: boolean;
+    isWebResCompleted: boolean;
+    isAssetsCompleted: boolean;
 
     private static readonly htmlRegEx = /^text\/html(?=(\s|;|$))/i;
     private static readonly javaScriptRegEx = /^application\/javascript(?=(\s|;|$))/i;
@@ -122,6 +128,21 @@ export class crawler {
         return !this._isCrawling && this.isCrawlingCompleted && !this.stopCrawling;
     }
     private isCrawlingCompleted = false;
+    get isFscking(): boolean {
+        const fsckStatus = this._fsckStatus;
+        if (fsckStatus == null) return false;
+        return fsckStatus.remaining > 0;
+    }
+    get lastFsckResult(): string {
+        const fsckStatus = this._fsckStatus;
+        if (fsckStatus == null) return "";
+        return `[${fsckStatus.passed}] passed, [${fsckStatus.remaining}] remaining`
+            + `, [${fsckStatus.notPassed}] missing/mismatch/error`;
+    }
+    get fsckStatus(): fsckStatus | undefined {
+        return this._fsckStatus;
+    }
+    private _fsckStatus?: fsckStatus;
 
     constructor(params: parameters.params, localServer: localServer) {
         this.params = params;
@@ -158,90 +179,9 @@ export class crawler {
         this.localRootDir = path.join(".", "static");
         this.localConflictDir = path.join(".", "conflict");
 
-        const unsortedFileExtSet = new Set<string>();
-        let isWebResCompleted: boolean | undefined;
-        try {
-            const replacementJs = this.readFile("/magica/js/system/replacement.js")?.toString('utf-8');
-            if (replacementJs != null) {
-                const fileTimeStampObj: Record<string, string> = JSON.parse(
-                    replacementJs.replace(/^\s*window\.fileTimeStamp\s*=\s*/, "")
-                );
-                let completed = true;
-                for (let subPath in fileTimeStampObj) {
-                    let matched = subPath.match(crawler.fileExtRegEx);
-                    if (matched) unsortedFileExtSet.add(matched[0]);
-                }
-                for (let subPath in fileTimeStampObj) {
-                    let key = `/magica/${subPath}`.split("/").map((s) => encodeURIComponent(s)).join("/");
-                    if (!this.staticFileMap.has(key) && !this.staticFile404Set.has(key)) {
-                        console.log(`[${key}] is still missing`);
-                        completed = false;
-                        break;
-                    }
-                }
-                isWebResCompleted = completed;
-            }
-        } catch (e) {
-            isWebResCompleted = false;
-            console.error(e);
-        }
-        this.isWebResCompleted = isWebResCompleted != null ? isWebResCompleted : false;
-
-        let isAssetsCompleted: boolean | undefined;
-        try {
-            let completed = true;
-            const maintenanceConfigStr = this.readFile(`/maintenance/magica/config`)?.toString('utf-8');
-            if (maintenanceConfigStr != null) {
-                const assetver = this.readAssetVer(maintenanceConfigStr);
-                const mergedAssetList: Array<assetListEntry> = [];
-                let allAssetListExists = true;
-                crawler.assetListFileNameList.find((fileName) => {
-                    const assetListStr = this.readFile(`/magica/resource/download/asset/master/resource/${assetver}/${fileName}`)
-                        ?.toString('utf-8');
-                    if (assetListStr == null) {
-                        allAssetListExists = false;
-                        return true;
-                    }
-                    const assetList: Array<assetListEntry> = JSON.parse(assetListStr);
-                    assetList.forEach((item) => mergedAssetList.push(item));
-                });
-                if (allAssetListExists) {
-                    mergedAssetList.forEach((item) => {
-                        let matched = item.file_list[0].url.match(crawler.fileExtRegEx);
-                        if (matched) unsortedFileExtSet.add(matched[0]);
-                    });
-                    mergedAssetList.find((item) => {
-                        const fileName = item.file_list[0].url;
-                        const key = `/magica/resource/download/asset/master/resource/${assetver}/${fileName}`;
-                        if (!this.staticFileMap.has(key) || !this.staticFile404Set.has(key)) {
-                            console.log(`[${key}] is still missing`);
-                            completed = false;
-                            return true;
-                        }
-                    });
-                } else {
-                    completed = false;
-                }
-            }
-        } catch (e) {
-            isAssetsCompleted = false;
-            console.error(e);
-        }
-        try {
-            const writePath = path.join(".", "fileExtSet.json");
-            const fileExtArray = Array.from(unsortedFileExtSet.keys()).sort();
-            const fileExtSet = new Set<string>(fileExtArray);
-            const stringified = JSON.stringify(fileExtSet, parameters.replacer, 4);
-            let noChange = false;
-            if (fs.existsSync(writePath) && fs.statSync(writePath).isFile()) {
-                const content = fs.readFileSync(writePath, 'utf-8');
-                if (content === stringified) noChange = true;
-            }
-            if (!noChange) fs.writeFileSync(writePath, stringified);
-        } catch (e) {
-            console.error(e);
-        }
-        this.isAssetsCompleted = isAssetsCompleted != null ? isAssetsCompleted : false;
+        const { isWebResCompleted, isAssetsCompleted } = this.checkStaticCompleted();
+        this.isWebResCompleted = isWebResCompleted;
+        this.isAssetsCompleted = isAssetsCompleted;
     }
 
     fetchAllAsync(): Promise<void> {
@@ -256,12 +196,20 @@ export class crawler {
                         });
                 }).finally(() => {
                     // not changing this._crawlingStatus
+                    try {
+                        const { isWebResCompleted, isAssetsCompleted } = this.checkStaticCompleted();
+                        this.isWebResCompleted = isWebResCompleted;
+                        this.isAssetsCompleted = isAssetsCompleted;
+                    } catch (e) {
+                        console.error(e);
+                    }
                     this.saveFileMeta();
                 })
         );
     }
     async getFetchAllPromise(): Promise<void> {
         if (this._isCrawling) throw new Error("previous crawling has not finished");
+        if (this.isFscking) throw new Error("is still fsck'ing, cannot start crawling");
         this.stopCrawling = false;
         this._isCrawling = true;
         this.isCrawlingCompleted = false;
@@ -397,6 +345,163 @@ export class crawler {
         let stringified404Set = JSON.stringify(this.staticFile404Set, parameters.replacer);
         fs.writeFileSync(crawler.staticFile404SetPath, stringified404Set, 'utf-8');
         console.log(`saved stringified404Set`);
+    }
+    fsck(): Promise<boolean> {
+        return new Promise<boolean>((resolve, reject) => {
+            if (this._isCrawling) {
+                reject(new Error(`is still crawling, cannot perform fsck`));
+                return;
+            }
+            if (this.isFscking) {
+                reject(new Error(`is already performing fsck`));
+                return;
+            }
+
+            const total = this.staticFileMap.size;
+            this._fsckStatus = {
+                passed: 0,
+                remaining: total,
+                notPassed: 0,
+            }
+
+            const okaySet = new Set<string>(), notOkaySet = new Set<string>();
+            const checkNextFile = (it: IterableIterator<[string, Array<fileMeta>]>): void => {
+                const val = it.next();
+                if (val.done) {
+                    this._fsckStatus = {
+                        passed: okaySet.size,
+                        remaining: total - okaySet.size - notOkaySet.size,
+                        notPassed: notOkaySet.size,
+                    }
+                    console.log(this.lastFsckResult);
+                    notOkaySet.forEach((pathInUrl) => this.staticFileMap.delete(pathInUrl));
+                    try {
+                        const { isWebResCompleted, isAssetsCompleted } = this.checkStaticCompleted();
+                        this.isWebResCompleted = isWebResCompleted;
+                        this.isAssetsCompleted = isAssetsCompleted;
+                        this.saveFileMeta();
+                    } catch (e) {
+                        console.error(e);
+                    }
+                    resolve(notOkaySet.size == 0);
+                    return;
+                }
+                const pathInUrl: string = val.value[0], fileMetaArray: Array<fileMeta> = val.value[1];
+                new Promise<void>((resolve) => {
+                    let okay = false;
+                    try {
+                        if (this.checkAlreadyExist(pathInUrl, fileMetaArray[0].md5)) okay = true;
+                    } catch (e) {
+                        console.error(e);
+                    }
+                    if (okay) {
+                        okaySet.add(pathInUrl);
+                    } else {
+                        notOkaySet.add(pathInUrl);
+                    }
+                    this._fsckStatus = {
+                        passed: okaySet.size,
+                        remaining: total - okaySet.size - notOkaySet.size,
+                        notPassed: notOkaySet.size,
+                    }
+                    resolve();
+                }).then(() => setTimeout(() => checkNextFile(it))); // setTimeout to prevent stall
+            }
+            checkNextFile(this.staticFileMap.entries());
+        });
+    }
+
+    private checkStaticCompleted(): { isWebResCompleted: boolean, isAssetsCompleted: boolean } {
+        const unsortedFileExtSet = new Set<string>();
+        let isWebResCompleted: boolean | undefined;
+        try {
+            const replacementJs = this.readFile("/magica/js/system/replacement.js")?.toString('utf-8');
+            if (replacementJs != null) {
+                const fileTimeStampObj: Record<string, string> = JSON.parse(
+                    replacementJs.replace(/^\s*window\.fileTimeStamp\s*=\s*/, "")
+                );
+                for (let subPath in fileTimeStampObj) {
+                    let matched = subPath.match(crawler.fileExtRegEx);
+                    if (matched) unsortedFileExtSet.add(matched[0]);
+                }
+                let completed = true;
+                for (let subPath in fileTimeStampObj) {
+                    let key = `/magica/${subPath}`.split("/").map((s) => encodeURIComponent(s)).join("/");
+                    if (!this.staticFileMap.has(key) && !this.staticFile404Set.has(key)) {
+                        console.log(`[${key}] is still missing`);
+                        completed = false;
+                        break;
+                    }
+                }
+                isWebResCompleted = completed;
+            }
+        } catch (e) {
+            isWebResCompleted = false;
+            console.error(e);
+        }
+        this.isWebResCompleted = isWebResCompleted != null ? isWebResCompleted : false;
+
+        let isAssetsCompleted: boolean | undefined;
+        try {
+            let completed: boolean;
+            const maintenanceConfigStr = this.readFile(`/maintenance/magica/config`)?.toString('utf-8');
+            if (maintenanceConfigStr != null) {
+                const assetver = this.readAssetVer(maintenanceConfigStr);
+                const mergedAssetList: Array<assetListEntry> = [];
+                let allAssetListExists = true;
+                crawler.assetListFileNameList.find((fileName) => {
+                    const assetListStr = this.readFile(`/magica/resource/download/asset/master/resource/${assetver}/${fileName}`)
+                        ?.toString('utf-8');
+                    if (assetListStr == null) {
+                        allAssetListExists = false;
+                        return true;
+                    }
+                    const assetList: Array<assetListEntry> = JSON.parse(assetListStr);
+                    assetList.forEach((item) => mergedAssetList.push(item));
+                });
+                if (allAssetListExists) {
+                    mergedAssetList.forEach((item) => {
+                        let matched = item.file_list[0].url.match(crawler.fileExtRegEx);
+                        if (matched) unsortedFileExtSet.add(matched[0]);
+                    });
+                    completed = true;
+                    mergedAssetList.find((item) => {
+                        const fileName = item.file_list[0].url;
+                        const key = `/magica/resource/download/asset/master/resource/${assetver}/${fileName}`;
+                        if (!this.staticFileMap.has(key) || !this.staticFile404Set.has(key)) {
+                            console.log(`[${key}] is still missing`);
+                            completed = false;
+                            return true;
+                        }
+                    });
+                } else {
+                    completed = false;
+                }
+                isAssetsCompleted = completed;
+            }
+        } catch (e) {
+            isAssetsCompleted = false;
+            console.error(e);
+        }
+        try {
+            const writePath = path.join(".", "fileExtSet.json");
+            const fileExtArray = Array.from(unsortedFileExtSet.keys()).sort();
+            const fileExtSet = new Set<string>(fileExtArray);
+            const stringified = JSON.stringify(fileExtSet, parameters.replacer, 4);
+            let noChange = false;
+            if (fs.existsSync(writePath) && fs.statSync(writePath).isFile()) {
+                const content = fs.readFileSync(writePath, 'utf-8');
+                if (content === stringified) noChange = true;
+            }
+            if (!noChange) fs.writeFileSync(writePath, stringified);
+        } catch (e) {
+            console.error(e);
+        }
+
+        return {
+            isWebResCompleted: isWebResCompleted == null ? false : isWebResCompleted,
+            isAssetsCompleted: isAssetsCompleted == null ? false : isAssetsCompleted,
+        }
     }
 
     private async http2Request(

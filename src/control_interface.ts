@@ -102,10 +102,10 @@ export class controlInterface {
                 const apiName = req.url.replace(/(^\/api\/)|(\?.*$)/g, "");
                 console.log(`controlInterface received api request [${apiName}]`);
                 switch (apiName) {
-                    case "get_download_status":
+                    case "get_status":
                         try {
                             let gameUid = this.getGameUid(this.params.openIdTicket);
-                            this.sendResultAsync(res, 200, JSON.stringify(this.getDownloadStatus(gameUid)), true);
+                            this.sendResultAsync(res, 200, JSON.stringify(this.getStatus(gameUid)), true);
                         } catch (e) {
                             console.error(`${apiName} error`, e);
                             this.sendResultAsync(res, 500, e instanceof Error ? e.message : `${apiName} error`);
@@ -317,6 +317,8 @@ export class controlInterface {
                     case "crawl_static_data":
                         if (this.crawler.isCrawling) {
                             this.sendResultAsync(res, 429, "crawling not yet finished");
+                        } else if (this.crawler.isFscking) {
+                            this.sendResultAsync(res, 429, "is still fscking");
                         } else {
                             try {
                                 let crawlingParams = await this.getParsedPostData(req);
@@ -344,6 +346,23 @@ export class controlInterface {
                             await this.getParsedPostData(req);
                             this.crawler.stopCrawling = true;
                             this.sendResultAsync(res, 200, "stop crawling");
+                        } catch (e) {
+                            console.error(`${apiName} error`, e);
+                            this.sendResultAsync(res, 500, e instanceof Error ? e.message : `${apiName} error`);
+                        }
+                        return;
+                    case "fsck":
+                        try {
+                            await this.getParsedPostData(req);
+                            if (this.crawler.isCrawling) {
+                                this.sendResultAsync(res, 429, "is still crawling");
+                            } else if (this.crawler.isFscking) {
+                                this.sendResultAsync(res, 429, "is already fscking");
+                            } else {
+                                this.crawler.fsck()
+                                    .catch((e) => console.error(`${apiName} error`, e)); // prevent crash
+                                this.sendResultAsync(res, 200, "started fsck");
+                            }
                         } catch (e) {
                             console.error(`${apiName} error`, e);
                             this.sendResultAsync(res, 500, e instanceof Error ? e.message : `${apiName} error`);
@@ -604,13 +623,16 @@ export class controlInterface {
             upstreamProxyCACertStyle = "color: green";
         }
 
-        const downloadingStatus = this.getDownloadStatus(gameUid);
-        const isDownloading = downloadingStatus.isDownloading;
-        const userdataDumpStatus = downloadingStatus.userdataDumpStatus;
-        const userdataDumpStatusStyle = downloadingStatus.userdataDumpStatusStyle
-        const isCrawling = downloadingStatus.isCrawling;
-        const crawlingStatus = downloadingStatus.crawlingStatus;
-        const crawlingStatusStyle = downloadingStatus.crawlingStatusStyle;
+        const status = this.getStatus(gameUid);
+        const isDownloading = status.isDownloading;
+        const userdataDumpStatus = status.userdataDumpStatus;
+        const userdataDumpStatusStyle = status.userdataDumpStatusStyle
+        const isCrawling = status.isCrawling;
+        const crawlingStatus = status.crawlingStatus;
+        const crawlingStatusStyle = status.crawlingStatusStyle;
+        const fsckResult = status.fsckResult;
+        const fsckResultStyle = status.fsckResultStyle;
+        const isFscking = status.isFscking;
 
         const crawlWebRes = this.params.crawlWebRes;
         const crawlAssets = this.params.crawlAssets;
@@ -642,11 +664,11 @@ export class controlInterface {
             + `\n    window.addEventListener('load', (ev) => {`
             + `\n      document.getElementById(\"loginstatus\").textContent = \"${loginStatus}\";`
             + `\n      document.getElementById(\"openidticketstatus\").textContent = \"${openIdTicketStatus}\";`
-            + `\n      let initialCountdown = ${isDownloading || isCrawling ? "20" : "0"};`
+            + `\n      let initialCountdown = ${isDownloading || isCrawling || isFscking ? "20" : "0"};`
             + `\n      async function autoRefresh(countdown) {`
-            + `\n          let status = {isDownloading: true, isCrawling: true};`
+            + `\n          let status = {isDownloading: true, isCrawling: true, isFscking: true};`
             + `\n          try {`
-            + `\n              status = await (await fetch(new URL(\"/api/get_download_status\", document.baseURI))).json();`
+            + `\n              status = await (await fetch(new URL(\"/api/get_status\", document.baseURI))).json();`
             + `\n              countdown = initialCountdown;`
             + `\n          } catch (e) {`
             + `\n              console.error(e);`
@@ -658,7 +680,14 @@ export class controlInterface {
             + `\n          el.textContent = status.crawlingStatus; el.style = status.crawlingStatusStyle;`
             + `\n          document.getElementById(\"crawl_static_data_btn\").disabled = status.isCrawling;`
             + `\n          document.getElementById(\"stop_crawling_btn\").disabled = !status.isCrawling;`
-            + `\n          if (countdown > 0 && (status.isDownloading || status.isCrawling)) setTimeout(() => autoRefresh(--countdown), 500);`
+            + `\n          el = document.getElementById(\"crawl_web_res_lbl\")`
+            + `\n          el.textContent = status.isWebResCompleted ? \"已完成下载\" : \"未完成下载\"; el.style = status.isWebResCompleted ? \"color: green\" : \"\";`
+            + `\n          el = document.getElementById(\"crawl_assets_lbl\");`
+            + `\n          el.textContent = status.isAssetsCompleted ? \"已完成下载\" : \"未完成下载\";el.style = status.isAssetsCompleted ? \"color: green\": \"\"`
+            + `\n          el = document.getElementById(\"fsckresult\");`
+            + `\n          el.textContent = status.fsckResult; el.style = status.fsckResultStyle;`
+            + `\n          document.getElementById(\"fsck_btn\").disabled = status.isFscking;`
+            + `\n          if (countdown > 0 && (status.isDownloading || status.isCrawling || status.isFscking)) setTimeout(() => autoRefresh(--countdown), 500);`
             + `\n      }`
             + `\n      autoRefresh(initialCountdown);`
             + `\n    });`
@@ -934,11 +963,11 @@ export class controlInterface {
             + `\n  <form action=\"/api/crawl_static_data\" method=\"post\">`
             + `\n    <div>`
             + `\n      <input id=\"crawl_web_res\" name=\"crawl_web_res\" value=\"true\" type=\"checkbox\" ${crawlWebRes ? "checked" : ""}>`
-            + `\n      <label for=\"crawl_web_res\">下载Web资源（${isWebResCompleted ? "<b style=\"color: green\">已完成下载</b>" : "未完成下载"}，此部分在停止后不能恢复上次进度）</label>`
+            + `\n      <label for=\"crawl_web_res\">下载Web资源（<b id=\"crawl_web_res_lbl\">TO_BE_FILLED_BY_JAVASCRIPT</b>，此部分在停止后不能恢复上次进度）</label>`
             + `\n    </div>`
             + `\n    <div>`
             + `\n      <input id=\"crawl_assets\" name=\"crawl_assets\" value=\"true\" type=\"checkbox\" ${crawlAssets ? "checked" : ""}>`
-            + `\n      <label for=\"crawl_assets\">下载本地资源（${isAssetsCompleted ? "<b style=\"color: green\">已完成下载</b>" : "未完成下载"}，此部分可自动恢复上次进度）</label>`
+            + `\n      <label for=\"crawl_assets\">下载本地资源（<b id=\"crawl_assets_lbl\">TO_BE_FILLED_BY_JAVASCRIPT</b>，此部分可自动恢复上次进度）</label>`
             + `\n    </div>`
             + `\n    <div>`
             + `\n      <input type=\"submit\" id=\"crawl_static_data_btn\" ${isCrawling ? "disabled" : ""} value=\"开始爬取\">`
@@ -948,6 +977,18 @@ export class controlInterface {
             + `\n  <form action=\"/api/stop_crawling\" method=\"post\">`
             + `\n    <div>`
             + `\n      <input type=\"submit\" id=\"stop_crawling_btn\" ${isCrawling ? "" : "disabled"} value=\"停止爬取\">`
+            + `\n    </div>`
+            + `\n  </form>`
+            + `\n  </fieldset>`
+            + `\n  <fieldset>`
+            + `\n  <legend>检查文件完整性</legend>`
+            + `\n  <div>`
+            + `\n    <button id=\"refreshbtn6\" onclick=\"window.location.reload(true);\">刷新</button>`
+            + `\n    <label id=\"fsckresult\" style=\"${fsckResultStyle}\" for=\"refreshbtn6\">TO_BE_FILLED_BY_JAVASCRIPT</label>`
+            + `\n  </div>`
+            + `\n  <form action=\"/api/fsck\" method=\"post\">`
+            + `\n    <div>`
+            + `\n      <input type=\"submit\" id=\"fsck_btn\" ${isFscking ? "" : "disabled"} value=\"开始检查\">`
             + `\n    </div>`
             + `\n  </form>`
             + `\n  </fieldset>`
@@ -973,13 +1014,18 @@ export class controlInterface {
         return uidMatched != null && !isNaN(Number(uidMatched[0])) ? (Number(uidMatched[0])) : undefined;
     }
 
-    private getDownloadStatus(gameUid: number | undefined): {
+    private getStatus(gameUid: number | undefined): {
         isDownloading: boolean,
         userdataDumpStatus: string,
         userdataDumpStatusStyle: string,
         isCrawling: boolean,
         crawlingStatus: string,
         crawlingStatusStyle: string,
+        isFscking: boolean,
+        fsckResult: string,
+        fsckResultStyle: string,
+        isWebResCompleted: boolean,
+        isAssetsCompleted: boolean,
     } {
         let userdataDumpStatus = "尚未开始从官服下载", userdataDumpStatusStyle = "color: red";;
         const isDownloading = this.userdataDmp.isDownloading;
@@ -1008,6 +1054,20 @@ export class controlInterface {
             if (this.crawler.lastError != null) crawlingStatusStyle = "color: red";
         }
 
+        const isFscking = this.crawler.isFscking;
+        const fsckResult = this.crawler.lastFsckResult;
+        const fsckStatus = this.crawler.fsckStatus;
+        const fsckResultStyle = isFscking
+            ? "color: blue"
+            : fsckStatus == null
+                ? "color: grey"
+                : fsckStatus.notPassed > 0
+                    ? "color: red"
+                    : "color: green";
+
+        const isWebResCompleted = this.crawler.isWebResCompleted;
+        const isAssetsCompleted = this.crawler.isAssetsCompleted;
+
         return {
             isDownloading: isDownloading,
             userdataDumpStatus: userdataDumpStatus,
@@ -1015,6 +1075,11 @@ export class controlInterface {
             isCrawling: isCrawling,
             crawlingStatus: crawlingStatus,
             crawlingStatusStyle: crawlingStatusStyle,
+            isFscking: isFscking,
+            fsckResult: fsckResult,
+            fsckResultStyle: fsckResultStyle,
+            isWebResCompleted: isWebResCompleted,
+            isAssetsCompleted: isAssetsCompleted,
         }
     }
 
