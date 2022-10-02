@@ -123,7 +123,7 @@ export class localServer {
                 const reqHttpVer = cliReq.httpVersion;
                 let methodToSend = method, pathToSend = cliReq.url;
                 let fakedResponse = false;
-                let reqBodyBuf = Buffer.from(new ArrayBuffer(0)), reqBodyStr: string | undefined;
+                const reqBodyBufArray: Array<Buffer> = [];
 
                 let matchedHooks = this.hooks.filter((item): boolean => {
                     let nextAction = item.matchRequest(method, url, reqHttpVer, cliReq.headers);
@@ -150,7 +150,7 @@ export class localServer {
                 let statusMessage: string | undefined;
                 let respHttpVer: string | undefined;
                 let respHeaders: http2.IncomingHttpHeaders;
-                let respBodyBuf = Buffer.from(new ArrayBuffer(0)), respBodyStr: string | undefined;
+                const respBodyBufArray: Array<Buffer> = [];
 
                 let socket: net.Socket | tls.TLSSocket;
                 if (host.match(/^(|www\.)magireco\.local(|:\d{1,5})$/)) {
@@ -195,7 +195,7 @@ export class localServer {
                             else cliRes.writeHead(statusCode, statusMessage, respHeaders);
                             svrRes.on('data', (chunk) => {
                                 // hook
-                                if (matchedHooks.length > 0) respBodyBuf = Buffer.concat([respBodyBuf, chunk as Buffer]);
+                                if (matchedHooks.length > 0) respBodyBufArray.push(chunk as Buffer);
 
                                 try {
                                     cliRes.write(chunk);
@@ -207,6 +207,7 @@ export class localServer {
                             svrRes.on('end', () => {
                                 // hook
                                 if (matchedHooks.length > 0) {
+                                    let respBodyBuf = Buffer.concat(respBodyBufArray), respBodyStr: string | undefined;
                                     try {
                                         const encoding = respHeaders["content-encoding"];
                                         respBodyBuf = localServer.decompress(respBodyBuf, encoding);
@@ -256,7 +257,7 @@ export class localServer {
 
                 cliReq.on('data', (chunk) => {
                     // hook
-                    if (matchedHooks.length > 0) reqBodyBuf = Buffer.concat([reqBodyBuf, chunk as Buffer]);
+                    if (matchedHooks.length > 0) reqBodyBufArray.push(chunk as Buffer);
 
                     try {
                         svrReq?.write(chunk);
@@ -270,6 +271,7 @@ export class localServer {
 
                     // hook
                     if (matchedHooks.length > 0) {
+                        let reqBodyBuf = Buffer.concat(reqBodyBufArray), reqBodyStr: string | undefined;
                         try {
                             const encoding = reqHeaders["content-encoding"];
                             reqBodyBuf = localServer.decompress(reqBodyBuf, encoding);
@@ -364,7 +366,7 @@ export class localServer {
                 const url = reqHeaders[":path"] == null ? undefined : new URL(reqHeaders[":path"], `https://${authority}/`);
                 const reqHttpVer = "2.0"; //FIXME
                 let fakedResponse = false;
-                let reqBodyBuf = Buffer.from(new ArrayBuffer(0)), reqBodyStr: string | undefined;
+                const reqBodyBufArray: Array<Buffer> = [];
 
                 let matchedHooks = this.hooks.filter((item): boolean => {
                     let nextAction = item.matchRequest(method, url, reqHttpVer, reqHeaders);
@@ -393,7 +395,7 @@ export class localServer {
                 let statusMessage: string | undefined;
                 const respHttpVer = "2.0";
                 let respHeaders: http2.IncomingHttpHeaders & http2.IncomingHttpStatusHeader;
-                let respBodyBuf = Buffer.from(new ArrayBuffer(0)), respBodyStr: string | undefined;
+                const respBodyBufArray: Array<Buffer> = [];
 
                 let sess = await this.getH2SessionAsync(authorityURL, alpn, sni);
                 let svrReq: http2.ClientHttp2Stream | undefined;
@@ -425,7 +427,7 @@ export class localServer {
                 });
                 svrReq?.on('data', (chunk) => {
                     // hook
-                    if (matchedHooks.length > 0) respBodyBuf = Buffer.concat([respBodyBuf, chunk as Buffer]);
+                    if (matchedHooks.length > 0) respBodyBufArray.push(chunk as Buffer);
 
                     try {
                         cliReqStream.write(chunk);
@@ -439,6 +441,7 @@ export class localServer {
 
                     // hook
                     if (matchedHooks.length > 0) {
+                        let respBodyBuf = Buffer.concat(respBodyBufArray), respBodyStr: string | undefined;
                         try {
                             const encoding = respHeaders["content-encoding"];
                             respBodyBuf = localServer.decompress(respBodyBuf, encoding);
@@ -474,7 +477,7 @@ export class localServer {
 
                 cliReqStream.on('data', (chunk) => {
                     // hook
-                    if (matchedHooks.length > 0) reqBodyBuf = Buffer.concat([reqBodyBuf, chunk as Buffer]);
+                    if (matchedHooks.length > 0) reqBodyBufArray.push(chunk as Buffer);
 
                     try {
                         svrReq?.write(chunk);
@@ -488,6 +491,7 @@ export class localServer {
 
                     // hook
                     if (matchedHooks.length > 0) {
+                        let reqBodyBuf = Buffer.concat(reqBodyBufArray), reqBodyStr: string | undefined;
                         try {
                             const encoding = reqHeaders["content-encoding"];
                             reqBodyBuf = localServer.decompress(reqBodyBuf, encoding);
@@ -940,9 +944,10 @@ export class localServer {
         cvtBufToStr: boolean
     ): void {
         let respHeaders = headers;
-        let respBodyBuf = Buffer.from(new ArrayBuffer(0)), respBodyStr: string | undefined;
-        request.on('data', (chunk) => { respBodyBuf = Buffer.concat([respBodyBuf, chunk as Buffer]); });
+        const respBodyBufArray: Array<Buffer> = [];
+        request.on('data', (chunk) => { respBodyBufArray.push(chunk as Buffer); });
         request.on('end', () => {
+            let respBodyBuf = Buffer.concat(respBodyBufArray), respBodyStr: string | undefined;
             try {
                 const encoding = respHeaders["content-encoding"];
                 respBodyBuf = localServer.decompress(respBodyBuf, encoding);
@@ -954,8 +959,8 @@ export class localServer {
                 console.error(`handleHttp2Response authority=[${authority}] decompressing or decoding respBodyBuf to string error`, e);
                 reject(e);
             }
-            let respBody = respBodyStr != null ? respBodyStr : respBodyBuf;
-            resolve({ headers: respHeaders, respBody: respBody });
+            const body = respBodyStr != null ? respBodyStr : respBodyBuf;
+            resolve({ headers: respHeaders, respBody: body });
         });
     }
 

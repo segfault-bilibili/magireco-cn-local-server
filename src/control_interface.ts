@@ -517,9 +517,10 @@ export class controlInterface {
             if (!method?.match(/^POST$/i)) reject(Error(`method=${method} is not POST`));
             else {
                 req.on('error', (err) => reject(err));
-                let postData = Buffer.from(new ArrayBuffer(0));
-                req.on('data', (chunk) => postData = Buffer.concat([postData, chunk]));
+                const postDataArray: Array<Buffer> = [];
+                req.on('data', (chunk) => postDataArray.push(chunk as Buffer));
                 req.on('end', () => {
+                    const postData = Buffer.concat(postDataArray);
                     try {
                         const contentType = req.headers["content-type"];
                         if (contentType == null) throw new Error();
