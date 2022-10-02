@@ -256,12 +256,7 @@ export class crawler {
                         });
                 }).finally(() => {
                     // not changing this._crawlingStatus
-                    console.log(`saving stringifiedMap and stringified404Set ...`);
-                    let stringifiedMap = JSON.stringify(this.staticFileMap, parameters.replacer);
-                    fs.writeFileSync(crawler.staticFileMapPath, stringifiedMap, 'utf-8');
-                    let stringified404Set = JSON.stringify(this.staticFile404Set, parameters.replacer);
-                    fs.writeFileSync(crawler.staticFile404SetPath, stringified404Set, 'utf-8');
-                    console.log(`saved stringifiedMap and stringified404Set`);
+                    this.saveFileMeta();
                 })
         );
     }
@@ -393,6 +388,16 @@ export class crawler {
         metaArray.unshift(meta);
         this.staticFileMap.set(pathInUrl, metaArray);
     }
+    private saveFileMeta(): void {
+        console.log(`saving stringifiedMap ...`);
+        let stringifiedMap = JSON.stringify(this.staticFileMap, parameters.replacer);
+        fs.writeFileSync(crawler.staticFileMapPath, stringifiedMap, 'utf-8');
+        console.log(`saved stringifiedMap`);
+        console.log(`saving stringified404Set ...`);
+        let stringified404Set = JSON.stringify(this.staticFile404Set, parameters.replacer);
+        fs.writeFileSync(crawler.staticFile404SetPath, stringified404Set, 'utf-8');
+        console.log(`saved stringified404Set`);
+    }
 
     private async http2Request(
         url: URL, overrideReqHeaders?: http2.OutgoingHttpHeaders, cvtBufToStr = false, postData?: string | Buffer
@@ -464,6 +469,8 @@ export class crawler {
         let resultMap = new Map<string, http2BatchGetResultItem>();
 
         let hasError = false, stoppedCrawling = false;
+        const saveFileMetaInterval = 5000;
+        let lastSavedFileMeta = 0;
         let crawl = async (queueNo: number): Promise<boolean> => {
             this._crawlingStatus = `[${stageStr}]`
                 + ` fetched/total=[${resultMap.size}/${total}] remaining=[${urlStrSet.size - resultMap.size}]`
@@ -471,6 +478,12 @@ export class crawler {
 
             let item = urlList.shift();
             if (item == null) return false;
+
+            const currentTime = new Date().getTime();
+            if (currentTime - lastSavedFileMeta > saveFileMetaInterval) {
+                this.saveFileMeta();
+                lastSavedFileMeta = currentTime;
+            }
 
             let url = item.url, md5 = item.md5;
             let key = url.pathname;
