@@ -111,5 +111,7 @@ lastUserdataDump.br
 static/
 conflict/
 staticFileMap.json
+staticFileMap.json.br
 staticFile404Set.json
+staticFile404Set.json.br
 fileExtSet.json
