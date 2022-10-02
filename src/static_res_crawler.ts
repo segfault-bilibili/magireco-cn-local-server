@@ -530,6 +530,8 @@ export class crawler {
                     resultMap.set(key, { url: url, resp: resp });
                 }
             } catch (e) {
+                abandonedSet.add(key);
+                urlStrSet.delete(key);
                 hasError = true;
                 console.error(`batchHttp2Get error on url=[${url.href}]`, e);
                 throw e;
