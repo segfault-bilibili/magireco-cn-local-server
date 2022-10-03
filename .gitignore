@@ -107,6 +107,7 @@ params.json
 params.json.old
 ca.crt
 lastUserdataDump.br
+lastUserdataDump.br.old
 
 static/
 conflict/
