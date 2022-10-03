@@ -1181,6 +1181,7 @@ export class controlInterface {
                     + `\n</head>`
                     + `\n<body>`
                     + `\n  <label for=\"backbtn\">${statusCode == 200 ? "操作成功，请返回" : "错误"}</label>`
+                    + `\n  <br><b>以下内容可能含有敏感隐私信息，请勿分享。</b>`
                     + `\n  <button id=\"backbtn\" onclick=\"window.history.back();\">返回 Back</button>`
                     + `\n  <hr>`
                     + `\n  <label for=\"httpstatus\">HTTP Status Code</label>`
