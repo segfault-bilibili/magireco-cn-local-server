@@ -29,6 +29,7 @@ export interface fakeResponse extends hookNextAction {
 export interface passOnRequest extends hookNextAction {
     nextAction: "passOnRequest",
     replaceRequest?: {
+        host?: string;
         method?: string,
         path?: string,
     },
@@ -88,46 +89,44 @@ export class localServer {
             if (cliReq.httpVersionMajor !== 1) return;//handled in stream event
 
             const reqHeaders = cliReq.headers;
-            const host = reqHeaders.host;
             const alpn = (cliReq.socket as tls.TLSSocket).alpnProtocol;
             const sni = (cliReq.socket as any).servername;
 
             cliReq.on('error', (err) => {
-                console.error(`request error: host=[${host}] alpn=[${alpn}] sni=[${sni}]`, err);
+                console.error(`request error: host=[${reqHeaders.host}] alpn=[${alpn}] sni=[${sni}]`, err);
                 try {
                     cliRes.writeHead(502, { ["Content-Type"]: "text/plain" });
                     cliRes.end("502 Bad Gateway");
                 } catch (e) {
                     //FIXME temporary workaround to avoid ERR_HTTP2_INVALID_STREAM crash
-                    console.error(`http1 host=[${host}] cliRes.writeHead() error`, e);
+                    console.error(`http1 host=[${reqHeaders.host}] cliRes.writeHead() error`, e);
                 }
             });
 
-            if (host == null) {
+            if (reqHeaders.host == null) {
                 try {
                     cliRes.writeHead(403, { ["Content-Type"]: "text/plain" });
                     cliRes.end("403 Forbidden");
                 } catch (e) {
                     //FIXME temporary workaround to avoid ERR_HTTP2_INVALID_STREAM crash
-                    console.error(`http1 host=[${host}] cliRes.writeHead() error`, e);
+                    console.error(`http1 host=[${reqHeaders.host}] cliRes.writeHead() error`, e);
                 }
                 return;
             }
 
-            if (parameters.params.VERBOSE) console.log(`request accepted, host=[${host}] alpn=[${alpn}] sni=[${sni}]`);
+            if (parameters.params.VERBOSE) console.log(`request accepted, host=[${reqHeaders.host}] alpn=[${alpn}] sni=[${sni}]`);
 
             try {
                 // hook
-                const method = cliReq.method;
-                const url = new URL(cliReq.url, `https://${host}/`);
+                let modifiedMethod = cliReq.method;
                 const reqHttpVer = cliReq.httpVersion;
-                let methodToSend = method, pathToSend = cliReq.url;
                 let fakedResponse = false;
                 const reqBodyBufArray: Array<Buffer> = [];
 
                 let matchedHooks = this.hooks.filter((item): boolean => {
                     if (fakedResponse) return false;
-                    let nextAction = item.matchRequest(method, url, reqHttpVer, cliReq.headers);
+                    let nextAction = item.matchRequest(modifiedMethod, new URL(cliReq.url, `https://${reqHeaders["host"]}`),
+                        reqHttpVer, reqHeaders);
                     switch (nextAction.nextAction) {
                         case "fakeResponse":
                             fakedResponse = true;
@@ -139,8 +138,12 @@ export class localServer {
                         case "passOnRequest":
                             const replaceRequest = nextAction.replaceRequest;
                             if (replaceRequest != null) {
-                                if (replaceRequest.method != null) methodToSend = replaceRequest.method;
-                                if (replaceRequest.path != null) pathToSend = replaceRequest.path;
+                                if (replaceRequest.method != null) modifiedMethod = replaceRequest.method;
+                                if (replaceRequest.host != null) {
+                                    // replace host header since it's http1
+                                    reqHeaders[":authority"] = reqHeaders["host"] = replaceRequest.host;
+                                }
+                                if (replaceRequest.path != null) cliReq.url = replaceRequest.path;
                             }
                             break;
                     }
@@ -154,19 +157,20 @@ export class localServer {
                 const respBodyBufArray: Array<Buffer> = [];
 
                 let socket: net.Socket | tls.TLSSocket;
-                if (host.match(/^(|www\.)magireco\.local(|:\d{1,5})$/)) {
+                if (reqHeaders.host.match(/^(|www\.)magireco\.local(|:\d{1,5})$/)) {
                     let controlInterfaceHost = this.params.listenList.controlInterface.host;
                     let controlInterfacePort = this.params.listenList.controlInterface.port;
                     socket = await localServer.directConnectAsync(controlInterfaceHost, controlInterfacePort);
                 } else {
-                    socket = await localServer.getTlsSocketAsync(this.params, true, new URL(`https://${host}/`), alpn, sni);
+                    socket = await localServer.getTlsSocketAsync(this.params, true, new URL(`https://${reqHeaders.host}/`), alpn, sni);
                 }
 
                 let svrReq: http.ClientRequest | undefined;
                 if (fakedResponse) svrReq = undefined;
                 else svrReq = http.request({
-                    method: methodToSend,
-                    path: pathToSend,
+                    method: modifiedMethod,
+                    host: reqHeaders["host"],
+                    path: cliReq.url,
                     createConnection: (options, onCreate) => {
                         return socket;
                     },
@@ -177,7 +181,7 @@ export class localServer {
                         cliRes.writeHead(100);
                     } catch (e) {
                         //FIXME temporary workaround to avoid ERR_HTTP2_INVALID_STREAM crash
-                        console.error(`http1 host=[${host}] cliRes.writeHead() error`, e);
+                        console.error(`http1 host=[${reqHeaders.host}] cliRes.writeHead() error`, e);
                     }
                 });
                 svrReq?.on('response', (svrRes) => {
@@ -202,7 +206,7 @@ export class localServer {
                                     cliRes.write(chunk);
                                 } catch (e) {
                                     //FIXME temporary workaround to avoid ERR_HTTP2_INVALID_STREAM crash
-                                    console.error(`http1 host=[${host}] cliRes.write() error`, e);
+                                    console.error(`http1 host=[${reqHeaders.host}] cliRes.write() error`, e);
                                 }
                             });
                             svrRes.on('end', () => {
@@ -215,44 +219,44 @@ export class localServer {
                                         const charset = parseCharset.get(respHeaders);
                                         respBodyStr = respBodyBuf.toString(charset);
                                     } catch (e) {
-                                        console.error(`http1 hook host=[${host}] decompressing or decoding respBodyBuf to string error`, e);
+                                        console.error(`http1 hook host=[${reqHeaders.host}] decompressing or decoding respBodyBuf to string error`, e);
                                     }
                                     const body = respBodyStr != null ? respBodyStr : respBodyBuf;
                                     matchedHooks.forEach((item) =>
                                         item.onMatchedResponse(statusCode, statusMessage, respHttpVer, respHeaders, body));
                                 }
 
-                                if (parameters.params.VERBOSE) console.log(`ending cliRes downlink: host=[${host}] alpn=[${alpn}] sni=[${sni}]`);
+                                if (parameters.params.VERBOSE) console.log(`ending cliRes downlink: host=[${reqHeaders.host}] alpn=[${alpn}] sni=[${sni}]`);
                                 try {
                                     cliRes.end();
                                 } catch (e) {
                                     //FIXME temporary workaround to avoid ERR_HTTP2_INVALID_STREAM crash
-                                    console.error(`http1 host=[${host}] cliRes.end() error`, e);
+                                    console.error(`http1 host=[${reqHeaders.host}] cliRes.end() error`, e);
                                 }
                             });
                         }
                     } catch (e) {
                         //FIXME temporary workaround to avoid ERR_HTTP2_INVALID_STREAM crash
-                        console.error(`http1 host=[${host}] svrRes.writeHead() error`, e);
+                        console.error(`http1 host=[${reqHeaders.host}] svrRes.writeHead() error`, e);
                     }
                 });
                 svrReq?.on('end', () => {
-                    if (parameters.params.VERBOSE) console.log(`ending cliRes downlink: host=[${host}] alpn=[${alpn}] sni=[${sni}]`);
+                    if (parameters.params.VERBOSE) console.log(`ending cliRes downlink: host=[${reqHeaders.host}] alpn=[${alpn}] sni=[${sni}]`);
                     try {
                         cliRes.end();
                     } catch (e) {
                         //FIXME temporary workaround to avoid ERR_HTTP2_INVALID_STREAM crash
-                        console.error(`http1 host=[${host}] cliRes.end() error`, e);
+                        console.error(`http1 host=[${reqHeaders.host}] cliRes.end() error`, e);
                     }
                 });
                 svrReq?.on('error', (err) => {
-                    console.error(`svrReq error: host=[${host}] alpn=[${alpn}] sni=[${sni}]`, err);
+                    console.error(`svrReq error: host=[${reqHeaders.host}] alpn=[${alpn}] sni=[${sni}]`, err);
                     try {
                         cliRes.writeHead(502, { ["Content-Type"]: "text/plain" });
                         cliRes.end("502 Bad Gateway");
                     } catch (e) {
                         //FIXME temporary workaround to avoid ERR_HTTP2_INVALID_STREAM crash
-                        console.error(`http1 host=[${host}] cliRes.writeHead() error`, e);
+                        console.error(`http1 host=[${reqHeaders.host}] cliRes.writeHead() error`, e);
                     }
                 });
 
@@ -264,11 +268,11 @@ export class localServer {
                         svrReq?.write(chunk);
                     } catch (e) {
                         //FIXME temporary workaround to avoid ERR_HTTP2_INVALID_STREAM crash
-                        console.error(`http1 host=[${host}] svrReq.write() error`, e);
+                        console.error(`http1 host=[${reqHeaders.host}] svrReq.write() error`, e);
                     }
                 });
                 cliReq.on('end', () => {
-                    if (parameters.params.VERBOSE) console.log(`cliReq uplink ended: host=[${host}] alpn=[${alpn}] sni=[${sni}]`);
+                    if (parameters.params.VERBOSE) console.log(`cliReq uplink ended: host=[${reqHeaders.host}] alpn=[${alpn}] sni=[${sni}]`);
 
                     // hook
                     if (matchedHooks.length > 0) {
@@ -279,12 +283,14 @@ export class localServer {
                             const charset = parseCharset.get(reqHeaders);
                             reqBodyStr = reqBodyBuf.toString(charset);
                         } catch (e) {
-                            console.error(`http1 hook host=[${host}] decompressing or decoding reqBodyBuf to string error`, e);
+                            console.error(`http1 hook host=[${reqHeaders.host}] decompressing or decoding reqBodyBuf to string error`, e);
                         }
                         const body = reqBodyStr != null ? reqBodyStr : reqBodyBuf;
                         matchedHooks = matchedHooks.filter((item): boolean => {
                             if (fakedResponse) return false;
-                            let nextAction = item.onMatchedRequest(method, url, reqHttpVer, reqHeaders, body);
+                            let nextAction = item.onMatchedRequest(modifiedMethod,
+                                new URL(cliReq.url, `https://${reqHeaders["host"]}`),
+                                reqHttpVer, reqHeaders, body);
                             switch (nextAction.nextAction) {
                                 case "fakeResponse":
                                     fakedResponse = true;
@@ -304,7 +310,7 @@ export class localServer {
                         svrReq?.end();
                     } catch (e) {
                         //FIXME temporary workaround to avoid ERR_HTTP2_INVALID_STREAM crash
-                        console.error(`http1 host=[${host}] svrReq.end() error`, e);
+                        console.error(`http1 host=[${reqHeaders.host}] svrReq.end() error`, e);
                     }
                 });
             } catch (e) {
@@ -320,20 +326,18 @@ export class localServer {
                     cliRes.end("502 Bad Gateway");
                 } catch (e) {
                     //FIXME temporary workaround to avoid ERR_HTTP2_INVALID_STREAM crash
-                    console.error(`http1 host=[${host}] cliRes.writeHead() error`, e);
+                    console.error(`http1 host=[${reqHeaders.host}] cliRes.writeHead() error`, e);
                 }
                 return;
             };
         });
 
         http2SecureServer.on('stream', async (cliReqStream, reqHeaders, flags) => {
-            const authority = reqHeaders[":authority"];
-            const authorityURL = new URL(`https://${authority}/`);
             const alpn = cliReqStream.session.alpnProtocol;
             const sni = (cliReqStream.session.socket as any).servername;
 
             cliReqStream.on('error', (err) => {
-                if (parameters.params.VERBOSE) console.log(`cliReqStream error: authority=[${authority}] alpn=[${alpn}] sni=[${sni}]`, err);
+                if (parameters.params.VERBOSE) console.log(`cliReqStream error: authority=[${reqHeaders[":authority"]}] alpn=[${alpn}] sni=[${sni}]`, err);
                 try {
                     cliReqStream.respond({
                         [http2.constants.HTTP2_HEADER_STATUS]: http2.constants.HTTP_STATUS_BAD_GATEWAY,
@@ -342,11 +346,11 @@ export class localServer {
                     cliReqStream.end("502 Bad Gateway");
                 } catch (e) {
                     //FIXME temporary workaround to avoid ERR_HTTP2_INVALID_STREAM crash
-                    console.error(`http2 authority=[${authority}] cliReqStream.respond() error`, e);
+                    console.error(`http2 authority=[${reqHeaders[":authority"]}] cliReqStream.respond() error`, e);
                 }
             });
 
-            if (authority == null) {
+            if (reqHeaders[":authority"] == null) {
                 try {
                     cliReqStream.respond({
                         [http2.constants.HTTP2_HEADER_STATUS]: 403,
@@ -355,24 +359,24 @@ export class localServer {
                     cliReqStream.end("403 Forbidden");
                 } catch (e) {
                     //FIXME temporary workaround to avoid ERR_HTTP2_INVALID_STREAM crash
-                    console.error(`http2 authority=[${authority}] cliReqStream.respond() error`, e);
+                    console.error(`http2 authority=[${reqHeaders[":authority"]}] cliReqStream.respond() error`, e);
                 }
                 return;
             }
 
-            if (parameters.params.VERBOSE) console.log(`http2 cliReqStream accepted, authority=[${authority}] alpn=[${alpn}] sni=[${sni}]`);
+            if (parameters.params.VERBOSE) console.log(`http2 cliReqStream accepted, authority=[${reqHeaders[":authority"]}] alpn=[${alpn}] sni=[${sni}]`);
 
             try {
                 // hook
-                const method = reqHeaders[":method"];
-                const url = reqHeaders[":path"] == null ? undefined : new URL(reqHeaders[":path"], `https://${authority}/`);
                 const reqHttpVer = "2.0"; //FIXME
                 let fakedResponse = false;
                 const reqBodyBufArray: Array<Buffer> = [];
 
                 let matchedHooks = this.hooks.filter((item): boolean => {
                     if (fakedResponse) return false;
-                    let nextAction = item.matchRequest(method, url, reqHttpVer, reqHeaders);
+                    let nextAction = item.matchRequest(reqHeaders[":method"],
+                        reqHeaders[":path"] == null ? undefined : new URL(reqHeaders[":path"], `https://${reqHeaders[":authority"]}/`),
+                        reqHttpVer, reqHeaders);
                     switch (nextAction.nextAction) {
                         case "fakeResponse":
                             fakedResponse = true;
@@ -387,6 +391,13 @@ export class localServer {
                             const replaceRequest = nextAction.replaceRequest;
                             if (replaceRequest != null) {
                                 if (replaceRequest.method != null) reqHeaders[":method"] = replaceRequest.method;
+                                if (replaceRequest.host != null) {
+                                    reqHeaders[":authority"] = replaceRequest.host;
+                                    if (reqHeaders["host"] != null) {
+                                        // in http2, if there's no host header, then there's no need to replace it
+                                        reqHeaders["host"] = replaceRequest.host;
+                                    }
+                                }
                                 if (replaceRequest.path != null) reqHeaders[":path"] = replaceRequest.path;
                             }
                             break;
@@ -400,7 +411,9 @@ export class localServer {
                 let respHeaders: http2.IncomingHttpHeaders & http2.IncomingHttpStatusHeader;
                 const respBodyBufArray: Array<Buffer> = [];
 
-                let sess = await this.getH2SessionAsync(authorityURL, alpn, sni);
+                const authorityURL = new URL(`https://${reqHeaders[":authority"]}`);
+                let sess = await this.getH2SessionAsync(authorityURL,
+                    alpn, reqHeaders[":authority"] != null ? authorityURL.hostname : sni);
                 let svrReq: http2.ClientHttp2Stream | undefined;
                 if (fakedResponse) svrReq = undefined;
                 else svrReq = sess.request(reqHeaders);
@@ -411,7 +424,7 @@ export class localServer {
                         });
                     } catch (e) {
                         //FIXME temporary workaround to avoid ERR_HTTP2_INVALID_STREAM crash
-                        console.error(`http2 authority=[${authority}] cliReqStream.respond() error`, e);
+                        console.error(`http2 authority=[${reqHeaders[":authority"]}] cliReqStream.respond() error`, e);
                     }
                 });
                 svrReq?.on('response', (headers, flags) => {
@@ -425,7 +438,7 @@ export class localServer {
                         cliReqStream.respond(respHeaders);
                     } catch (e) {
                         //FIXME temporary workaround to avoid ERR_HTTP2_INVALID_STREAM crash
-                        console.error(`http2 authority=[${authority}] cliReqStream.respond() error`, e);
+                        console.error(`http2 authority=[${reqHeaders[":authority"]}] cliReqStream.respond() error`, e);
                     }
                 });
                 svrReq?.on('data', (chunk) => {
@@ -436,11 +449,11 @@ export class localServer {
                         cliReqStream.write(chunk);
                     } catch (e) {
                         //FIXME temporary workaround to avoid ERR_HTTP2_INVALID_STREAM crash
-                        console.error(`http2 authority=[${authority}] cliReqStream.write() error`, e);
+                        console.error(`http2 authority=[${reqHeaders[":authority"]}] cliReqStream.write() error`, e);
                     }
                 });
                 svrReq?.on('end', () => {
-                    if (parameters.params.VERBOSE) console.log(`ending cliReqStream downlink: authority=[${authority}] alpn=[${alpn}] sni=[${sni}]`);
+                    if (parameters.params.VERBOSE) console.log(`ending cliReqStream downlink: authority=[${reqHeaders[":authority"]}] alpn=[${alpn}] sni=[${sni}]`);
 
                     // hook
                     if (matchedHooks.length > 0) {
@@ -451,7 +464,7 @@ export class localServer {
                             const charset = parseCharset.get(respHeaders);
                             respBodyStr = respBodyBuf.toString(charset);
                         } catch (e) {
-                            console.error(`http2 hook authority=[${authority}] decompressing or decoding respBodyBuf to string error`, e);
+                            console.error(`http2 hook authority=[${reqHeaders[":authority"]}] decompressing or decoding respBodyBuf to string error`, e);
                         }
                         const body = respBodyStr != null ? respBodyStr : respBodyBuf;
                         matchedHooks.forEach((item) => item.onMatchedResponse(statusCode, statusMessage, respHttpVer, respHeaders, body));
@@ -461,11 +474,11 @@ export class localServer {
                         cliReqStream.end();
                     } catch (e) {
                         //FIXME temporary workaround to avoid ERR_HTTP2_INVALID_STREAM crash
-                        console.error(`http2 authority=[${authority}] cliReqStream.end() error`, e);
+                        console.error(`http2 authority=[${reqHeaders[":authority"]}] cliReqStream.end() error`, e);
                     }
                 });
                 svrReq?.on('error', (err) => {
-                    console.error(`svrReq error: authority=[${authority}] alpn=[${alpn}] sni=[${sni}]`, err);
+                    console.error(`svrReq error: authority=[${reqHeaders[":authority"]}] alpn=[${alpn}] sni=[${sni}]`, err);
                     try {
                         cliReqStream.respond({
                             [http2.constants.HTTP2_HEADER_STATUS]: http2.constants.HTTP_STATUS_BAD_GATEWAY,
@@ -474,7 +487,7 @@ export class localServer {
                         cliReqStream.end("502 Bad Gateway");
                     } catch (e) {
                         //FIXME temporary workaround to avoid ERR_HTTP2_INVALID_STREAM crash
-                        console.error(`http2 authority=[${authority}] cliReqStream.respond() error`, e);
+                        console.error(`http2 authority=[${reqHeaders[":authority"]}] cliReqStream.respond() error`, e);
                     }
                 });
 
@@ -486,11 +499,11 @@ export class localServer {
                         svrReq?.write(chunk);
                     } catch (e) {
                         //FIXME temporary workaround to avoid ERR_HTTP2_INVALID_STREAM crash
-                        console.error(`http2 authority=[${authority}] svrReq.write() error`, e);
+                        console.error(`http2 authority=[${reqHeaders[":authority"]}] svrReq.write() error`, e);
                     }
                 });
                 cliReqStream.on('end', () => {
-                    if (parameters.params.VERBOSE) console.log(`cliReqStream uplink ended: authority=[${authority}] alpn=[${alpn}] sni=[${sni}]`);
+                    if (parameters.params.VERBOSE) console.log(`cliReqStream uplink ended: authority=[${reqHeaders[":authority"]}] alpn=[${alpn}] sni=[${sni}]`);
 
                     // hook
                     if (matchedHooks.length > 0) {
@@ -501,12 +514,15 @@ export class localServer {
                             const charset = parseCharset.get(reqHeaders);
                             reqBodyStr = reqBodyBuf.toString(charset);
                         } catch (e) {
-                            console.error(`http2 hook authority=[${authority}] decompressing or decoding reqBodyBuf to string error`, e);
+                            console.error(`http2 hook authority=[${reqHeaders[":authority"]}] decompressing or decoding reqBodyBuf to string error`, e);
                         }
                         const body = reqBodyStr != null ? reqBodyStr : reqBodyBuf;
                         matchedHooks = matchedHooks.filter((item): boolean => {
                             if (fakedResponse) return false;
-                            let nextAction = item.onMatchedRequest(method, url, reqHttpVer, reqHeaders, body);
+                            let nextAction = item.onMatchedRequest(reqHeaders[":method"],
+                                reqHeaders[":path"] == null ? undefined
+                                    : new URL(reqHeaders[":path"], `https://${reqHeaders[":authority"]}/`),
+                                reqHttpVer, reqHeaders, body);
                             switch (nextAction.nextAction) {
                                 case "fakeResponse":
                                     fakedResponse = true;
@@ -526,7 +542,7 @@ export class localServer {
                         svrReq?.end();
                     } catch (e) {
                         //FIXME temporary workaround to avoid ERR_HTTP2_INVALID_STREAM crash
-                        console.error(`http2 authority=[${authority}] svrReq.end() error`, e);
+                        console.error(`http2 authority=[${reqHeaders[":authority"]}] svrReq.end() error`, e);
                     }
                 });
             } catch (e) {
@@ -540,11 +556,12 @@ export class localServer {
                             cliReqStream.end('Magireco Local Server');
                         } catch (e) {
                             //FIXME temporary workaround to avoid ERR_HTTP2_INVALID_STREAM crash
-                            console.error(`http2 authority=[${authority}] cliReqStream.respond() error`, e);
+                            console.error(`http2 authority=[${reqHeaders[":authority"]}] cliReqStream.respond() error`, e);
                         }
                         return;
                     case constants.DOWNGRADE_TO_HTTP1:
                         //FIXME
+                        const authorityURL = new URL(`https://${reqHeaders[":authority"]}`);
                         this.params.setSupportH2(authorityURL, false);//FIXME not working when IP addr used in HTTP CONNECT
                         if (parameters.params.VERBOSE) console.log(`marked [${authorityURL}] supportHTTP2=false`);
                         if (parameters.params.VERBOSE) console.log("sending status code 505 and goaway");
@@ -557,7 +574,7 @@ export class localServer {
                             cliReqStream.session.goaway(http2.constants.NGHTTP2_HTTP_1_1_REQUIRED);
                         } catch (e) {
                             //FIXME temporary workaround to avoid ERR_HTTP2_INVALID_STREAM crash
-                            console.error(`http2 authority=[${authority}] cliReqStream.respond() error`, e);
+                            console.error(`http2 authority=[${reqHeaders[":authority"]}] cliReqStream.respond() error`, e);
                         }
                         return;
                 }
@@ -570,7 +587,7 @@ export class localServer {
                     cliReqStream.end("502 Bad Gateway");
                 } catch (e) {
                     //FIXME temporary workaround to avoid ERR_HTTP2_INVALID_STREAM crash
-                    console.error(`http2 authority=[${authority}] cliReqStream.respond() error`, e);
+                    console.error(`http2 authority=[${reqHeaders[":authority"]}] cliReqStream.respond() error`, e);
                 }
             };
         });
