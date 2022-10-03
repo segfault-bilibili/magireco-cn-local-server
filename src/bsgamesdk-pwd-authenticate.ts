@@ -85,7 +85,7 @@ export class bsgamesdkPwdAuth {
         });
     }
 
-    private getPostDataSign(unsigned: string): string {
+    static getPostDataSign(unsigned: string): string {
         let postDataMap = new Map<string, string>();
         let keys = unsigned.split("&").map((p) => {
             let s = p.split("=");
@@ -128,7 +128,7 @@ export class bsgamesdkPwdAuth {
             + `channel_id=1&`
             + `game_id=810`;
 
-        let sign = this.getPostDataSign(postData);
+        let sign = bsgamesdkPwdAuth.getPostDataSign(postData);
         postData += `&sign=${sign}`;
 
         const issueCipherURL = new URL("https://line1-sdk-center-login-sh.biligame.net/api/external/issue/cipher/v3");
@@ -171,7 +171,7 @@ export class bsgamesdkPwdAuth {
             + `game_id=810&`
             + `user_id=${encodeURIComponent(user_id)}`;
 
-        let sign = this.getPostDataSign(postData);
+        let sign = bsgamesdkPwdAuth.getPostDataSign(postData);
         postData += `&sign=${sign}`;
 
         const loginV3URL = new URL("https://line1-sdk-center-login-sh.biligame.net/api/external/login/v3");

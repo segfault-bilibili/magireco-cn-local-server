@@ -5,6 +5,7 @@ import { fakeResponse, hook, localServer, passOnRequest, passOnRequestBody } fro
 import * as parameters from "../parameters";
 import * as staticResCrawler from "../static_res_crawler";
 import * as userdataDump from "../userdata_dump";
+import { bsgamesdkPwdAuth } from "../bsgamesdk-pwd-authenticate";
 
 export class fakeMagirecoProdRespHook implements hook {
     private readonly params: parameters.params;
@@ -15,6 +16,9 @@ export class fakeMagirecoProdRespHook implements hook {
     private readonly magirecoPatchUrlRegEx: RegExp;
     private readonly apiPathNameRegEx: RegExp;
 
+    private readonly bsgameSdkLoginRegEx: RegExp;
+    private readonly bsgameSdkCipherRegEx: RegExp;
+
     constructor(params: parameters.params, crawler: staticResCrawler.crawler, dmp: userdataDump.userdataDmp) {
         this.params = params;
         this.crawler = crawler;
@@ -23,6 +27,9 @@ export class fakeMagirecoProdRespHook implements hook {
         this.magirecoProdUrlRegEx = /^(http|https):\/\/l\d+-prod-[0-9a-z\-]+-mfsn\d*\.bilibiligame\.net\/(|maintenance\/)magica\/.+$/;
         this.magirecoPatchUrlRegEx = /^(http|https):\/\/line\d+-prod-patch-mfsn\d*\.bilibiligame\.net\/magica\/.+$/;
         this.apiPathNameRegEx = /^\/magica\/api\/.+$/;
+
+        this.bsgameSdkLoginRegEx = /^(http|https):\/\/line\d+-sdk-center-login-sh\.biligame\.net\/api\/external\/(login|user\.token\.oauth\.login)\/v3((|\?.*)$)/;
+        this.bsgameSdkCipherRegEx = /^(http|https):\/\/line\d+-sdk-center-login-sh\.biligame\.net\/api\/external\/issue\/cipher\/v3((|\?.*)$)/;
     }
 
     // if matched, keep a copy of request/response data in memory
@@ -40,9 +47,39 @@ export class fakeMagirecoProdRespHook implements hook {
 
         const isMagiRecoProd = url?.href.match(this.magirecoProdUrlRegEx) != null;
         const isMagiRecoPatch = url?.href.match(this.magirecoPatchUrlRegEx) != null;
-        if (!isMagiRecoProd && !isMagiRecoPatch) return {
+        const isBsgamesdkLogin = url?.href.match(this.bsgameSdkLoginRegEx) != null;
+        const isBsgamesdkCipher = url?.href.match(this.bsgameSdkCipherRegEx) != null;
+        if (!isMagiRecoProd && !isMagiRecoPatch && !isBsgamesdkLogin && !isBsgamesdkCipher) return {
             nextAction: "passOnRequest",
             interceptResponse: false,
+        }
+
+        if (isBsgamesdkCipher || isBsgamesdkLogin) {
+            let contentType = 'application/json;charset=UTF-8';
+            let respBody: Buffer | undefined;
+            if (isBsgamesdkCipher) {
+                console.log(`attempt to fake bsgamesdk cipher response`);
+                respBody = this.fakeBsgamesdkCipherResp();
+            } else if (isBsgamesdkLogin) {
+                console.log(`attempt to fake bsgamesdk login response`);
+                respBody = this.fakeBsgamesdkLoginResp();
+            }
+            if (respBody == null) console.log(`failed to fake bsgamesdk login response`);
+            const headers = {
+                [http2.constants.HTTP2_HEADER_CONTENT_TYPE]: contentType,
+            };
+            if (respBody != null) {
+                return {
+                    nextAction: "fakeResponse",
+                    fakeResponse: {
+                        statusCode: 200,
+                        statusMessage: "OK",
+                        headers: headers,
+                        body: respBody,
+                    },
+                    interceptResponse: false,
+                }
+            }
         }
 
         const isApi = url.pathname.match(this.apiPathNameRegEx) != null;
@@ -54,9 +91,11 @@ export class fakeMagirecoProdRespHook implements hook {
             const apiName = url.pathname.replace(/^\/magica\/api\//, "");
             switch (apiName) {
                 case "system/game/login":
-                    return {
-                        nextAction: "passOnRequest",
-                        interceptResponse: false,
+                    {
+                        body = this.fakeSystemLogin();
+                        if (body != null) console.log(`faked system login`);
+                        else console.error(`failed to fake system login`);
+                        break;
                     }
                 case "announcements/red/obvious":
                 case "event_banner/list/1":
@@ -206,9 +245,62 @@ export class fakeMagirecoProdRespHook implements hook {
         headers?: http.IncomingHttpHeaders | http2.IncomingHttpHeaders,
         body?: string | Buffer
     ): fakeResponse | passOnRequestBody {
-        return {
+        const mode = this.params.mode;
+        if (mode !== parameters.mode.LOCAL_OFFLINE) return {
             nextAction: "passOnRequestBody",
             interceptResponse: false,
+        }
+
+        const isMagiRecoProd = url?.href.match(this.magirecoProdUrlRegEx) != null;
+        const isMagiRecoPatch = url?.href.match(this.magirecoPatchUrlRegEx) != null;
+        if (!isMagiRecoProd && !isMagiRecoPatch) return {
+            nextAction: "passOnRequestBody",
+            interceptResponse: false,
+        }
+
+        const isApi = url.pathname.match(this.apiPathNameRegEx) != null;
+        if (isApi) {
+            let statusCode = 200;
+            let contentType = `application/json;charset=UTF-8`;
+            let respBody: Buffer | undefined;
+
+            const apiName = url.pathname.replace(/^\/magica\/api\//, "");
+            switch (apiName) {
+                case "test/logger/error":
+                    {
+                        if (typeof body === 'string') {
+                            console.error(`[test/logger/error]`, body);
+                        }
+                        break;
+                    }
+                default:
+                    {
+                    }
+            }
+
+            if (respBody == null) {
+                console.error(`responding with forceGotoFirst [${url.pathname}]`);
+                respBody = Buffer.from(this.forceGotoFirst(), 'utf-8');
+            }
+
+            const headers = {
+                [http2.constants.HTTP2_HEADER_CONTENT_TYPE]: contentType,
+            }
+            return {
+                nextAction: "fakeResponse",
+                fakeResponse: {
+                    statusCode: statusCode,
+                    statusMessage: "OK",
+                    headers: headers,
+                    body: respBody,
+                },
+                interceptResponse: false,
+            }
+        } else {
+            return {
+                nextAction: "passOnRequestBody",
+                interceptResponse: false,
+            }
         }
     }
 
@@ -219,6 +311,79 @@ export class fakeMagirecoProdRespHook implements hook {
         headers?: http.IncomingHttpHeaders | (http2.IncomingHttpHeaders & http2.IncomingHttpStatusHeader),
         body?: string | Buffer
     ): void {
+    }
+
+    private fakeBsgamesdkCipherResp(): Buffer {
+        const obj = {
+            requestId: `${this.getRandomHex(32)}`,
+            timestamp: `${new Date().getTime()}`,
+            code: 0,
+            hash: `${this.getRandomHex(16)}`, // fake one
+            cipher_key: "-----BEGIN PUBLIC KEY-----\nMIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDjb4V7EidX/ym28t2ybo0U6t0n\n6p4ej8VjqKHg100va6jkNbNTrLQqMCQCAYtXMXXp2Fwkk6WR+12N9zknLjf+C9sx\n/+l48mjUU8RqahiFD1XT/u2e0m2EN029OhCgkHx3Fc/KlFSIbak93EH/XlYis0w+\nXl69GV6klzgxW6d2xQIDAQAB\n-----END PUBLIC KEY-----",
+            server_message: "",
+        }
+        return Buffer.from(JSON.stringify(obj), 'utf-8');
+    }
+    private fakeBsgamesdkLoginResp(): Buffer | undefined {
+        const lastSnapshot = this.userdataDmp.lastSnapshot;
+        if (lastSnapshot == null) return;
+
+        const uid = lastSnapshot.uid;
+        if (typeof uid !== 'number' || isNaN(uid)) return;
+
+        const topPage = lastSnapshot.httpResp.get.get(this.pageKeys["page/TopPage"])?.body;
+        if (topPage == null) return;
+
+        const user = topPage["user"];
+        if (user == null) return;
+        const loginName = user["loginName"];
+
+        const requestId = this.getRandomHex(32);
+        const tsStr = `${new Date().getTime()}`;
+        const expires = Number(tsStr) + 30 * 24 * 60 * 60 * 1000;
+        const h5_paid_download = 1;
+        const h5_paid_download_sign = bsgamesdkPwdAuth.getPostDataSign(`requestId=${requestId}&uid=${uid}&timestamp=${tsStr}`
+            + `&h5_paid_download=${h5_paid_download}`);
+        const obj = {
+            requestId: `${requestId}`,
+            timestamp: `${tsStr}`,
+            auth_name: `离线登录用户`,
+            realname_verified: 1,
+            remind_status: 0,
+            h5_paid_download: h5_paid_download,
+            h5_paid_download_sign: `${h5_paid_download_sign}`,
+            code: 0,
+            access_key: `${this.getRandomHex(32)}_sh`,
+            expires: expires,
+            uid: uid,
+            face: "http://static.hdslb.com/images/member/noface.gif",
+            s_face: "http://static.hdslb.com/images/member/noface.gif",
+            uname: `${loginName}`,
+            server_message: "",
+            isCache: "true",
+        }
+        return Buffer.from(JSON.stringify(obj), 'utf-8');
+    }
+
+    private fakeSystemLogin(): Buffer | undefined {
+        const lastSnapshot = this.userdataDmp.lastSnapshot;
+        if (lastSnapshot == null) return;
+
+        const topPage = lastSnapshot.httpResp.get.get(this.pageKeys["page/TopPage"])?.body;
+        if (topPage == null) return;
+
+        const loginName = topPage["loginName"];
+
+        const obj = {
+            data: {
+                open_id: `${this.getRandomOpenId()}`,
+                uname: `${loginName}`,
+                code: 0,
+                timestamp: new Date().getTime(),
+            },
+            resultCode: "success"
+        }
+        return Buffer.from(JSON.stringify(obj), 'utf-8');
     }
 
     private get404xml(host: string, key: string): string {
@@ -305,7 +470,7 @@ export class fakeMagirecoProdRespHook implements hook {
         ],
     }
 
-    private readonly fakeResp = {
+    private readonly fakeResp: Record<string, any> = {
         ["announcements/red/obvious"]: {
             resultCode: "success",
             count: 0
@@ -370,6 +535,15 @@ export class fakeMagirecoProdRespHook implements hook {
                 createdAt: "2020/05/27 10:11:38",
             },
         ],
+    }
+
+    private getRandomHex(charCount: number): string {
+        return crypto.randomBytes(Math.trunc((charCount + 1) / 2)).toString('hex').substring(0, charCount);
+    }
+
+    private getRandomOpenId(): string {
+        return [8, 4, 4, 4, 12].map((len) => crypto.randomBytes(Math.trunc((len + 1) / 2))
+            .toString('hex').substring(0, len)).join("-");
     }
 
 }
