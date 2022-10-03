@@ -103,7 +103,11 @@ export class fakeMagirecoProdRespHook implements hook {
                     }
                 case "page/TopPage":
                 case "page/CollectionTop":
+                case "page/CharaCollection":
+                case "page/PieceCollection":
                 case "page/StoryCollection":
+                case "page/DoppelCollection":
+                case "page/EnemyCollection":
                     {
                         const lastSnapshot = this.userdataDmp.lastSnapshot;
                         if (lastSnapshot != null) {
@@ -272,7 +276,15 @@ export class fakeMagirecoProdRespHook implements hook {
             + `&timeStamp=`,
         ["page/CollectionTop"]: `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/CollectionTop?value=`
             + `&timeStamp=`,
+        ["page/CharaCollection"]: `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/CharaCollection?value=`
+            + `&timeStamp=`,
+        ["page/PieceCollection"]: `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/PieceCollection?value=`
+            + `&timeStamp=`,
         ["page/StoryCollection"]: `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/StoryCollection?value=`
+            + `&timeStamp=`,
+        ["page/DoppelCollection"]: `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/DoppelCollection?value=`
+            + `&timeStamp=`,
+        ["page/EnemyCollection"]: `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/EnemyCollection?value=`
             + `&timeStamp=`,
         ["page/MainQuest"]: `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/MainQuest?value=`
             + `userChapterList`
