@@ -586,7 +586,7 @@ export class controlInterface {
             let expires: number | string | undefined = bsgamesdkResponse.expires;
             if (expires != null) expires = `${new Date(expires).toLocaleDateString()} ${new Date(expires).toLocaleTimeString()}`;
             loginStatus = getStrRep(`B站账户已登录 账户=[${bsgamesdkResponse.uname}] uid=[${bsgamesdkResponse.uid}]`
-                + ` 实名=[${bsgamesdkResponse.auth_name}] 实名认证状态=[${bsgamesdkResponse.realname_verified}]`
+                + ` 实名认证状态=[${bsgamesdkResponse.realname_verified}]`
                 + ` 登录时间=[${since}] 登录过期时间=[${expires}]`);
             loginStatusStyle = "color: green";
             loginBtnText = "重新登录";
@@ -954,9 +954,6 @@ export class controlInterface {
             + `\n  <form action=\"/api/clear_bsgamesdk_ids\" method=\"post\">`
             + `\n    <div>`
             + `\n      <input type=\"submit\" id=\"clear_bsgamesdk_ids_btn\" value=\"清除B站登录状态并重置设备ID\">`
-            + `\n      <br><code>bd_id=[${bd_id}]</code>`
-            + `\n      <br><code>buvid=[${buvid}]</code>`
-            + `\n      <br><code>udid=[${udid}]</code>`
             + `\n    </div>`
             + `\n  </form>`
             + `\n  </fieldset>`
@@ -1012,7 +1009,6 @@ export class controlInterface {
             + `\n  <form action=\"/api/clear_magireco_ids\" method=\"post\">`
             + `\n    <div>`
             + `\n      <input type=\"submit\" id=\"clear_magireco_ids_btn\" value=\"清除游戏登录状态并重置设备ID\">`
-            + `\n      <br><code>device_id=[${device_id}]</code>`
             + `\n    </div>`
             + `\n  </form>`
             + `\n  </fieldset>`
