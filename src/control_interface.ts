@@ -742,7 +742,7 @@ export class controlInterface {
             + `\n  </style>`
             + `\n</head>`
             + `\n<body>`
-            + `\n  <h1>魔法纪录国服本地服务器</h1>`
+            + `\n  <h1>魔法纪录国服本地服务器 v${process.env.npm_package_version}</h1>`
             + `\n  <fieldset>`
             + `\n  <legend>HTTP代理</legend>`
             + `\n  <div>`
