@@ -149,6 +149,9 @@ export class localServer {
                     }
                     return fakedResponse ? false : nextAction.interceptResponse;
                 });
+                if (this.params.mode === parameters.mode.LOCAL_OFFLINE) {
+                    if (matchedHooks.length == 0 && !fakedResponse) cliReq.destroy();
+                }
 
                 let statusCode: number | undefined;
                 let statusMessage: string | undefined;
@@ -304,6 +307,9 @@ export class localServer {
                             }
                             return fakedResponse ? false : nextAction.interceptResponse;
                         });
+                        if (this.params.mode === parameters.mode.LOCAL_OFFLINE) {
+                            if (matchedHooks.length == 0 && !fakedResponse) cliReq.destroy();
+                        }
                     }
 
                     try {
@@ -404,6 +410,9 @@ export class localServer {
                     }
                     return fakedResponse ? false : nextAction.interceptResponse;
                 });
+                if (this.params.mode === parameters.mode.LOCAL_OFFLINE) {
+                    if (matchedHooks.length == 0 && !fakedResponse) cliReqStream.destroy();
+                }
 
                 let statusCode: number | undefined;
                 let statusMessage: string | undefined;
@@ -537,6 +546,9 @@ export class localServer {
                             }
                             return fakedResponse ? false : nextAction.interceptResponse;
                         });
+                        if (this.params.mode === parameters.mode.LOCAL_OFFLINE) {
+                            if (matchedHooks.length == 0 && !fakedResponse) cliReqStream.destroy();
+                        }
                     }
 
                     try {
