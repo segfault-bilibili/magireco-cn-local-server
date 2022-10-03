@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.bsgamesdkPwdAuth = exports.app_key_Android = void 0;
 const crypto = require("crypto");
 const http2 = require("http2");
+const parameters = require("./parameters");
 exports.app_key_Android = "add83765a53c4664944eabc18298731b";
 class bsgamesdkPwdAuth {
     constructor(params, localServer) {
@@ -11,6 +12,8 @@ class bsgamesdkPwdAuth {
     }
     get IDs() { return this.params.bsgamesdkIDs; }
     async login(username, password) {
+        if (this.params.mode === parameters.mode.LOCAL_OFFLINE)
+            throw new Error("cannot do bilibili login in local offline mode");
         let hashAndCipherKey = await this.issueCipherV3();
         let hashsalt = hashAndCipherKey.hash;
         let pubkey = crypto.createPublicKey(hashAndCipherKey.cipher_key);
@@ -52,7 +55,7 @@ class bsgamesdkPwdAuth {
             }).catch((e) => reject(e));
         });
     }
-    getPostDataSign(unsigned) {
+    static getPostDataSign(unsigned) {
         let postDataMap = new Map();
         let keys = unsigned.split("&").map((p) => {
             let s = p.split("=");
@@ -94,7 +97,7 @@ class bsgamesdkPwdAuth {
             + `cipher_type=bili_login_rsa&`
             + `channel_id=1&`
             + `game_id=810`;
-        let sign = this.getPostDataSign(postData);
+        let sign = bsgamesdkPwdAuth.getPostDataSign(postData);
         postData += `&sign=${sign}`;
         const issueCipherURL = new URL("https://line1-sdk-center-login-sh.biligame.net/api/external/issue/cipher/v3");
         let resp = await this.bsgamesdkReq(issueCipherURL, postData);
@@ -136,7 +139,7 @@ class bsgamesdkPwdAuth {
             + `channel_id=1&`
             + `game_id=810&`
             + `user_id=${encodeURIComponent(user_id)}`;
-        let sign = this.getPostDataSign(postData);
+        let sign = bsgamesdkPwdAuth.getPostDataSign(postData);
         postData += `&sign=${sign}`;
         const loginV3URL = new URL("https://line1-sdk-center-login-sh.biligame.net/api/external/login/v3");
         let resp = await this.bsgamesdkReq(loginV3URL, postData);

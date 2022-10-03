@@ -33,7 +33,7 @@ export declare class bsgamesdkPwdAuth {
     constructor(params: parameters.params, localServer: localServer);
     login(username: string, password: string): Promise<bsgamesdkResponse>;
     private bsgamesdkReq;
-    private getPostDataSign;
+    static getPostDataSign(unsigned: string): string;
     private issueCipherV3;
     private loginV3;
     static newRandomID(): bsgamesdkIDs;

@@ -129,6 +129,8 @@ class userdataDmp {
         }));
     }
     async getSnapshotPromise(concurrent = 8) {
+        if (this.params.mode === parameters.mode.LOCAL_OFFLINE)
+            throw new Error("cannot dump userdata in local offline mode");
         if (this.isDownloading)
             throw new Error("previous download has not finished");
         this._isDownloading = true;

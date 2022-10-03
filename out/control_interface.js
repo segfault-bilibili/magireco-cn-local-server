@@ -30,7 +30,7 @@ class controlInterface {
         const hooks = [
             new save_access_key_hook_1.saveAccessKeyHook(params),
             new save_open_id_ticket_hook_1.saveOpenIdTicketHook(params),
-            new fake_magireco_prod_resp_hook_1.fakeMagirecoProdRespHook(params, crawler),
+            new fake_magireco_prod_resp_hook_1.fakeMagirecoProdRespHook(params, crawler, userdataDmp),
         ];
         hooks.forEach((hook) => localsvr.addHook(hook));
         const httpServerSelf = http.createServer(async (req, res) => {
@@ -176,15 +176,19 @@ class controlInterface {
                             let pwdLoginParams = await this.getParsedPostData(req);
                             let username = pwdLoginParams.get("username");
                             let password = pwdLoginParams.get("password");
-                            if (username == null || password == null || username === "" || password === "") {
+                            if (this.params.mode === parameters.mode.LOCAL_OFFLINE) {
+                                this.sendResultAsync(res, 403, "cannot do bilibili login in local offline mode");
+                            }
+                            else if (username == null || password == null || username === "" || password === "") {
                                 let result = "username or password is empty";
                                 console.error(result);
                                 this.sendResultAsync(res, 400, result);
-                                return;
                             }
-                            let result = await this.bsgamesdkPwdAuth.login(username, password);
-                            let resultText = JSON.stringify(result);
-                            this.sendResultAsync(res, 200, resultText);
+                            else {
+                                let result = await this.bsgamesdkPwdAuth.login(username, password);
+                                let resultText = JSON.stringify(result);
+                                this.sendResultAsync(res, 200, resultText);
+                            }
                         }
                         catch (e) {
                             console.error(`${apiName} error`, e);
@@ -206,7 +210,10 @@ class controlInterface {
                             const lastError = this.userdataDmp.lastError;
                             const hasDownloadResultOrError = alreadyDownloaded || lastError != null;
                             const isDownloading = this.userdataDmp.isDownloading;
-                            if (!isDownloading && (requestingNewDownload || !hasDownloadResultOrError)) {
+                            if (this.params.mode === parameters.mode.LOCAL_OFFLINE) {
+                                this.sendResultAsync(res, 403, "cannot dump userdata in local offline mode");
+                            }
+                            else if (!isDownloading && (requestingNewDownload || !hasDownloadResultOrError)) {
                                 this.userdataDmp.getSnapshotAsync()
                                     .catch((e) => console.error(`${apiName} error`, e)); // prevent crash
                                 this.sendResultAsync(res, 200, "downloading");
@@ -277,7 +284,10 @@ class controlInterface {
                         }
                         return;
                     case "crawl_static_data":
-                        if (this.crawler.isCrawling) {
+                        if (this.params.mode === parameters.mode.LOCAL_OFFLINE) {
+                            this.sendResultAsync(res, 403, "cannot crawl in local offline mode");
+                        }
+                        else if (this.crawler.isCrawling) {
                             this.sendResultAsync(res, 429, "crawling not yet finished");
                         }
                         else if (this.crawler.isFscking) {
@@ -690,13 +700,16 @@ class controlInterface {
             + `\n          } catch (e) {`
             + `\n              console.error(e);`
             + `\n          }`
+            + `\n          set_mode_btn.disabled = status.isDownloading || status.isCrawling;`
+            + `\n          let isOfflineMode = status.mode == ${parameters.mode.LOCAL_OFFLINE};`
+            + `\n          isOffline(isOfflineMode);`
             + `\n          let el = document.getElementById(\"userdatadumpstatus\");`
             + `\n          el.textContent = status.userdataDumpStatus; el.style = status.userdataDumpStatusStyle;`
-            + `\n          document.getElementById(\"prepare_download_btn\").disabled = status.isDownloading;`
+            + `\n          document.getElementById(\"prepare_download_btn\").disabled = isOfflineMode || status.isDownloading;`
             + `\n          el = document.getElementById(\"crawlingstatus\");`
             + `\n          el.textContent = status.crawlingStatus; el.style = status.crawlingStatusStyle;`
-            + `\n          document.getElementById(\"crawl_static_data_btn\").disabled = status.isCrawling;`
-            + `\n          document.getElementById(\"stop_crawling_btn\").disabled = !status.isCrawling;`
+            + `\n          document.getElementById(\"crawl_static_data_btn\").disabled = isOfflineMode || status.isCrawling;`
+            + `\n          document.getElementById(\"stop_crawling_btn\").disabled = isOfflineMode || !status.isCrawling;`
             + `\n          el = document.getElementById(\"crawl_web_res_lbl\")`
             + `\n          el.textContent = status.isWebResCompleted ? \"已完成下载\" : \"未完成下载\"; el.style = status.isWebResCompleted ? \"color: green\" : \"\";`
             + `\n          el = document.getElementById(\"crawl_assets_lbl\");`
@@ -708,8 +721,28 @@ class controlInterface {
             + `\n      }`
             + `\n      autoRefresh(initialCountdown);`
             + `\n    });`
+            + `\n    function isOffline(isOfflineMode) {`
+            + `\n      let modeElments = document.getElementsByName("mode");`
+            + `\n      for (let i = 0; i < modeElments.length; i++) {`
+            + `\n        let el = modeElments[i];`
+            + `\n        if (isOfflineMode == null) {`
+            + `\n          if (el.value === \"online\" && el.checked) isOfflineMode = false;`
+            + `\n          if (el.value === \"local_offline\" && el.checked) isOfflineMode = true;`
+            + `\n        } else {`
+            + `\n          if (el.value === \"online\") el.checked = !isOfflineMode;`
+            + `\n          if (el.value === \"local_offline\") el.checked = isOfflineMode;`
+            + `\n          const btnids = [\"loginbtn\", \"prepare_download_btn\", \"crawl_static_data_btn\", \"stop_crawling_btn\"];`
+            + `\n          btnids.forEach((id) => {`
+            + `\n            let el = document.getElementById(id);`
+            + `\n            el.value = el.value.replace(/^((?!本地离线模式下无法)|本地离线模式下无法)/, isOfflineMode ? \"本地离线模式下无法\" : \"\");`
+            + `\n            el.disabled = isOfflineMode;`
+            + `\n          });`
+            + `\n        }`
+            + `\n      }`
+            + `\n      return isOfflineMode;`
+            + `\n    }`
             + `\n    function unlock_prepare_download_btn() {`
-            + `\n      document.getElementById(\"prepare_download_btn\").removeAttribute(\"disabled\");`
+            + `\n      if (!isOffline()) document.getElementById(\"prepare_download_btn\").removeAttribute(\"disabled\");`
             + `\n    }`
             + `\n  </script>`
             + `\n  <style>`
@@ -740,7 +773,7 @@ class controlInterface {
             + `\n    若要${aHref("从官服下载个人账号数据", "#dumpuserdata", false)}，可以使用下面的${aHref("Bilibili登录", "#bilibilipwdauth", false)}界面，也可以使用Clash让游戏客户端通过上述HTTP代理联网；`
             + `\n  </li>`
             + `\n  <li>`
-            + `\n    或者修改${aHref("工作模式", "#setmode", false)}后，使用Clash让游戏客户端通过上述HTTP代理联网即可成为脱离官服的本地离线服务器（功能暂未实现）。`
+            + `\n    或者修改${aHref("工作模式", "#setmode", false)}后，使用Clash让游戏客户端通过上述HTTP代理联网即可成为脱离官服的本地离线服务器。`
             + `\n  </li>`
             + `\n  </ul>`
             + `\n  </div>`
@@ -779,9 +812,6 @@ class controlInterface {
             + `\n  <h2>说明</h2>`
             + `\n  <ol>`
             + `\n  <li>`
-            + `\n  目前暂时尚未实现本地离线服务器功能。`
-            + `\n  </li>`
-            + `\n  <li>`
             + `\n  在国服尚未关服的情况下，这里提供的${aHref("Bilibili登录", "#bilibilipwdauth", false)}界面可以在无需游戏客户端的情况下登录游戏账号。`
             + `\n  <br>但这只是快捷省事的途径，不一定可靠。`
             + `\n  </li>`
@@ -796,6 +826,14 @@ class controlInterface {
             + `\n  <br>（<b>注意Clash第一次启动后需要设置一下代理模式</b>，否则默认是DIRECT直连）`
             + `\n  <br>尤其是<b>CA证书必须安装为Android的系统证书</b>，这一步可以用${aHref("autoBattle脚本", autoBattleURL.href)}（安装后请先下拉在线更新到最新版）选择运行[安装CA证书]这个脚本自动完成。`
             + `\n  <br>另外提醒一下：Android 6的MuMu模拟器等环境下，Clash for Android似乎不能正常按应用分流，所以不能在MuMu模拟器里再安装Termux、然后用Termux跑本地服务器，否则会出现上述网络通信“死循环”问题。<b>使用MuMu模拟器时也应该按照上述方法，在模拟器外直接在电脑上跑本地服务器。</b>`
+            + `\n  </li>`
+            + `\n  <li>`
+            + `\n  本地离线模式只支持通过<b>用户名密码登录</b>，功能目前只有<b>首页</b>和<b>档案</b>两个；`
+            + `\n  <br><i>（本地离线模式下，在游戏客户端中输入任意非空用户名密码均可照常登录到离线服务器）</i>`
+            + `\n  <br>而且目前暂时<b>只有之前下载过个人账号数据的情况下才能正常登录到离线服务器</b>。`
+            + `\n  </li>`
+            + `\n  <li>`
+            + `\n  <b>必须切换到在线模式才能下载个人账号数据，本地离线模式下无法从官服下载个人账号数据。</b>`
             + `\n  </li>`
             + `\n  </ol>`
             + `\n  <hr>`
@@ -1076,6 +1114,7 @@ class controlInterface {
         const isWebResCompleted = this.crawler.isWebResCompleted;
         const isAssetsCompleted = this.crawler.isAssetsCompleted;
         return {
+            mode: this.params.mode,
             isDownloading: isDownloading,
             userdataDumpStatus: userdataDumpStatus,
             userdataDumpStatusStyle: userdataDumpStatusStyle,

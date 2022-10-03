@@ -28,6 +28,7 @@ export interface fakeResponse extends hookNextAction {
 export interface passOnRequest extends hookNextAction {
     nextAction: "passOnRequest";
     replaceRequest?: {
+        host?: string;
         method?: string;
         path?: string;
     };
