@@ -64,14 +64,12 @@ export class fakeMagirecoProdRespHook implements hook {
                         body = Buffer.from(JSON.stringify(this.fakeResp[apiName]), 'utf-8');
                         break;
                     }
-                /*
                 case "test/logger/error": {
                     return {
                         nextAction: "passOnRequest",
-                        interceptResponse: false,
+                        interceptResponse: true,
                     }
                 }
-                */
                 case "page/MyPage":
                     {
                         const lastSnapshot = this.userdataDmp.lastSnapshot;

@@ -222,15 +222,17 @@ export class controlInterface {
                             let pwdLoginParams = await this.getParsedPostData(req);
                             let username = pwdLoginParams.get("username");
                             let password = pwdLoginParams.get("password");
-                            if (username == null || password == null || username === "" || password === "") {
+                            if (this.params.mode === parameters.mode.LOCAL_OFFLINE) {
+                                this.sendResultAsync(res, 403, "cannot do bilibili login in local offline mode");
+                            } else if (username == null || password == null || username === "" || password === "") {
                                 let result = "username or password is empty";
                                 console.error(result);
                                 this.sendResultAsync(res, 400, result);
-                                return;
+                            } else {
+                                let result = await this.bsgamesdkPwdAuth.login(username, password);
+                                let resultText = JSON.stringify(result);
+                                this.sendResultAsync(res, 200, resultText);
                             }
-                            let result = await this.bsgamesdkPwdAuth.login(username, password);
-                            let resultText = JSON.stringify(result);
-                            this.sendResultAsync(res, 200, resultText);
                         } catch (e) {
                             console.error(`${apiName} error`, e);
                             this.sendResultAsync(res, 500, e instanceof Error ? e.message : `${apiName} error`);
@@ -252,7 +254,9 @@ export class controlInterface {
                             const lastError = this.userdataDmp.lastError;
                             const hasDownloadResultOrError = alreadyDownloaded || lastError != null;
                             const isDownloading = this.userdataDmp.isDownloading;
-                            if (!isDownloading && (requestingNewDownload || !hasDownloadResultOrError)) {
+                            if (this.params.mode === parameters.mode.LOCAL_OFFLINE) {
+                                this.sendResultAsync(res, 403, "cannot dump userdata in local offline mode");
+                            } else if (!isDownloading && (requestingNewDownload || !hasDownloadResultOrError)) {
                                 this.userdataDmp.getSnapshotAsync()
                                     .catch((e) => console.error(`${apiName} error`, e)); // prevent crash
                                 this.sendResultAsync(res, 200, "downloading");
@@ -315,7 +319,9 @@ export class controlInterface {
                         }
                         return;
                     case "crawl_static_data":
-                        if (this.crawler.isCrawling) {
+                        if (this.params.mode === parameters.mode.LOCAL_OFFLINE) {
+                            this.sendResultAsync(res, 403, "cannot crawl in local offline mode");
+                        } else if (this.crawler.isCrawling) {
                             this.sendResultAsync(res, 429, "crawling not yet finished");
                         } else if (this.crawler.isFscking) {
                             this.sendResultAsync(res, 429, "is still fscking");
@@ -674,13 +680,16 @@ export class controlInterface {
             + `\n          } catch (e) {`
             + `\n              console.error(e);`
             + `\n          }`
+            + `\n          set_mode_btn.disabled = status.isDownloading || status.isCrawling;`
+            + `\n          let isOfflineMode = status.mode == ${parameters.mode.LOCAL_OFFLINE};`
+            + `\n          isOffline(isOfflineMode);`
             + `\n          let el = document.getElementById(\"userdatadumpstatus\");`
             + `\n          el.textContent = status.userdataDumpStatus; el.style = status.userdataDumpStatusStyle;`
-            + `\n          document.getElementById(\"prepare_download_btn\").disabled = status.isDownloading;`
+            + `\n          document.getElementById(\"prepare_download_btn\").disabled = isOfflineMode || status.isDownloading;`
             + `\n          el = document.getElementById(\"crawlingstatus\");`
             + `\n          el.textContent = status.crawlingStatus; el.style = status.crawlingStatusStyle;`
-            + `\n          document.getElementById(\"crawl_static_data_btn\").disabled = status.isCrawling;`
-            + `\n          document.getElementById(\"stop_crawling_btn\").disabled = !status.isCrawling;`
+            + `\n          document.getElementById(\"crawl_static_data_btn\").disabled = isOfflineMode || status.isCrawling;`
+            + `\n          document.getElementById(\"stop_crawling_btn\").disabled = isOfflineMode || !status.isCrawling;`
             + `\n          el = document.getElementById(\"crawl_web_res_lbl\")`
             + `\n          el.textContent = status.isWebResCompleted ? \"已完成下载\" : \"未完成下载\"; el.style = status.isWebResCompleted ? \"color: green\" : \"\";`
             + `\n          el = document.getElementById(\"crawl_assets_lbl\");`
@@ -692,8 +701,28 @@ export class controlInterface {
             + `\n      }`
             + `\n      autoRefresh(initialCountdown);`
             + `\n    });`
+            + `\n    function isOffline(isOfflineMode) {`
+            + `\n      let modeElments = document.getElementsByName("mode");`
+            + `\n      for (let i = 0; i < modeElments.length; i++) {`
+            + `\n        let el = modeElments[i];`
+            + `\n        if (isOfflineMode == null) {`
+            + `\n          if (el.value === \"online\" && el.checked) isOfflineMode = false;`
+            + `\n          if (el.value === \"local_offline\" && el.checked) isOfflineMode = true;`
+            + `\n        } else {`
+            + `\n          if (el.value === \"online\") el.checked = !isOfflineMode;`
+            + `\n          if (el.value === \"local_offline\") el.checked = isOfflineMode;`
+            + `\n          const btnids = [\"loginbtn\", \"prepare_download_btn\", \"crawl_static_data_btn\", \"stop_crawling_btn\"];`
+            + `\n          btnids.forEach((id) => {`
+            + `\n            let el = document.getElementById(id);`
+            + `\n            el.value = el.value.replace(/^((?!本地离线模式下无法)|本地离线模式下无法)/, isOfflineMode ? \"本地离线模式下无法\" : \"\");`
+            + `\n            el.disabled = isOfflineMode;`
+            + `\n          });`
+            + `\n        }`
+            + `\n      }`
+            + `\n      return isOfflineMode;`
+            + `\n    }`
             + `\n    function unlock_prepare_download_btn() {`
-            + `\n      document.getElementById(\"prepare_download_btn\").removeAttribute(\"disabled\");`
+            + `\n      if (!isOffline()) document.getElementById(\"prepare_download_btn\").removeAttribute(\"disabled\");`
             + `\n    }`
             + `\n  </script>`
             + `\n  <style>`
@@ -1016,6 +1045,7 @@ export class controlInterface {
     }
 
     private getStatus(gameUid: number | undefined): {
+        mode: parameters.mode,
         isDownloading: boolean,
         userdataDumpStatus: string,
         userdataDumpStatusStyle: string,
@@ -1070,6 +1100,7 @@ export class controlInterface {
         const isAssetsCompleted = this.crawler.isAssetsCompleted;
 
         return {
+            mode: this.params.mode,
             isDownloading: isDownloading,
             userdataDumpStatus: userdataDumpStatus,
             userdataDumpStatusStyle: userdataDumpStatusStyle,

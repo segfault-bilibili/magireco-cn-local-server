@@ -47,6 +47,7 @@ export class bsgamesdkPwdAuth {
     }
 
     async login(username: string, password: string): Promise<bsgamesdkResponse> {
+        if (this.params.mode === parameters.mode.LOCAL_OFFLINE) throw new Error("cannot do bilibili login in local offline mode");
         let hashAndCipherKey = await this.issueCipherV3();
         let hashsalt = hashAndCipherKey.hash;
         let pubkey = crypto.createPublicKey(hashAndCipherKey.cipher_key);

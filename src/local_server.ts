@@ -156,26 +156,26 @@ export class localServer {
                 let respHeaders: http2.IncomingHttpHeaders;
                 const respBodyBufArray: Array<Buffer> = [];
 
-                let socket: net.Socket | tls.TLSSocket;
-                if (reqHeaders.host.match(/^(|www\.)magireco\.local(|:\d{1,5})$/)) {
-                    let controlInterfaceHost = this.params.listenList.controlInterface.host;
-                    let controlInterfacePort = this.params.listenList.controlInterface.port;
-                    socket = await localServer.directConnectAsync(controlInterfaceHost, controlInterfacePort);
-                } else {
-                    socket = await localServer.getTlsSocketAsync(this.params, true, new URL(`https://${reqHeaders.host}/`), alpn, sni);
-                }
-
                 let svrReq: http.ClientRequest | undefined;
-                if (fakedResponse) svrReq = undefined;
-                else svrReq = http.request({
-                    method: modifiedMethod,
-                    host: reqHeaders["host"],
-                    path: cliReq.url,
-                    createConnection: (options, onCreate) => {
-                        return socket;
-                    },
-                    headers: reqHeaders,
-                });
+                if (this.params.mode !== parameters.mode.LOCAL_OFFLINE && !fakedResponse) {
+                    let socket: net.Socket | tls.TLSSocket;
+                    if (reqHeaders.host.match(/^(|www\.)magireco\.local(|:\d{1,5})$/)) {
+                        let controlInterfaceHost = this.params.listenList.controlInterface.host;
+                        let controlInterfacePort = this.params.listenList.controlInterface.port;
+                        socket = await localServer.directConnectAsync(controlInterfaceHost, controlInterfacePort);
+                    } else {
+                        socket = await localServer.getTlsSocketAsync(this.params, true, new URL(`https://${reqHeaders.host}/`), alpn, sni);
+                    }
+                    svrReq = http.request({
+                        method: modifiedMethod,
+                        host: reqHeaders["host"],
+                        path: cliReq.url,
+                        createConnection: (options, onCreate) => {
+                            return socket;
+                        },
+                        headers: reqHeaders,
+                    });
+                }
                 svrReq?.on('continue', () => {
                     try {
                         cliRes.writeHead(100);
@@ -412,11 +412,12 @@ export class localServer {
                 const respBodyBufArray: Array<Buffer> = [];
 
                 const authorityURL = new URL(`https://${reqHeaders[":authority"]}`);
-                let sess = await this.getH2SessionAsync(authorityURL,
-                    alpn, reqHeaders[":authority"] != null ? authorityURL.hostname : sni);
-                let svrReq: http2.ClientHttp2Stream | undefined;
-                if (fakedResponse) svrReq = undefined;
-                else svrReq = sess.request(reqHeaders);
+                let sess: http2.ClientHttp2Session | undefined, svrReq: http2.ClientHttp2Stream | undefined;
+                if (this.params.mode !== parameters.mode.LOCAL_OFFLINE && !fakedResponse) {
+                    sess = await this.getH2SessionAsync(authorityURL,
+                        alpn, reqHeaders[":authority"] != null ? authorityURL.hostname : sni);
+                    svrReq = sess.request(reqHeaders);
+                }
                 svrReq?.on('continue', () => {
                     try {
                         cliReqStream.respond({

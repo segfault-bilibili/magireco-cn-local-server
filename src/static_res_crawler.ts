@@ -231,6 +231,7 @@ export class crawler {
         );
     }
     async getFetchAllPromise(): Promise<void> {
+        if (this.params.mode === parameters.mode.LOCAL_OFFLINE) throw new Error("cannot crawl in local offline mode");
         if (this._isCrawling) throw new Error("previous crawling has not finished");
         if (this.isFscking) throw new Error("is still fsck'ing, cannot start crawling");
         this.stopCrawling = false;
