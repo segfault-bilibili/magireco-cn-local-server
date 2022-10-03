@@ -87,7 +87,7 @@ export class controlInterface {
         const hooks = [
             new saveAccessKeyHook(params),
             new saveOpenIdTicketHook(params),
-            new fakeMagirecoProdRespHook(params, crawler),
+            new fakeMagirecoProdRespHook(params, crawler, userdataDmp),
         ];
         hooks.forEach((hook) => localsvr.addHook(hook));
 
