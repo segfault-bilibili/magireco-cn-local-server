@@ -688,7 +688,13 @@ class controlInterface {
             + `\n        window.location.reload(true);`
             + `\n      }`
             + `\n    }`
+            + `\n    var verboseDescHtml = \"${aHref("（点击显示设置说明，即让游戏客户端连接到本地服务器而不是直连官服）", "javascript:swapVerboseDesc();", false).replace(/"/g, "\\\"")}\";`
+            + `\n    function swapVerboseDesc() {`
+            + `\n      let el = document.getElementById(\"verbosedesc\"); let innerHTML = el.innerHTML;`
+            + `\n      el.innerHTML = verboseDescHtml; verboseDescHtml = innerHTML;`
+            + `\n    }`
             + `\n    window.addEventListener('load', (ev) => {`
+            + `\n      swapVerboseDesc();`
             + `\n      document.getElementById(\"loginstatus\").textContent = \"${loginStatus}\";`
             + `\n      document.getElementById(\"openidticketstatus\").textContent = \"${openIdTicketStatus}\";`
             + `\n      let initialCountdown = ${isDownloading || isCrawling || isFscking ? "20" : "0"};`
@@ -821,16 +827,44 @@ class controlInterface {
             + `\n  <li>`
             + `\n  另外，让${aHref("游戏客户端", officialURL.href)}通过上述HTTP代理设置连接服务器时（也就是通过这个本地服务器进行中转），即会自动从游戏通信内容中抓取到登录信息，然后刷新这个页面即可看到登录状态变为绿色“已登录”。`
             + `\n  <br>接着就同样可以利用抓取到的登录信息来下载保存个人账号数据。`
-            + `\n  <br>但这很显然要求你有一定的动手能力，比如电脑上用${aHref("最新版NodeJS", nodeJsUrl.href)}直接跑${aHref("这个本地服务器", npmRepoUrl.href)}、用Android模拟器跑游戏客户端和${aHref("Clash for Android", clashURL.href)}，然后用<code>adb -e reverse tcp:${httpProxyPort} tcp:${httpProxyPort}</code>命令（<code>-e</code>参数指定连接至模拟器而不是真机；<code>-d</code>则反之。若有多个设备/模拟器则可用<code>-t</code>指定<code>adb devices -l</code>列出的transport_id编号，比如<code>-t 2</code>）设置端口映射来让模拟器里的Clash能连到外边，CA证书也安装在跑游戏客户端和Clash的Android模拟器里；`
-            + `\n  <br>或是在Android真机上用${aHref("Termux", termuxURL.href)}跑这个本地服务器，然后用类似${aHref("光速", gsxnjURL.href)}之类虚拟机来跑游戏客户端，并在虚拟机内安装CA证书，Clash则直接跑在真机上，然后需要设置Clash分流来<b>只让跑着游戏客户端的虚拟机App走代理，不能让跑着本地服务器的Termux也走代理</b><i>（否则很显然，本地服务器转发到游戏官服时又被Clash拦截送回本地服务器，这样网络通信就“死循环”了）</i>，也就是在Clash的[网络]=>[访问控制模式]中选择<b>[仅允许已选择的应用]</b>，然后在[访问控制应用包列表]中<b>只勾选跑着游戏客户端（以及下文提到的autoBattle脚本）的虚拟机App</b>。`
-            + `\n  <br>（<b>注意Clash第一次启动后需要设置一下代理模式</b>，否则默认是DIRECT直连）`
-            + `\n  <br>尤其是<b>CA证书必须安装为Android的系统证书</b>，这一步可以用${aHref("autoBattle脚本", autoBattleURL.href)}（安装后请先下拉在线更新到最新版）选择运行[安装CA证书]这个脚本自动完成。`
-            + `\n  <br>另外提醒一下：Android 6的MuMu模拟器等环境下，Clash for Android似乎不能正常按应用分流，所以不能在MuMu模拟器里再安装Termux、然后用Termux跑本地服务器，否则会出现上述网络通信“死循环”问题。<b>使用MuMu模拟器时也应该按照上述方法，在模拟器外直接在电脑上跑本地服务器。</b>`
+            + `\n  </li>`
+            + `\n  <li id=\"verbosedesc\">`
+            + `\n  ${aHref("（点击隐藏详细设置说明，即让游戏客户端连接到本地服务器而不是直连官服）", "javascript:swapVerboseDesc();", false)}`
+            + `\n    <ul>`
+            + `\n      <li>`
+            + `\n        比如电脑上用${aHref("最新版NodeJS", nodeJsUrl.href)}直接跑${aHref("这个本地服务器", npmRepoUrl.href)}、用Android模拟器跑${aHref("游戏客户端", officialURL.href)}和${aHref("Clash for Android", clashURL.href)}，`
+            + `\n        <br>然后用<code>adb -e reverse tcp:${httpProxyPort} tcp:${httpProxyPort}</code>命令设置端口映射来让模拟器里的Clash能连到外边；`
+            + `\n        <br>CA证书也安装在（跑着游戏客户端和Clash的）Android模拟器里；`
+            + `\n        <br>（<code>adb</code>的<code>-e</code>参数指定连接至模拟器而不是真机；<code>-d</code>则反之。若有多个设备/模拟器则可用<code>-t</code>指定<code>adb devices -l</code>列出的transport_id编号，比如<code>-t 2</code>）`
+            + `\n      </li><li>`
+            + `\n        或是在Android真机上用${aHref("Termux", termuxURL.href)}跑这个本地服务器，`
+            + `\n        <br>然后用类似${aHref("光速", gsxnjURL.href)}之类虚拟机来跑${aHref("游戏客户端", officialURL.href)}，`
+            + `\n        <br>并在虚拟机内安装CA证书。`
+            + `\n        <br>Clash则直接跑在真机上，然后需要设置Clash分流来<b>只让跑着游戏客户端的虚拟机App走代理，不能让跑着本地服务器的Termux也走代理</b>，`
+            + `\n        <br>也就是在Clash的[网络]=>[访问控制模式]中选择<b>[仅允许已选择的应用]</b>，然后在[访问控制应用包列表]中<b>只勾选虚拟机App</b>（虚拟机里跑着游戏客户端以及下文提到的autoBattle脚本）。`
+            + `\n        <br><i>（否则很显然，本地服务器转发到游戏官服时又被Clash拦截送回本地服务器，这样网络通信就“死循环”了）</i>`
+            + `\n      </li><li>`
+            + `\n        （<b>注意Clash第一次启动后需要设置一下代理模式</b>，否则默认是DIRECT直连）`
+            + `\n      </li><li>`
+            + `\n        <b>CA证书必须安装为Android的系统证书</b>`
+            + `\n        <br><i>（必须<b>Root权限</b>，所以对于获取Root权限不便的真机，需要在虚拟机内安装游戏客户端；而虚拟机内可能不支持运行Clash，故Clash需要跑在虚拟机外）。</i>`
+            + `\n        <br>安装CA证书这一步可以用${aHref("autoBattle脚本", autoBattleURL.href)}（安装后请先下拉在线更新到最新版）选择运行[安装CA证书]这个脚本自动完成。`
+            + `\n      </li><li>`
+            + `\n         另外提醒一下：Android 6的MuMu模拟器等环境下，Clash for Android似乎不能正常按应用分流，所以不能在MuMu模拟器里再安装Termux、然后用Termux跑本地服务器，否则会出现上述网络通信“死循环”问题。<b>使用MuMu模拟器时也应该按照上述方法，在模拟器外直接在电脑上跑本地服务器。</b>`
+            + `\n      </li>`
+            + `\n    </ul>`
             + `\n  </li>`
             + `\n  <li>`
-            + `\n  本地离线模式只支持通过<b>用户名密码登录</b>，功能目前只有<b>首页</b>和<b>档案</b>两个；`
-            + `\n  <br><i>（本地离线模式下，在游戏客户端中输入任意非空用户名密码均可照常登录到离线服务器）</i>`
-            + `\n  <br>而且目前暂时<b>只有之前下载过个人账号数据的情况下才能正常登录到离线服务器</b>。`
+            + `\n  本地离线模式<b>必须</b>先${aHref("从官服下载静态资源", "#crawlstaticdata", false)}才能正常提供服务。`
+            + `\n  </li>`
+            + `\n  <li>`
+            + `\n  本地离线模式只支持通过<b>用户名密码登录</b>，功能目前暂时只有<b>首页</b>和<b>档案</b>两个；`
+            + `\n  </li>`
+            + `\n  <li>`
+            + `\n  本地离线模式下，在游戏客户端中输入任意非空用户名密码均可照常登录到离线服务器。`
+            + `\n  </li>`
+            + `\n  <li>`
+            + `\n  目前暂时<b>只有之前下载过个人账号数据的情况下才能正常登录到离线服务器</b>。`
             + `\n  </li>`
             + `\n  <li>`
             + `\n  <b>必须切换到在线模式才能下载个人账号数据，本地离线模式下无法从官服下载个人账号数据。</b>`
