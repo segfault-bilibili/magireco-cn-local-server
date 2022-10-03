@@ -835,6 +835,8 @@ export class controlInterface {
             + `\n        另外提醒一下：Android 6的MuMu模拟器等环境下，Clash for Android似乎不能正常按应用分流，所以不能在MuMu模拟器里再安装Termux、然后用Termux跑本地服务器，否则会出现上述网络通信“死循环”问题。<b>使用MuMu模拟器时也应该按照上述方法，在模拟器外直接在电脑上跑本地服务器。</b>`
             + `\n      </li><li>`
             + `\n        Android 9或以上的新版MuMu模拟器，建议如上述方式修改Clash设置，只让游戏客户端通过Clash联网，并启用[绕过私有网络]和[DNS劫持]。`
+            + `\n      </li><li>`
+            + `\n        雷电模拟器9的系统分区默认不可写，导致无法安装CA证书，需要在模拟器右上角三条横线菜单[软件设置]=>[性能设置]中将[磁盘共享]设为<b>[System.vmdk可写入]</b>。`
             + `\n      </li>`
             + `\n    </ul>`
             + `\n  </li>`
