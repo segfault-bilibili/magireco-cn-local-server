@@ -109,33 +109,14 @@ export class fakeMagirecoProdRespHook implements hook {
                         interceptResponse: true,
                     }
                 }
+                case "page/ResumeBackground":
+                    {
+                        body = this.fakeResumeBackground();
+                        break;
+                    }
                 case "page/MyPage":
                     {
-                        const lastSnapshot = this.userdataDmp.lastSnapshot;
-                        if (lastSnapshot != null) {
-                            let respBodyObj = lastSnapshot.httpResp.get.get(this.pageKeys[apiName])?.body;
-                            if (respBodyObj != null) {
-                                // make a replica to avoid changing original
-                                let replica = JSON.parse(JSON.stringify(respBodyObj));
-                                // copy "missing" parts from other page to populate common.storage,
-                                // so that StoryCollection etc won't crash
-                                for (let pageKey in this.myPagePatchList) {
-                                    let page = lastSnapshot.httpResp.get.get(this.pageKeys[pageKey])?.body;
-                                    if (page == null) {
-                                        console.error(`[${pageKey}] is missing, cannot copy data from it to [${apiName}]`);
-                                        continue;
-                                    }
-                                    this.myPagePatchList[pageKey].forEach((key) => {
-                                        replica[key] = page[key];
-                                        if (replica[key] == null) {
-                                            console.error(`cannot copy [${key}] from [${pageKey}] to [${apiName}]`);
-                                        }
-                                    });
-                                }
-                                // convert to buffer
-                                body = Buffer.from(JSON.stringify(replica), 'utf-8');
-                            }
-                        }
+                        body = this.fakeMyPage();
                         break;
                     }
                 case "page/TopPage":
@@ -384,6 +365,68 @@ export class fakeMagirecoProdRespHook implements hook {
             resultCode: "success"
         }
         return Buffer.from(JSON.stringify(obj), 'utf-8');
+    }
+
+    private fakeResumeBackground(): Buffer {
+        const obj = {
+            currentTime: this.getDateTimeString(),
+            resourceUpdated: false,
+            eventList: [],
+            regularEventList: [],
+            functionMaintenanceList: [],
+            campaignList: [],
+            forceClearCache: false,
+        };
+        return Buffer.from(JSON.stringify(obj));
+    }
+    private getDateTimeString(): string {
+        const d = new Date();
+        let year = String(d.getFullYear());
+        let monthDate = [
+            String(d.getMonth() + 1),
+            String(d.getDate()),
+        ];
+        let time = [
+            String(d.getHours()),
+            String(d.getMinutes()),
+            String(d.getSeconds()),
+        ];
+        [monthDate, time].forEach((array) => {
+            array.forEach((str, index) => {
+                if (str.length < 2) str = Array.from({ length: 2 - str.length }, () => "0").join("") + str;
+                array[index] = str;
+            });
+        });
+        return `${year}/${monthDate.join("/")} ${time.join(":")}`;
+    }
+
+    private fakeMyPage(): Buffer | undefined {
+        const apiName = "page/MyPage";
+        const lastSnapshot = this.userdataDmp.lastSnapshot;
+        if (lastSnapshot != null) {
+            let respBodyObj = lastSnapshot.httpResp.get.get(this.pageKeys[apiName])?.body;
+            if (respBodyObj != null) {
+                // make a replica to avoid changing original
+                let replica = JSON.parse(JSON.stringify(respBodyObj));
+                // copy "missing" parts from other page to populate common.storage,
+                // so that StoryCollection etc won't crash
+                for (let pageKey in this.myPagePatchList) {
+                    let page = lastSnapshot.httpResp.get.get(this.pageKeys[pageKey])?.body;
+                    if (page == null) {
+                        console.error(`[${pageKey}] is missing, cannot copy data from it to [${apiName}]`);
+                        continue;
+                    }
+                    this.myPagePatchList[pageKey].forEach((key) => {
+                        replica[key] = page[key];
+                        if (replica[key] == null) {
+                            console.error(`cannot copy [${key}] from [${pageKey}] to [${apiName}]`);
+                        }
+                    });
+                }
+                // convert to buffer
+                return Buffer.from(JSON.stringify(replica), 'utf-8');
+            }
+        }
     }
 
     private get404xml(host: string, key: string): string {
