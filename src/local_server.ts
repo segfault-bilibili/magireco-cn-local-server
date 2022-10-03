@@ -126,6 +126,7 @@ export class localServer {
                 const reqBodyBufArray: Array<Buffer> = [];
 
                 let matchedHooks = this.hooks.filter((item): boolean => {
+                    if (fakedResponse) return false;
                     let nextAction = item.matchRequest(method, url, reqHttpVer, cliReq.headers);
                     switch (nextAction.nextAction) {
                         case "fakeResponse":
@@ -143,7 +144,7 @@ export class localServer {
                             }
                             break;
                     }
-                    return nextAction.interceptResponse;
+                    return fakedResponse ? false : nextAction.interceptResponse;
                 });
 
                 let statusCode: number | undefined;
@@ -282,6 +283,7 @@ export class localServer {
                         }
                         const body = reqBodyStr != null ? reqBodyStr : reqBodyBuf;
                         matchedHooks = matchedHooks.filter((item): boolean => {
+                            if (fakedResponse) return false;
                             let nextAction = item.onMatchedRequest(method, url, reqHttpVer, reqHeaders, body);
                             switch (nextAction.nextAction) {
                                 case "fakeResponse":
@@ -294,7 +296,7 @@ export class localServer {
                                 case "passOnRequestBody":
                                     break;
                             }
-                            return nextAction.interceptResponse;
+                            return fakedResponse ? false : nextAction.interceptResponse;
                         });
                     }
 
@@ -369,6 +371,7 @@ export class localServer {
                 const reqBodyBufArray: Array<Buffer> = [];
 
                 let matchedHooks = this.hooks.filter((item): boolean => {
+                    if (fakedResponse) return false;
                     let nextAction = item.matchRequest(method, url, reqHttpVer, reqHeaders);
                     switch (nextAction.nextAction) {
                         case "fakeResponse":
@@ -388,7 +391,7 @@ export class localServer {
                             }
                             break;
                     }
-                    return nextAction.interceptResponse;
+                    return fakedResponse ? false : nextAction.interceptResponse;
                 });
 
                 let statusCode: number | undefined;
@@ -502,6 +505,7 @@ export class localServer {
                         }
                         const body = reqBodyStr != null ? reqBodyStr : reqBodyBuf;
                         matchedHooks = matchedHooks.filter((item): boolean => {
+                            if (fakedResponse) return false;
                             let nextAction = item.onMatchedRequest(method, url, reqHttpVer, reqHeaders, body);
                             switch (nextAction.nextAction) {
                                 case "fakeResponse":
@@ -514,7 +518,7 @@ export class localServer {
                                 case "passOnRequestBody":
                                     break;
                             }
-                            return nextAction.interceptResponse;
+                            return fakedResponse ? false : nextAction.interceptResponse;
                         });
                     }
 
