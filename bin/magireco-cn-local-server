@@ -1,3 +1,11 @@
 #!/usr/bin/env node
 
+if (process.env.npm_package_version == null) {
+    try {
+        let content = fs.readFileSync("../package.json");
+        let pkg = JSON.parse(content);
+        process.env.npm_package_version = pkg.version;
+    } catch (e) {}
+}
+
 require("../out/proxy_main.js");

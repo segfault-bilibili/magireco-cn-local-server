@@ -651,6 +651,8 @@ export class controlInterface {
         const magirecoIDs = this.params.magirecoIDs;
         const device_id = magirecoIDs.device_id;
 
+        const pkgVersionStr = process.env.npm_package_version == null ? `` : ` v${process.env.npm_package_version}`;
+
         const html = "<!doctype html>"
             + `\n<html>`
             + `\n<head>`
@@ -742,7 +744,7 @@ export class controlInterface {
             + `\n  </style>`
             + `\n</head>`
             + `\n<body>`
-            + `\n  <h1>魔法纪录国服本地服务器 v${process.env.npm_package_version}</h1>`
+            + `\n  <h1>魔法纪录国服本地服务器${pkgVersionStr}</h1>`
             + `\n  <fieldset>`
             + `\n  <legend>HTTP代理</legend>`
             + `\n  <div>`
