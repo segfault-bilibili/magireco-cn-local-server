@@ -451,6 +451,16 @@ export class fakeMagirecoProdRespHook implements hook {
     }
 
     private readonly pageKeys: Record<string, string> = {
+        //登录页
+        ["page/TopPage"]: `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/TopPage?value=`
+            + `user`
+            + `%2CgameUser`
+            + `%2CitemList`
+            + `%2CgiftList`
+            + `%2CpieceList`
+            + `%2CuserQuestAdventureList`
+            + `&timeStamp=`,
+        //首页
         ["page/MyPage"]: `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/MyPage?value=`
             + `user`
             + `%2CgameUser`
@@ -472,33 +482,34 @@ export class fakeMagirecoProdRespHook implements hook {
             + `%2CuserDeckList`
             + `%2CuserLive2dList`
             + `&timeStamp=`,
-        ["page/TopPage"]: `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/TopPage?value=`
-            + `user`
-            + `%2CgameUser`
-            + `%2CitemList`
-            + `%2CgiftList`
-            + `%2CpieceList`
-            + `%2CuserQuestAdventureList`
-            + `&timeStamp=`,
+        //档案
         ["page/CollectionTop"]: `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/CollectionTop?value=`
             + `&timeStamp=`,
+        //魔法少女图鉴
         ["page/CharaCollection"]: `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/CharaCollection?value=`
             + `&timeStamp=`,
+        //记忆结晶图鉴
         ["page/PieceCollection"]: `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/PieceCollection?value=`
             + `&timeStamp=`,
+        //剧情存档
         ["page/StoryCollection"]: `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/StoryCollection?value=`
             + `&timeStamp=`,
+        //魔女化身图鉴
         ["page/DoppelCollection"]: `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/DoppelCollection?value=`
             + `&timeStamp=`,
+        //魔女·传闻图鉴
         ["page/EnemyCollection"]: `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/EnemyCollection?value=`
             + `&timeStamp=`,
+        //主线剧情
         ["page/MainQuest"]: `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/MainQuest?value=`
             + `userChapterList`
             + `%2CuserSectionList`
             + `%2CuserQuestBattleList`
             + `%2CuserFollowList&timeStamp=`,
+        //镜层首页
         ["page/ArenaTop"]: `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/ArenaTop?value=`
-            + `userArenaBattle&timeStamp=`
+            + `userArenaBattle&timeStamp=`,
+
     }
 
     private readonly myPagePatchList: Record<string, Array<string>> = {
