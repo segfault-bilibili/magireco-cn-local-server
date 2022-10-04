@@ -611,7 +611,7 @@ class controlInterface {
             if (expires != null)
                 expires = `${new Date(expires).toLocaleDateString()} ${new Date(expires).toLocaleTimeString()}`;
             loginStatus = (0, get_str_rep_1.getStrRep)(`B站账户已登录 账户=[${bsgamesdkResponse.uname}] uid=[${bsgamesdkResponse.uid}]`
-                + ` 实名=[${bsgamesdkResponse.auth_name}] 实名认证状态=[${bsgamesdkResponse.realname_verified}]`
+                + ` 实名认证状态=[${bsgamesdkResponse.realname_verified}]`
                 + ` 登录时间=[${since}] 登录过期时间=[${expires}]`);
             loginStatusStyle = "color: green";
             loginBtnText = "重新登录";
@@ -762,7 +762,7 @@ class controlInterface {
             + `\n  </style>`
             + `\n</head>`
             + `\n<body>`
-            + `\n  <h1>魔法纪录国服本地服务器</h1>`
+            + `\n  <h1>魔法纪录国服本地服务器 v${process.env.npm_package_version}</h1>`
             + `\n  <fieldset>`
             + `\n  <legend>HTTP代理</legend>`
             + `\n  <div>`
@@ -855,6 +855,8 @@ class controlInterface {
             + `\n        另外提醒一下：Android 6的MuMu模拟器等环境下，Clash for Android似乎不能正常按应用分流，所以不能在MuMu模拟器里再安装Termux、然后用Termux跑本地服务器，否则会出现上述网络通信“死循环”问题。<b>使用MuMu模拟器时也应该按照上述方法，在模拟器外直接在电脑上跑本地服务器。</b>`
             + `\n      </li><li>`
             + `\n        Android 9或以上的新版MuMu模拟器，建议如上述方式修改Clash设置，只让游戏客户端通过Clash联网，并启用[绕过私有网络]和[DNS劫持]。`
+            + `\n      </li><li>`
+            + `\n        雷电模拟器9的系统分区默认不可写，导致无法安装CA证书，需要在模拟器右上角三条横线菜单[软件设置]=>[性能设置]中将[磁盘共享]设为<b>[System.vmdk可写入]</b>。`
             + `\n      </li>`
             + `\n    </ul>`
             + `\n  </li>`
@@ -974,9 +976,6 @@ class controlInterface {
             + `\n  <form action=\"/api/clear_bsgamesdk_ids\" method=\"post\">`
             + `\n    <div>`
             + `\n      <input type=\"submit\" id=\"clear_bsgamesdk_ids_btn\" value=\"清除B站登录状态并重置设备ID\">`
-            + `\n      <br><code>bd_id=[${bd_id}]</code>`
-            + `\n      <br><code>buvid=[${buvid}]</code>`
-            + `\n      <br><code>udid=[${udid}]</code>`
             + `\n    </div>`
             + `\n  </form>`
             + `\n  </fieldset>`
@@ -1032,7 +1031,6 @@ class controlInterface {
             + `\n  <form action=\"/api/clear_magireco_ids\" method=\"post\">`
             + `\n    <div>`
             + `\n      <input type=\"submit\" id=\"clear_magireco_ids_btn\" value=\"清除游戏登录状态并重置设备ID\">`
-            + `\n      <br><code>device_id=[${device_id}]</code>`
             + `\n    </div>`
             + `\n  </form>`
             + `\n  </fieldset>`
@@ -1191,6 +1189,7 @@ class controlInterface {
                     + `\n</head>`
                     + `\n<body>`
                     + `\n  <label for=\"backbtn\">${statusCode == 200 ? "操作成功，请返回" : "错误"}</label>`
+                    + `\n  <br><b>以下内容可能含有敏感隐私信息，请勿分享。</b>`
                     + `\n  <button id=\"backbtn\" onclick=\"window.history.back();\">返回 Back</button>`
                     + `\n  <hr>`
                     + `\n  <label for=\"httpstatus\">HTTP Status Code</label>`
