@@ -2,8 +2,7 @@
 
 if (process.env.npm_package_version == null) {
     try {
-        let content = fs.readFileSync("../package.json");
-        let pkg = JSON.parse(content);
+        const pkg = require("../package.json");
         process.env.npm_package_version = pkg.version;
     } catch (e) {}
 }
