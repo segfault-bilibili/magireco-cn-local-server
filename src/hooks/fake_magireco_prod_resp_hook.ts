@@ -173,6 +173,7 @@ export class fakeMagirecoProdRespHook implements hook {
                 case "page/MemoriaEquip":
                 case "page/MemoriaList":
                 case "page/MemoriaSetList":
+                case "page/MagiRepoDetail":
                     {
                         body = this.fakeEmptyResp(apiName);
                         break;
@@ -201,6 +202,11 @@ export class fakeMagirecoProdRespHook implements hook {
                 case "friend/user":
                     {
                         body = this.fakeGuidResult(apiName, url.pathname);
+                        break;
+                    }
+                case "page/MagiRepo":
+                    {
+                        body = this.fakeMagiRepo(apiName);
                         break;
                     }
                 // remaining ones
@@ -1150,6 +1156,54 @@ export class fakeMagirecoProdRespHook implements hook {
                     return;
                 }
         }
+    }
+
+    private fakeMagiRepo(apiName: string): Buffer | undefined {
+        if (apiName !== "page/MagiRepo") {
+            console.error(`fakeMagiRepo invalid apiName=[${apiName}]`);
+            return;
+        }
+        const obj: Record<string, any> = {
+            currentTime: this.getDateTimeString(),
+            resourceUpdated: false,
+            eventList: [],
+            regularEventList: [],
+            functionMaintenanceList: [],
+            campaignList: [],
+            magiRepoList: [],
+            forceClearCache: false,
+        }
+        const lastNumber = [46, 100];
+        for (let part = 1; part <= 2; part++) {
+            for (let number = 1; number <= lastNumber[part - 1]; number++) {
+                let numberStr = String(number);
+                if (numberStr.length < 3) {
+                    numberStr = Array.from({ length: 3 - numberStr.length }, () => "0").join("") + numberStr;
+                }
+                let item: Record<string, number | string> = {
+                    part: part,
+                    number: number,
+                    imagePath: `/part${part}/magirepo_0${part}_${numberStr}.png`
+                }
+                if (part == 2) {
+                    if (item.number <= 30) delete item.startAt;
+                    else if (item.number <= 36) item.startAt = "2021/05/31 13:00:00";
+                    else if (item.number <= 40) item.startAt = "2021/06/24 13:00:00";
+                    else if (item.number <= 47) item.startAt = "2021/08/05 13:00:00";
+                    else if (item.number <= 50) item.startAt = "2021/09/13 13:00:00";
+                    else if (item.number <= 56) item.startAt = "2021/10/12 13:00:00";
+                    else if (item.number <= 60) item.startAt = "2021/11/26 13:00:00";
+                    else if (item.number <= 69) item.startAt = "2022/01/25 13:00:00";
+                    else if (item.number <= 77) item.startAt = "2022/02/21 13:00:00";
+                    else if (item.number <= 83) item.startAt = "2022/04/12 13:00:00";
+                    else if (item.number <= 88) item.startAt = "2022/05/13 12:00:00";
+                    else if (item.number <= 91) item.startAt = "2022/06/21 13:00:00";
+                    else if (item.number <= 100) item.startAt = "2022/07/29 12:00:00";
+                }
+                obj.magiRepoList.push(item);
+            }
+        }
+        return Buffer.from(JSON.stringify(obj), 'utf-8');
     }
 
     private get404xml(host: string, key: string): string {
