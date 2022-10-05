@@ -22,6 +22,7 @@ type httpPostApiRequest = { url: URL, postData: postData }
 type httpGetApiResult = { url: string, ts?: number, respBody: any }
 type httpPostApiResult = { url: string, ts?: number, postData: postData, respBody: any }
 type httpApiResult = { url: string, ts?: number, postData?: postData, respBody: any }
+type httpApiBrResult = { url: string, ts?: number, postData?: postData, respBrBody: string }
 
 export type dumpRespEntry = { ts?: number, body?: any, brBody: string }
 
@@ -196,12 +197,16 @@ export class userdataDmp {
         let stage = 1;
 
         const grow = async (seeds: Array<httpApiRequest>) => {
-            let results: Array<httpApiResult> = [];
+            let results: Array<httpApiBrResult> = [];
             for (let start = 0, total = seeds.length; start < total; start += concurrent) {
                 let end = Math.min(start + concurrent, total);
                 let requests = seeds.slice(start, end);
-                let promises = requests.map((request) => request.postData == null ? this.execHttpGetApi(request.url)
-                    : this.execHttpPostApi(request.url, request.postData));
+                let promises = requests.map((request) => (request.postData == null ? this.execHttpGetApi(request.url)
+                    : this.execHttpPostApi(request.url, request.postData)).then((result: unknown) => {
+                        (result as httpApiBrResult).respBrBody = brBase64((result as httpApiResult).respBody);
+                        delete (result as httpApiResult).respBody;
+                        return result as httpApiBrResult;
+                    }));
                 let settleStatus = await Promise.allSettled(promises);
                 let failed = settleStatus.filter((s) => s.status !== 'fulfilled').length;
                 if (failed > 0) {
@@ -224,28 +229,25 @@ export class userdataDmp {
             return results;
         }
         const reap = (
-            crops: Array<httpApiResult>,
+            crops: Array<httpApiBrResult>,
             httpGetMap: Map<string, dumpRespEntry>, httpPostMap: Map<string, Map<string, dumpRespEntry>>
         ) => {
             crops.map((result) => {
-                const buf = Buffer.from(JSON.stringify(result.respBody, parameters.replacer), 'utf-8');
-                const compressedBase64 = localServer.compress(buf, "br").toString('base64');
-                result.respBody = compressedBase64;
                 if (result.postData == null) {
                     const map = httpGetMap;
-                    const key = result.url, body = result.respBody, ts = result.ts;
+                    const key = result.url, brBody = result.respBrBody, ts = result.ts;
                     if (map.has(key)) throw new Error(`key=[${key}] already exists`);
-                    let val: dumpRespEntry = { brBody: body };
+                    let val: dumpRespEntry = { brBody: brBody };
                     if (ts != null) val.ts = ts;
                     map.set(key, val);
                 } else {
                     const map = httpPostMap;
-                    const key = result.url, body = result.respBody, ts = result.ts;
+                    const key = result.url, brBody = result.respBrBody, ts = result.ts;
                     const existingValMap = map.get(key);
                     const valMap = existingValMap != null ? existingValMap : new Map<string, dumpRespEntry>();
                     const valMapKey = JSON.stringify(result.postData.obj);
                     if (valMap.has(valMapKey)) throw new Error(`key=[${key}] already exists`);
-                    let valMapVal: dumpRespEntry = { brBody: body };
+                    let valMapVal: dumpRespEntry = { brBody: brBody };
                     if (ts != null) valMapVal.ts = ts;
                     valMap.set(valMapKey, valMapVal);
                     map.set(key, valMap);
@@ -765,7 +767,7 @@ export class userdataDmp {
         //好友
         const friendList: Set<string> = new Set<string>();
         //关注列表
-        const followTop = getUnBrBody(map, 
+        const followTop = getUnBrBody(map,
             `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/FollowTop?value=`
             + `userFollowList`
             + `&timeStamp=`
@@ -779,7 +781,7 @@ export class userdataDmp {
             friendList.add(followUserId);
         });
         //粉丝列表
-        const friendFollowerList = getUnBrBody(map, 
+        const friendFollowerList = getUnBrBody(map,
             `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/friend/follower/list/1`
         );
         if (friendFollowerList == null || !Array.isArray(friendFollowerList)) throw new Error("unable to read friendFollowerList");
@@ -848,7 +850,7 @@ export class userdataDmp {
         }
         //精神强化（未开放）
         if (this.params.fetchCharaEnhancementTree) {
-            const userFormationSheetList = getUnBrBody(map, 
+            const userFormationSheetList = getUnBrBody(map,
                 `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/ProfileFormationSupport?value=`
                 + `userFormationSheetList`
                 + `%2CuserCharaEnhancementCellList`
