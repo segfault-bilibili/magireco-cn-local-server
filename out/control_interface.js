@@ -529,6 +529,7 @@ class controlInterface {
         catch (e) {
             console.error(e);
         }
+        console.log("（按CTRL+C即可中断程序运行）");
     }
     async closeAll() {
         let promises = this.serverList.map((server) => server.close());
@@ -902,7 +903,7 @@ class controlInterface {
             + `\n  本地离线模式<b>必须</b>先${aHref("从官服下载静态资源", "#crawlstaticdata", false)}才能正常提供服务。`
             + `\n  </li>`
             + `\n  <li>`
-            + `\n  本地离线模式只支持通过<b>用户名密码登录</b>，功能目前暂时只有<b>首页</b>和<b>档案</b>两个；`
+            + `\n  本地离线模式只支持通过<b>用户名密码登录</b>，目前只有首页背景、看板、档案、镜层演习等少数功能完成修复；`
             + `\n  </li>`
             + `\n  <li>`
             + `\n  本地离线模式下，在游戏客户端中输入任意非空用户名密码均可照常登录到离线服务器。`
