@@ -23,15 +23,41 @@ type httpGetApiResult = { url: string, ts?: number, respBody: any }
 type httpPostApiResult = { url: string, ts?: number, postData: postData, respBody: any }
 type httpApiResult = { url: string, ts?: number, postData?: postData, respBody: any }
 
-export type snapshotRespEntry = { ts?: number, body: any }
+export type dumpRespEntry = { ts?: number, body?: any, brBody: string }
 
-export type snapshot = {
+export type dump = {
     uid: number,
     timestamp: number,
+    isBr: boolean,
     httpResp: {
-        get: Map<string, snapshotRespEntry>,
-        post: Map<string, Map<string, snapshotRespEntry>>
+        get: Map<string, dumpRespEntry>,
+        post: Map<string, Map<string, dumpRespEntry>>
     }
+}
+
+export const brBase64 = (data: any): string => {
+    const stringified = JSON.stringify(data, parameters.replacer);
+    const buf = Buffer.from(stringified, 'utf-8');
+    const compressedBase64 = localServer.compress(buf, "br").toString('base64');
+    return compressedBase64;
+}
+
+export const unBrBase64 = (brBase64?: string): any => {
+    if (brBase64 == null) return brBase64;
+    const compressedBuf = Buffer.from(brBase64, 'base64');
+    const decompressedStr = localServer.decompress(compressedBuf, "br").toString("utf-8");
+    const parsed = JSON.parse(decompressedStr, parameters.reviver);
+    return parsed;
+}
+
+export const getUnBrBody = (map: Map<string, dumpRespEntry>, key: string): any => {
+    const val = map.get(key);
+    if (val == null) return;
+    if (val.brBody == null) throw new Error("val.brBody == null");
+    const buf = Buffer.from(val.brBody, 'base64');
+    const decompressed = localServer.decompress(buf, "br").toString('utf-8');
+    const parsed = JSON.parse(decompressed, parameters.reviver);
+    return parsed;
 }
 
 export const guidRegEx = /^[\da-f]{8}-([\da-f]{4}-){3}[\da-f]{12}$/i;
@@ -40,14 +66,10 @@ export class userdataDmp {
     private readonly params: parameters.params;
     private localServer: localServer;
     private get magirecoIDs(): magirecoIDs { return this.params.magirecoIDs; }
-    get lastSnapshot(): snapshot | undefined {
-        return this._lastSnapshot;
+    get lastDump(): dump | undefined {
+        return this._lastDump;
     }
-    get lastSnapshotBr(): Buffer | undefined {
-        return this._lastSnapshotBr;
-    }
-    private _lastSnapshot?: snapshot;
-    private _lastSnapshotBr?: Buffer;
+    private _lastDump?: dump;
     get isDownloading(): boolean {
         return this._isDownloading;
     }
@@ -124,27 +146,28 @@ export class userdataDmp {
         return this.getUserdataDumpFileName(true);
     }
     private getUserdataDumpFileName(includeDateTime: boolean): string {
-        let time = this._lastSnapshot?.timestamp;
+        let time = this._lastDump?.timestamp;
         const dateTimeNumberStr = includeDateTime ? this.dateTimeNumberStr(time == null ? new Date().getTime() : time)
             : "last";
         const filenameWithoutUid = `magireco_cn_dump_${dateTimeNumberStr}.json`;
-        const lastSnapshot = this.lastSnapshot;
-        if (lastSnapshot == null) return filenameWithoutUid;
-        return `magireco_cn_dump_uid_${lastSnapshot.uid}_${dateTimeNumberStr}.json`;
+        const lastDump = this.lastDump;
+        if (lastDump == null) return filenameWithoutUid;
+        return `magireco_cn_dump_uid_${lastDump.uid}_${dateTimeNumberStr}.json`;
     }
     readonly userdataDumpFileNameRegEx = /^\/magireco_cn_dump[^\/\\]*\.json$/;
-    readonly internalUserdataDumpFileName = "lastUserdataDump.br";
+    readonly oldInternalUserdataDumpFileName = "lastUserdataDump.br";
+    readonly internalUserdataDumpFileName = "lastUserdataDumpBr.json";
 
     constructor(params: parameters.params, localServer: localServer) {
         this.params = params;
         this.localServer = localServer;
         this.clientSessionId = 100 + Math.floor(Math.random() * 899);
-        this.loadLastSnapshot();
+        this.loadLastDump();
     }
 
-    getSnapshotAsync(): Promise<snapshot> {
+    getDumpAsync(): Promise<dump> {
         return new Promise((resolve, reject) =>
-            this.getSnapshotPromise()
+            this.getDumpPromise()
                 .then((result) => resolve(result))
                 .catch((err) => {
                     this.params.save({ key: "openIdTicket", val: undefined })
@@ -155,7 +178,7 @@ export class userdataDmp {
                 })
         );
     }
-    private async getSnapshotPromise(concurrent = 8): Promise<snapshot> {
+    private async getDumpPromise(concurrent = 8): Promise<dump> {
         if (this.params.mode === parameters.mode.LOCAL_OFFLINE) throw new Error("cannot dump userdata in local offline mode");
         if (this.isDownloading) throw new Error("previous download has not finished");
         this._isDownloading = true;
@@ -167,8 +190,8 @@ export class userdataDmp {
         if (concurrent < 1 || concurrent > 8) throw new Error("concurrent < 1 || concurrent > 8");
 
         const timestamp = new Date().getTime();
-        const httpGetRespMap = new Map<string, snapshotRespEntry>(),
-            httpPostRespMap = new Map<string, Map<string, snapshotRespEntry>>();
+        const httpGetRespMap = new Map<string, dumpRespEntry>(),
+            httpPostRespMap = new Map<string, Map<string, dumpRespEntry>>();
 
         let stage = 1;
 
@@ -202,24 +225,27 @@ export class userdataDmp {
         }
         const reap = (
             crops: Array<httpApiResult>,
-            httpGetMap: Map<string, snapshotRespEntry>, httpPostMap: Map<string, Map<string, snapshotRespEntry>>
+            httpGetMap: Map<string, dumpRespEntry>, httpPostMap: Map<string, Map<string, dumpRespEntry>>
         ) => {
             crops.map((result) => {
+                const buf = Buffer.from(JSON.stringify(result.respBody, parameters.replacer), 'utf-8');
+                const compressedBase64 = localServer.compress(buf, "br").toString('base64');
+                result.respBody = compressedBase64;
                 if (result.postData == null) {
                     const map = httpGetMap;
                     const key = result.url, body = result.respBody, ts = result.ts;
                     if (map.has(key)) throw new Error(`key=[${key}] already exists`);
-                    let val: snapshotRespEntry = { body: body };
+                    let val: dumpRespEntry = { brBody: body };
                     if (ts != null) val.ts = ts;
                     map.set(key, val);
                 } else {
                     const map = httpPostMap;
                     const key = result.url, body = result.respBody, ts = result.ts;
                     const existingValMap = map.get(key);
-                    const valMap = existingValMap != null ? existingValMap : new Map<string, snapshotRespEntry>();
+                    const valMap = existingValMap != null ? existingValMap : new Map<string, dumpRespEntry>();
                     const valMapKey = JSON.stringify(result.postData.obj);
                     if (valMap.has(valMapKey)) throw new Error(`key=[${key}] already exists`);
-                    let valMapVal: snapshotRespEntry = { body: body };
+                    let valMapVal: dumpRespEntry = { brBody: body };
                     if (ts != null) valMapVal.ts = ts;
                     valMap.set(valMapKey, valMapVal);
                     map.set(key, valMap);
@@ -235,30 +261,31 @@ export class userdataDmp {
         }
 
         const requests1 = this.firstRoundUrlList.map((url) => { return { url: url }; });
-        console.log(`userdataDmp.getSnapshot() 1st round fetching...`);
+        console.log(`userdataDmp.getDump() 1st round fetching...`);
         const responses1 = await grow(requests1);
-        console.log(`userdataDmp.getSnapshot() 1st round collecting...`);
+        console.log(`userdataDmp.getDump() 1st round collecting...`);
         reap(responses1, httpGetRespMap, httpPostRespMap);
-        console.log(`userdataDmp.getSnapshot() 1st round completed`);
+        console.log(`userdataDmp.getDump() 1st round completed`);
 
-        console.log(`userdataDmp.getSnapshot() 2nd round fetching...`);
+        console.log(`userdataDmp.getDump() 2nd round fetching...`);
         const responses2 = await grow(this.getSecondRoundRequests(httpGetRespMap));
-        console.log(`userdataDmp.getSnapshot() 2nd round collecting...`);
+        console.log(`userdataDmp.getDump() 2nd round collecting...`);
         reap(responses2, httpGetRespMap, httpPostRespMap);
-        console.log(`userdataDmp.getSnapshot() 2nd round completed`);
+        console.log(`userdataDmp.getDump() 2nd round completed`);
 
-        console.log(`userdataDmp.getSnapshot() 3rd round fetching...`);
+        console.log(`userdataDmp.getDump() 3rd round fetching...`);
         const responses3 = await grow(this.getThirdRoundRequests(httpGetRespMap, httpPostRespMap));
-        console.log(`userdataDmp.getSnapshot() 3rd round collecting...`);
+        console.log(`userdataDmp.getDump() 3rd round collecting...`);
         reap(responses3, httpGetRespMap, httpPostRespMap);
-        console.log(`userdataDmp.getSnapshot() 3rd round completed`);
+        console.log(`userdataDmp.getDump() 3rd round completed`);
 
         if (this.params.arenaSimulate) {
             await this.mirrorsSimulateAll(httpGetRespMap, httpPostRespMap);
         }
 
-        this._lastSnapshot = {
+        this._lastDump = {
             uid: this.uid,
+            isBr: true,
             timestamp: timestamp,
             httpResp: {
                 get: httpGetRespMap,
@@ -267,37 +294,53 @@ export class userdataDmp {
         };
 
         console.log(this._fetchStatus = "JSON.stringify()...");
-        let jsonBuf = Buffer.from(JSON.stringify(this._lastSnapshot, parameters.replacer), 'utf-8');
-        console.log(this._fetchStatus = "brotli compressing...");
-        this._lastSnapshotBr = localServer.compress(jsonBuf, "br");
-        console.log(this._fetchStatus = `brotli compressed. [${jsonBuf.byteLength}] => [${this._lastSnapshotBr.byteLength}]`);
-
+        let jsonBuf = Buffer.from(JSON.stringify(this._lastDump, parameters.replacer), 'utf-8');
         console.log(this._fetchStatus = `writting to [${this.internalUserdataDumpFileName}] ...`);
-        fs.writeFileSync(path.join(".", this.internalUserdataDumpFileName), this._lastSnapshotBr);
+        fs.writeFileSync(path.join(".", this.internalUserdataDumpFileName), jsonBuf);
         console.log(this._fetchStatus = `written to [${this.internalUserdataDumpFileName}]`);
 
         this._isDownloading = false;
-        return this._lastSnapshot;
+        return this._lastDump;
     }
 
-    loadLastSnapshot(): void {
-        if (this._lastSnapshot != null) {
-            console.log("won't replace current snapshot");
+    loadLastDump(): void {
+        if (this._lastDump != null) {
+            console.log("won't replace current dump");
             return;
         }
         try {
             const filePath = path.join(".", this.internalUserdataDumpFileName);
-            if (fs.existsSync(filePath)) {
+            const legacyFilePath = path.join(".", this.oldInternalUserdataDumpFileName);
+            if (fs.existsSync(legacyFilePath) && fs.statSync(legacyFilePath).isFile()) {
+                console.log(`converting [${legacyFilePath}] ...`);
+                let compressed = fs.readFileSync(legacyFilePath);
+                let decompressedStr = localServer.decompress(compressed, "br").toString('utf-8');
+                let parsed: dump = JSON.parse(decompressedStr, parameters.reviver);
+                let mapArray = [parsed.httpResp.get];
+                parsed.httpResp.post.forEach((val) => mapArray.push(val));
+                mapArray.forEach((map) => {
+                    map.forEach((val) => {
+                        let stringified = JSON.stringify(val.body, parameters.replacer);
+                        let compressedBase64 = localServer.compress(Buffer.from(stringified, 'utf-8'), "br")
+                            .toString('base64');
+                        val.brBody = compressedBase64;
+                        delete val.body;
+                    });
+                });
+                parsed.isBr = true;
+                let convertedStr = JSON.stringify(parsed, parameters.replacer);
+                fs.writeFileSync(filePath, convertedStr);
+                fs.rmSync(legacyFilePath);
+            }
+
+            if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
                 console.log(`loading [${filePath}] ...`);
-                let lastSnapshotBr = fs.readFileSync(filePath);
-                let decompressedBuf = localServer.decompress(lastSnapshotBr, "br");
-                let decompressed = decompressedBuf.toString('utf-8');
-                this._lastSnapshot = JSON.parse(decompressed, parameters.reviver);
-                this._lastSnapshotBr = lastSnapshotBr;
+                let lastDumpStr = fs.readFileSync(filePath, 'utf-8');
+                this._lastDump = JSON.parse(lastDumpStr, parameters.reviver);
                 console.log(`loaded ${this.userdataDumpFileName}`);
             }
         } catch (e) {
-            console.log(`loadLastSnapshot`, e);
+            console.log(`loadLastDump`, e);
         }
     }
 
@@ -655,7 +698,7 @@ export class userdataDmp {
         "3cc2ec68-6c45-11e7-a958-0600870902db",
         "056a8707-6c45-11e7-a958-0600870902db"
     ]
-    private getSecondRoundRequests(map: Map<string, snapshotRespEntry>): Array<httpApiRequest> {
+    private getSecondRoundRequests(map: Map<string, dumpRespEntry>): Array<httpApiRequest> {
         const requests: Array<httpApiRequest> = [];
 
         const getPageCount = (total: number, perPage: number) => {
@@ -666,7 +709,7 @@ export class userdataDmp {
             return pageCount;
         }
 
-        const topPage = map.get(`https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/TopPage?value=`
+        const topPage = getUnBrBody(map, `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/TopPage?value=`
             + `user`
             + `%2CgameUser`
             + `%2CitemList`
@@ -674,8 +717,8 @@ export class userdataDmp {
             + `%2CpieceList`
             + `%2CuserQuestAdventureList`
             + `&timeStamp=`
-        )?.body;
-        const myPage = map.get(`https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/MyPage?value=`
+        );
+        const myPage = getUnBrBody(map, `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/MyPage?value=`
             + `user`
             + `%2CgameUser`
             + `%2CuserStatusList`
@@ -696,7 +739,7 @@ export class userdataDmp {
             + `%2CuserDeckList`
             + `%2CuserLive2dList`
             + `&timeStamp=`
-        )?.body;
+        );
 
         //左上角个人头像
         const userLive2dList = myPage["userLive2dList"];
@@ -722,11 +765,11 @@ export class userdataDmp {
         //好友
         const friendList: Set<string> = new Set<string>();
         //关注列表
-        const followTop = map.get(
+        const followTop = getUnBrBody(map, 
             `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/FollowTop?value=`
             + `userFollowList`
             + `&timeStamp=`
-        )?.body;
+        );
         const userFollowList = followTop["userFollowList"];
         if (userFollowList == null || !Array.isArray(userFollowList)) throw new Error("unable to read userFollowList");
         userFollowList.forEach((item) => {
@@ -736,9 +779,9 @@ export class userdataDmp {
             friendList.add(followUserId);
         });
         //粉丝列表
-        const friendFollowerList = map.get(
+        const friendFollowerList = getUnBrBody(map, 
             `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/friend/follower/list/1`
-        )?.body;
+        );
         if (friendFollowerList == null || !Array.isArray(friendFollowerList)) throw new Error("unable to read friendFollowerList");
         friendFollowerList.forEach((item) => {
             const followerUserId = item["followerUserId"];
@@ -763,9 +806,9 @@ export class userdataDmp {
         });
         //扭蛋获得履历（仅GUID）
         const gachasPerPage = 50;
-        const gachaHistory = map.get(`https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/GachaHistory?value=`
+        const gachaHistory = getUnBrBody(map, `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/GachaHistory?value=`
             + `&timeStamp=`
-        )?.body;
+        );
         const gachaHistoryCount = gachaHistory["gachaHistoryCount"];
         if (typeof gachaHistoryCount !== 'number' || isNaN(gachaHistoryCount)) throw new Error("gachaHistoryCount must be number");
         const gachaPageCount = getPageCount(gachaHistoryCount, gachasPerPage);
@@ -777,9 +820,9 @@ export class userdataDmp {
         }
         //礼物奖励箱
         const presentPerPage = 50;
-        const presentList = map.get(`https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/PresentList?value=`
+        const presentList = getUnBrBody(map, `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/PresentList?value=`
             + `&timeStamp=`
-        )?.body;
+        );
         const presentCount = presentList["presentCount"];
         if (typeof presentCount !== 'number' || isNaN(presentCount)) throw new Error("presentCount must be number");
         const presentPageCount = getPageCount(presentCount, presentPerPage);
@@ -791,9 +834,9 @@ export class userdataDmp {
         }
         //获得履历
         const presentHistoryPerPage = 100;
-        const presentHistory = map.get(`https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/PresentHistory?value=`
+        const presentHistory = getUnBrBody(map, `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/PresentHistory?value=`
             + `&timeStamp=`
-        )?.body;
+        );
         const presentHistoryCount = presentHistory["presentHistoryCount"];
         if (typeof presentHistoryCount !== 'number' || isNaN(presentHistoryCount)) throw new Error("presentHistoryCount must be number");
         const presentHistoryPageCount = getPageCount(presentHistoryCount, presentHistoryPerPage);
@@ -805,12 +848,12 @@ export class userdataDmp {
         }
         //精神强化（未开放）
         if (this.params.fetchCharaEnhancementTree) {
-            const userFormationSheetList = map.get(
+            const userFormationSheetList = getUnBrBody(map, 
                 `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/ProfileFormationSupport?value=`
                 + `userFormationSheetList`
                 + `%2CuserCharaEnhancementCellList`
                 + `&timeStamp=`
-            )?.body;
+            );
             const userCharaEnhancementCellList = userFormationSheetList["userCharaEnhancementCellList"];
             if (userCharaEnhancementCellList == null || !Array.isArray(userCharaEnhancementCellList))
                 throw new Error("unable to read userCharaEnhancementCellList");
@@ -829,20 +872,20 @@ export class userdataDmp {
         return requests;
     }
     private getThirdRoundRequests(
-        httpGetMap: Map<string, snapshotRespEntry>,
-        httpPostMap: Map<string, Map<string, snapshotRespEntry>>
+        httpGetMap: Map<string, dumpRespEntry>,
+        httpPostMap: Map<string, Map<string, dumpRespEntry>>
     ): Array<httpApiRequest> {
         //扭蛋获得履历
         const gachaHistoryPages: Array<{ gachaHistoryList: Array<{ id: string }> }> = [];
         const gachaIds: Array<string> = [];
 
-        const gachaHistoryFirstPage = httpGetMap.get(`https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/GachaHistory?value=`
+        const gachaHistoryFirstPage = getUnBrBody(httpGetMap, `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/GachaHistory?value=`
             + `&timeStamp=`
-        )?.body;
+        );
         gachaHistoryPages.push(gachaHistoryFirstPage);
 
         const gachaHistoryMap = httpPostMap.get(`https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/GachaHistory`);
-        gachaHistoryMap?.forEach((resp) => gachaHistoryPages.push(resp.body));
+        gachaHistoryMap?.forEach((resp) => gachaHistoryPages.push(unBrBase64(resp.brBody)));
         gachaHistoryPages.map((item) => {
             let gachaHistoryList = item["gachaHistoryList"];
             if (gachaHistoryList == null || !Array.isArray(gachaHistoryList)) throw new Error("unable to read gachaHistoryList");
@@ -862,9 +905,9 @@ export class userdataDmp {
         //好友
         const friendList: Set<string> = new Set<string>();
         //好友推荐
-        const friend_search = httpPostMap.get(
+        const friend_search = unBrBase64(httpPostMap.get(
             `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/search/friend_search/_search`
-        )?.get(JSON.stringify({ type: 0, }))?.body;
+        )?.get(JSON.stringify({ type: 0, }))?.brBody);
         if (friend_search == null || !Array.isArray(friend_search)) throw new Error("unable to read friend_search type 0");
         friend_search.forEach((item) => {
             const id = item["id"];
@@ -873,12 +916,12 @@ export class userdataDmp {
             friendList.add(id);
         });
         //214水波
-        const SupportSelect = httpPostMap.get(
+        const SupportSelect = unBrBase64(httpPostMap.get(
             `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/SupportSelect`
         )?.get(JSON.stringify({
             strUserIds: userdataDmp.fakeFriends.join(","),
             strNpcHelpIds: "102",//214水波的NPC桃子
-        }))?.body;
+        }))?.brBody);
         const supportUserList = SupportSelect["supportUserList"];
         if (supportUserList == null || !Array.isArray(supportUserList)) throw new Error("unable to read supportUserList");
         supportUserList.forEach((item) => {
@@ -895,29 +938,29 @@ export class userdataDmp {
 
         return requests;
     }
-    private async mirrorsSimulateAll(httpGetMap: Map<string, snapshotRespEntry>,
-        httpPostMap: Map<string, Map<string, snapshotRespEntry>>
+    private async mirrorsSimulateAll(httpGetMap: Map<string, dumpRespEntry>,
+        httpPostMap: Map<string, Map<string, dumpRespEntry>>
     ): Promise<void> {
         if (!this.params.arenaSimulate) return;
         //镜层演习开战
         const arenaStartUrlStr = `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/arena/start`;
         let arenaStartMap = httpPostMap.get(arenaStartUrlStr);
         if (arenaStartMap == null || !(arenaStartMap instanceof Map)) {
-            arenaStartMap = new Map<string, snapshotRespEntry>();
+            arenaStartMap = new Map<string, dumpRespEntry>();
             httpPostMap.set(arenaStartUrlStr, arenaStartMap);
         }
         const nativeGetUrlStr = `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/quest/native/get`;
         let nativeGetMap = httpPostMap.get(nativeGetUrlStr);
         if (nativeGetMap == null || !(nativeGetMap instanceof Map)) {
-            nativeGetMap = new Map<string, snapshotRespEntry>();
+            nativeGetMap = new Map<string, dumpRespEntry>();
             httpPostMap.set(nativeGetUrlStr, nativeGetMap);
         }
 
         const requests: Array<httpPostApiRequest> = [];
-        const arenaSimulate = httpGetMap.get(
+        const arenaSimulate = getUnBrBody(httpGetMap,
             `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/ArenaSimulate?value=`
             + `&timeStamp=`
-        )?.body;
+        );
         const opponentUserArenaBattleInfoList = arenaSimulate?.userArenaBattleMatch?.opponentUserArenaBattleInfoList;
         if (opponentUserArenaBattleInfoList == null || !Array.isArray(opponentUserArenaBattleInfoList))
             throw new Error("unable to read opponentUserArenaBattleInfoList");
@@ -1046,10 +1089,10 @@ export class userdataDmp {
             await this.execHttpPostApi(arenaResultReq.url, arenaResultReq.postData);
 
             arenaStartMap.set(JSON.stringify(req.postData.obj), {
-                body: resp.respBody,
+                brBody: brBase64(resp.respBody),
             })
             nativeGetMap.set(JSON.stringify(startBattleReq.postData.obj), {
-                body: startBattleResp.respBody,
+                brBody: brBase64(startBattleResp.respBody),
             });
 
             console.log(this._fetchStatus = `mirrorsSimulateAll [${i + 1}/${requests.length}] completed`);
