@@ -18,6 +18,7 @@ export type openIdTicket = {
 
 type postData = { obj: any }
 type httpApiRequest = { url: URL, postData?: postData }
+type httpPostApiRequest = { url: URL, postData: postData }
 type httpGetApiResult = { url: string, ts?: number, respBody: any }
 type httpPostApiResult = { url: string, ts?: number, postData: postData, respBody: any }
 type httpApiResult = { url: string, ts?: number, postData?: postData, respBody: any }
@@ -252,6 +253,10 @@ export class userdataDmp {
         reap(responses3, httpGetRespMap, httpPostRespMap);
         console.log(`userdataDmp.getSnapshot() 3rd round completed`);
 
+        if (this.params.arenaSimulate) {
+            await this.mirrorsSimulateAll(httpGetRespMap, httpPostRespMap);
+        }
+
         this._lastSnapshot = {
             uid: this.uid,
             timestamp: timestamp,
@@ -311,14 +316,24 @@ export class userdataDmp {
         }
     }
 
-    private magirecoJsonRequst(url: URL, postData?: postData): Promise<NonNullable<any>> {
+    private magirecoJsonRequst(url: URL, postData?: postData, isNative = false): Promise<NonNullable<any>> {
         return new Promise((resolve, reject) => {
             const host = url.host;
             const path = url.pathname + url.search;
             const isPOST = postData != null;
             const postDataStr = isPOST ? JSON.stringify(postData.obj) : undefined;
             const method = isPOST ? http2.constants.HTTP2_METHOD_POST : http2.constants.HTTP2_METHOD_GET;
-            const reqHeaders = {
+            const reqHeaders = isNative ? {
+                [http2.constants.HTTP2_HEADER_METHOD]: method,
+                [http2.constants.HTTP2_HEADER_PATH]: path,
+                [http2.constants.HTTP2_HEADER_AUTHORITY]: host,
+                [http2.constants.HTTP2_HEADER_HOST]: host,
+                [http2.constants.HTTP2_HEADER_ACCEPT_ENCODING]: "gzip, deflate",
+                ["Devicedata"]: "",
+                ["Deviceid"]: `${this.magirecoIDs.device_id}`,
+                ["X-Platform-Host"]: "https://l3-prod-all-gs-mfsn2.bilibiligame.net",
+                ["Ticket-Verify"]: "from_cocos",
+            } : {
                 [http2.constants.HTTP2_HEADER_METHOD]: method,
                 [http2.constants.HTTP2_HEADER_PATH]: path,
                 [http2.constants.HTTP2_HEADER_AUTHORITY]: host,
@@ -326,17 +341,17 @@ export class userdataDmp {
                 ["Client-Os-Ver"]: "Android OS 6.0.1 / API-23 (V417IR/eng.duanlusheng.20220819.111943)",
                 ["X-Platform-Host"]: host,
                 ["Client-Model-Name"]: "MuMu",
-                ["User-Agent"]: "Mozilla/5.0 (Linux; Android 6.0.1; MuMu Build/V417IR; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/66.0.3359.158 Mobile Safari/537.36",
+                [http2.constants.HTTP2_HEADER_USER_AGENT]: "Mozilla/5.0 (Linux; Android 6.0.1; MuMu Build/V417IR; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/66.0.3359.158 Mobile Safari/537.36",
                 ["Flag"]: `${this.flag}:${this.timeStamp}`,
-                ["Accept"]: "application/json, text/javascript, */*; q=0.01",
+                [http2.constants.HTTP2_HEADER_ACCEPT]: "application/json, text/javascript, */*; q=0.01",
                 ["X-Requested-With"]: "XMLHttpRequest",
                 ["Client-Session-Id"]: `${this.clientSessionId}`,
                 ["F4s-Client-Ver"]: "2.2.1",
-                ["Referer"]: `https://${host}/magica/index.html`,
-                ["Accept-Encoding"]: "gzip, deflate",
-                ["Accept-Language"]: "zh-CN,en-US;q=0.9",
+                [http2.constants.HTTP2_HEADER_REFERER]: `https://${host}/magica/index.html`,
+                [http2.constants.HTTP2_HEADER_CONTENT_ENCODING]: "gzip, deflate",
+                [http2.constants.HTTP2_HEADER_ACCEPT_LANGUAGE]: "zh-CN,en-US;q=0.9",
             }
-            if (isPOST) reqHeaders["Content-Type"] = "application/json";
+            if (isPOST) reqHeaders[http2.constants.HTTP2_HEADER_CONTENT_TYPE] = "application/json; charset=utf-8";
             const isLogin = url.pathname === "/magica/api/system/game/login";
             const openIdTicket = this.params.openIdTicket;
             const open_id = openIdTicket?.open_id;
@@ -811,7 +826,6 @@ export class userdataDmp {
                 });
             });
         }
-
         return requests;
     }
     private getThirdRoundRequests(
@@ -881,6 +895,157 @@ export class userdataDmp {
 
         return requests;
     }
+    private async mirrorsSimulateAll(httpGetMap: Map<string, snapshotRespEntry>,
+        httpPostMap: Map<string, Map<string, snapshotRespEntry>>
+    ): Promise<void> {
+        if (!this.params.arenaSimulate) return;
+        //镜层演习开战
+        const startBattleUrlStr = `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/quest/native/get`;
+        let saveToMap = httpPostMap.get(startBattleUrlStr);
+        if (saveToMap == null || !(saveToMap instanceof Map)) {
+            saveToMap = new Map<string, snapshotRespEntry>();
+            httpPostMap.set(startBattleUrlStr, saveToMap);
+        }
+
+        const requests: Array<httpPostApiRequest> = [];
+        const arenaSimulate = httpGetMap.get(
+            `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/ArenaSimulate?value=`
+            + `&timeStamp=`
+        )?.body;
+        const opponentUserArenaBattleInfoList = arenaSimulate?.userArenaBattleMatch?.opponentUserArenaBattleInfoList;
+        if (opponentUserArenaBattleInfoList == null || !Array.isArray(opponentUserArenaBattleInfoList))
+            throw new Error("unable to read opponentUserArenaBattleInfoList");
+        opponentUserArenaBattleInfoList.forEach((item) => {
+            const userId = item.userId;
+            if (typeof userId !== 'string') throw new Error("userId must be string");
+            if (!userId.match(guidRegEx)) throw new Error("userId must be guid");
+            const arenaBattleOpponentTeamType = item.arenaBattleOpponentTeamType;
+            if (typeof arenaBattleOpponentTeamType !== 'string') throw new Error("arenaBattleOpponentTeamType must be string");
+            requests.push({
+                url: new URL(`https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/arena/start`),
+                postData: {
+                    obj: {
+                        opponentUserId: userId,
+                        arenaBattleType: "SIMULATE",
+                        arenaBattleOpponentTeamType: arenaBattleOpponentTeamType,
+                    }
+                }
+            })
+        });
+
+        for (let i = 0; i < requests.length; i++) {
+            let req = requests[i];
+            let resp = await this.execHttpPostApi(req.url, req.postData);
+            let userArenaBattleResultList1 = resp.respBody?.userArenaBattleResultList;
+            if (userArenaBattleResultList1 == null) throw new Error("userArenaBattleResultList1 == null");
+            if (!Array.isArray(userArenaBattleResultList1)) throw new Error("userArenaBattleResultList1 must be array");
+            if (userArenaBattleResultList1.length == 0) throw new Error("userArenaBattleResultList1 is empty");
+            let userQuestBattleResultId = userArenaBattleResultList1[0].userQuestBattleResultId;
+            if (typeof userQuestBattleResultId !== 'string') throw new Error("userQuestBattleResultId must be string");
+            if (!userQuestBattleResultId.match(guidRegEx)) throw new Error("userQuestBattleResultId must be guid");
+            let startBattleReq = {
+                url: new URL(startBattleUrlStr),
+                postData: { obj: { userQuestBattleResultId: userQuestBattleResultId } },
+            }
+            let startBattleResp = await this.execHttpPostApi(startBattleReq.url, startBattleReq.postData, true);
+            let playerList = startBattleResp.respBody?.playerList;
+            if (playerList == null || !Array.isArray(playerList)) throw new Error("cannot read playerList from battleStartResp");
+            let playerListInResult = playerList.map((player) => ({
+                cardId: player.cardId,
+                pos: player.pos,
+                hp: player.hp,
+                hpRemain: 0,
+                mpRemain: 1000,
+                attack: player.attack,
+                defence: player.defence,
+                mpup: player.mpup,
+                blast: 0,
+                charge: 0,
+                rateGainMpAtk: player.rateGainMpAtk,
+                rateGainMpDef: player.rateGainMpDef,
+            }));
+            let resultObj = {
+                userQuestBattleResultId: userQuestBattleResultId,
+                totalWave: 1,
+                totalTurn: 1,
+                continueNum: 0,
+                clearTime: 59,
+                result: 'FAILED',
+                finishType: 'UNKNOWN',
+                lastAttackCardId: null,
+                isFinishLeader: false,
+                killNum: 0,
+                rateHp: 0,
+                questLoop: false,
+                stackedChargeNum: 0,
+                deadNum: playerList.length,
+                diskAcceleNum: 0,
+                diskBlastNum: 0,
+                diskChargeNum: 0,
+                comboAcceleNum: 0,
+                comboBlastNum: 0,
+                comboChargeNum: 0,
+                chainNum: 0,
+                chargeNum: 0,
+                chargeMax: 0,
+                skillNum: 0,
+                connectNum: 0,
+                magiaNum: 0,
+                doppelNum: 0,
+                abnormalNum: 0,
+                avoidNum: 0,
+                counterNum: 0,
+                totalDamageByFire: 0,
+                totalDamageByWater: 0,
+                totalDamageByTimber: 0,
+                totalDamageByLight: 0,
+                totalDamageByDark: 0,
+                totalDamageBySkill: 0,
+                totalDamageByVoid: 0,
+                totalDamage: 999999,
+                totalDamageFromPoison: 0,
+                badCharmNum: 0,
+                badStunNum: 0,
+                badRestraintNum: 0,
+                badPoisonNum: 0,
+                badBurnNum: 0,
+                badCurseNum: 0,
+                badFogNum: 0,
+                badDarknessNum: 0,
+                badBlindnessNum: 0,
+                badBanSkillNum: 0,
+                badBanMagiaNum: 0,
+                badInvalidHealHpNum: 0,
+                badInvalidHealMpNum: 0,
+                waveList: [{ totalDamage: 0, mostDamage: 0 }],
+                playerList: playerListInResult
+            }
+            let stopBattleReq = {
+                url: new URL(`https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/quest/native/result/send`),
+                postData: { obj: { param: JSON.stringify(resultObj) } }
+            }
+            let stopBattleResp = await this.execHttpPostApi(stopBattleReq.url, stopBattleReq.postData, true);
+            let userArenaBattleResultList = stopBattleResp.respBody?.userArenaBattleResultList;
+            if (userArenaBattleResultList == null || !Array.isArray(userArenaBattleResultList))
+                throw new Error("cannot read userArenaBattleResultList");
+            if (userArenaBattleResultList.length == 0)
+                throw new Error("userArenaBattleResultList is empty");
+            let opponentUserId = userArenaBattleResultList[0]?.opponentUserId;
+            if (typeof opponentUserId !== 'string') throw new Error("opponentUserId must be string");
+            if (!opponentUserId.match(guidRegEx)) throw new Error("opponentUserId must be guid");
+            let arenaResultReq = {
+                url: new URL(`https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/ArenaResult`),
+                postData: { obj: { strUserId: opponentUserId } }
+            }
+            await this.execHttpPostApi(arenaResultReq.url, arenaResultReq.postData);
+
+            saveToMap.set(JSON.stringify(startBattleReq.postData.obj), {
+                body: startBattleResp.respBody,
+            });
+
+            console.log(this._fetchStatus = `mirrorsSimulateAll [${i + 1}/${requests.length}] completed`);
+        }
+    }
 
     private readonly tsRegEx = /(?<=timeStamp\=)\d+/;
     private async execHttpGetApi(url: URL): Promise<httpGetApiResult> {
@@ -902,8 +1067,8 @@ export class userdataDmp {
         }
         return ret;
     }
-    private async execHttpPostApi(url: URL, postData: postData): Promise<httpPostApiResult> {
-        let resp = await this.magirecoJsonRequst(url, postData);
+    private async execHttpPostApi(url: URL, postData: postData, isNative = false): Promise<httpPostApiResult> {
+        let resp = await this.magirecoJsonRequst(url, postData, isNative);
         if (resp.resultCode === "error") {
             console.error(`execHttpPostApi unsuccessful resultCode=${resp.resultCode} errorTxt=${resp.errorTxt}`);
             throw new Error(JSON.stringify(resp));

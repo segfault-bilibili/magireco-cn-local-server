@@ -39,6 +39,7 @@ const persistParams: {
     openIdTicket?: userdataDump.openIdTicket,
     magirecoIDs?: userdataDump.magirecoIDs,
     fetchCharaEnhancementTree: boolean,
+    arenaSimulate: boolean,
     concurrentFetch: boolean,
     crawlWebRes: boolean,
     crawlAssets: boolean,
@@ -64,6 +65,7 @@ const persistParams: {
     openIdTicket: undefined,
     magirecoIDs: undefined,
     fetchCharaEnhancementTree: false,
+    arenaSimulate: true,
     concurrentFetch: true,
     crawlWebRes: true,
     crawlAssets: true,
@@ -218,6 +220,7 @@ export class params {
     get openIdTicket(): userdataDump.openIdTicket | undefined { return this.mapData.get("openIdTicket"); }
 
     get fetchCharaEnhancementTree(): boolean { return this.mapData.get("fetchCharaEnhancementTree"); }
+    get arenaSimulate(): boolean { return this.mapData.get("arenaSimulate"); }
     get concurrentFetch(): boolean { return this.mapData.get("concurrentFetch"); }
 
     get crawlWebRes(): boolean { return this.mapData.get("crawlWebRes"); }

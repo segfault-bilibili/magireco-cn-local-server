@@ -259,9 +259,11 @@ export class controlInterface {
                             const dumpDataParams = await this.getParsedPostData(req); // finish receiving first
                             const requestingNewDownload = dumpDataParams.get("new") != null;
                             const fetchCharaEnhancementTree = dumpDataParams.get("fetch_chara_enhance_tree") != null;
+                            const arenaSimulate = dumpDataParams.get("arena_simulate") != null;
                             const concurrent = dumpDataParams.get("concurrent") != null;
                             await this.params.save([
                                 { key: "fetchCharaEnhancementTree", val: fetchCharaEnhancementTree },
+                                { key: "arenaSimulate", val: arenaSimulate },
                                 { key: "concurrent", val: concurrent }
                             ]);
 
@@ -1016,6 +1018,10 @@ export class controlInterface {
             + `\n    <div>`
             + `\n      <input id=\"fetch_chara_enhance_tree_checkbox\" name=\"fetch_chara_enhance_tree\" value=\"true\" type=\"checkbox\" ${this.params.fetchCharaEnhancementTree ? "checked" : ""}>`
             + `\n      <label for=\"fetch_chara_enhance_tree_checkbox\">下载（官方未开放的）精神强化数据</label>`
+            + `\n    </div>`
+            + `\n    <div>`
+            + `\n      <input id=\"arena_simulate_checkbox\" name=\"arena_simulate\" value=\"true\" type=\"checkbox\" ${this.params.arenaSimulate ? "checked" : ""}>`
+            + `\n      <label for=\"arena_simulate_checkbox\"><b>（需至少1BP）</b>通过镜层演习获取好友队伍配置</label>`
             + `\n    </div>`
             + `\n    <div>`
             + `\n      <input id=\"concurrent_checkbox\" name=\"concurrent\" value=\"true\" type=\"checkbox\" ${this.params.concurrentFetch ? "checked" : ""}>`
