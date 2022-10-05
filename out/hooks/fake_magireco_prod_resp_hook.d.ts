@@ -43,6 +43,7 @@ export declare class fakeMagirecoProdRespHook implements hook {
     private fakePagedResult;
     private fakeGuidResult;
     private fakeArenaResp;
+    private fakeMagiRepo;
     private get404xml;
     private fakeErrorResp;
     private readonly pageKeys;
