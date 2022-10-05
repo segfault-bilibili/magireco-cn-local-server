@@ -900,11 +900,17 @@ export class userdataDmp {
     ): Promise<void> {
         if (!this.params.arenaSimulate) return;
         //镜层演习开战
-        const startBattleUrlStr = `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/quest/native/get`;
-        let saveToMap = httpPostMap.get(startBattleUrlStr);
-        if (saveToMap == null || !(saveToMap instanceof Map)) {
-            saveToMap = new Map<string, snapshotRespEntry>();
-            httpPostMap.set(startBattleUrlStr, saveToMap);
+        const arenaStartUrlStr = `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/arena/start`;
+        let arenaStartMap = httpPostMap.get(arenaStartUrlStr);
+        if (arenaStartMap == null || !(arenaStartMap instanceof Map)) {
+            arenaStartMap = new Map<string, snapshotRespEntry>();
+            httpPostMap.set(arenaStartUrlStr, arenaStartMap);
+        }
+        const nativeGetUrlStr = `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/quest/native/get`;
+        let nativeGetMap = httpPostMap.get(nativeGetUrlStr);
+        if (nativeGetMap == null || !(nativeGetMap instanceof Map)) {
+            nativeGetMap = new Map<string, snapshotRespEntry>();
+            httpPostMap.set(nativeGetUrlStr, nativeGetMap);
         }
 
         const requests: Array<httpPostApiRequest> = [];
@@ -922,7 +928,7 @@ export class userdataDmp {
             const arenaBattleOpponentTeamType = item.arenaBattleOpponentTeamType;
             if (typeof arenaBattleOpponentTeamType !== 'string') throw new Error("arenaBattleOpponentTeamType must be string");
             requests.push({
-                url: new URL(`https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/arena/start`),
+                url: new URL(arenaStartUrlStr),
                 postData: {
                     obj: {
                         opponentUserId: userId,
@@ -944,7 +950,7 @@ export class userdataDmp {
             if (typeof userQuestBattleResultId !== 'string') throw new Error("userQuestBattleResultId must be string");
             if (!userQuestBattleResultId.match(guidRegEx)) throw new Error("userQuestBattleResultId must be guid");
             let startBattleReq = {
-                url: new URL(startBattleUrlStr),
+                url: new URL(nativeGetUrlStr),
                 postData: { obj: { userQuestBattleResultId: userQuestBattleResultId } },
             }
             let startBattleResp = await this.execHttpPostApi(startBattleReq.url, startBattleReq.postData, true);
@@ -1039,7 +1045,10 @@ export class userdataDmp {
             }
             await this.execHttpPostApi(arenaResultReq.url, arenaResultReq.postData);
 
-            saveToMap.set(JSON.stringify(startBattleReq.postData.obj), {
+            arenaStartMap.set(JSON.stringify(req.postData.obj), {
+                body: resp.respBody,
+            })
+            nativeGetMap.set(JSON.stringify(startBattleReq.postData.obj), {
                 body: startBattleResp.respBody,
             });
 
