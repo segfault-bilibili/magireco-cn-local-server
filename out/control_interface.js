@@ -34,7 +34,7 @@ class controlInterface {
         ];
         hooks.forEach((hook) => localsvr.addHook(hook));
         const httpServerSelf = http.createServer(async (req, res) => {
-            var _a;
+            var _a, _b;
             if (req.url == null) {
                 res.writeHead(403, { ["Content-Type"]: "text/plain" });
                 res.end("403 Forbidden");
@@ -106,6 +106,27 @@ class controlInterface {
                                 throw new Error("nothing uploaded");
                             await this.params.save(newParamStr);
                             this.sendResultAsync(res, 200, "saved new params");
+                        }
+                        catch (e) {
+                            console.error(`${apiName} error`, e);
+                            this.sendResultAsync(res, 500, e instanceof Error ? e.message : `${apiName} error`);
+                        }
+                        return;
+                    case "upload_overrides":
+                        try {
+                            let postData = await this.getPostData(req);
+                            if (typeof postData === 'string')
+                                throw new Error("postData is string");
+                            let uploaded_overrides = postData.find((item) => item.name === "uploaded_overrides");
+                            if (!((_b = uploaded_overrides === null || uploaded_overrides === void 0 ? void 0 : uploaded_overrides.filename) === null || _b === void 0 ? void 0 : _b.match(/\.json$/i)))
+                                throw new Error("filename not ended with .json");
+                            let newOverridesStr = uploaded_overrides.data.toString();
+                            if (newOverridesStr === "")
+                                newOverridesStr = undefined;
+                            if (newOverridesStr == null)
+                                throw new Error("nothing uploaded");
+                            await this.params.saveOverrideDB(newOverridesStr);
+                            this.sendResultAsync(res, 200, "saved new overrides");
                         }
                         catch (e) {
                             console.error(`${apiName} error`, e);
@@ -200,9 +221,11 @@ class controlInterface {
                             const dumpDataParams = await this.getParsedPostData(req); // finish receiving first
                             const requestingNewDownload = dumpDataParams.get("new") != null;
                             const fetchCharaEnhancementTree = dumpDataParams.get("fetch_chara_enhance_tree") != null;
+                            const arenaSimulate = dumpDataParams.get("arena_simulate") != null;
                             const concurrent = dumpDataParams.get("concurrent") != null;
                             await this.params.save([
                                 { key: "fetchCharaEnhancementTree", val: fetchCharaEnhancementTree },
+                                { key: "arenaSimulate", val: arenaSimulate },
                                 { key: "concurrent", val: concurrent }
                             ]);
                             const lastSnapshot = this.userdataDmp.lastSnapshot;
@@ -391,6 +414,14 @@ class controlInterface {
                         ["Content-Disposition"]: `attachment; filename=\"${req.url.replace(/^\//, "")}\"`,
                     });
                     res.end(this.params.stringify());
+                    return;
+                case "/overrides.json":
+                    console.log(`serving overrides.json`);
+                    res.writeHead(200, {
+                        ["Content-Type"]: "application/json; charset=utf-8",
+                        ["Content-Disposition"]: `attachment; filename=\"${req.url.replace(/^\//, "")}\"`,
+                    });
+                    res.end(JSON.stringify(this.params.overridesDB, parameters.replacer));
                     return;
             }
             if (req.url.match(this.userdataDmp.userdataDumpFileNameRegEx)) {
@@ -799,21 +830,37 @@ class controlInterface {
             + `\n  </fieldset>`
             + `\n  <fieldset>`
             + `\n  <legend>下载配置数据</legend>`
-            + `\n  <div>`
-            + `\n    <label for=\"paramsjson\"><b style=\"color: red\">（含有登录密钥等敏感数据，请勿分享）</b></label>`
-            + `\n    ${aHref("params.json", "/params.json")}`
-            + `\n  </div>`
+            + `\n    <fieldset><legend>服务器配置</legend>`
+            + `\n      <label for=\"paramsjson\"><b style=\"color: red\">（含有登录密钥等敏感数据，请勿分享）</b></label>`
+            + `\n      ${aHref("params.json", "/params.json")}`
+            + `\n    </fieldset>`
+            + `\n    <fieldset><legend>玩家配置（如看板背景等）</legend>`
+            + `\n      <label for=\"overridesjson\"></label>`
+            + `\n      ${aHref("overrides.json", "/overrides.json")}`
+            + `\n    </fieldset>`
             + `\n  </fieldset>`
             + `\n  <fieldset>`
             + `\n  <legend>上传配置数据</legend>`
-            + `\n  <form enctype=\"multipart/form-data\" action=\"/api/upload_params\" method=\"post\">`
-            + `\n    <div>`
-            + `\n      <input type=\"file\" name=\"uploaded_params\" id=\"params_file\">`
-            + `\n    </div>`
-            + `\n    <div>`
-            + `\n      <input type=\"submit\" value=\"上传配置数据\" id=\"upload_params_btn\">`
-            + `\n    </div>`
-            + `\n  </form>`
+            + `\n    <fieldset><legend>服务器配置</legend>`
+            + `\n      <form enctype=\"multipart/form-data\" action=\"/api/upload_params\" method=\"post\">`
+            + `\n        <div>`
+            + `\n          <input type=\"file\" name=\"uploaded_params\" id=\"params_file\">`
+            + `\n        </div>`
+            + `\n        <div>`
+            + `\n          <input type=\"submit\" value=\"上传配置数据\" id=\"upload_params_btn\">`
+            + `\n        </div>`
+            + `\n      </form>`
+            + `\n    </fieldset>`
+            + `\n    <fieldset><legend>玩家配置（如看板背景等）</legend>`
+            + `\n      <form enctype=\"multipart/form-data\" action=\"/api/upload_overrides\" method=\"post\">`
+            + `\n        <div>`
+            + `\n          <input type=\"file\" name=\"uploaded_overrides\" id=\"overrides_file\">`
+            + `\n        </div>`
+            + `\n        <div>`
+            + `\n          <input type=\"submit\" value=\"上传配置数据\" id=\"upload_overrides_btn\">`
+            + `\n        </div>`
+            + `\n      </form>`
+            + `\n    </fieldset>`
             + `\n  </fieldset>`
             + `\n  <hr>`
             + `\n  <h2>说明</h2>`
@@ -995,6 +1042,10 @@ class controlInterface {
             + `\n    <div>`
             + `\n      <input id=\"fetch_chara_enhance_tree_checkbox\" name=\"fetch_chara_enhance_tree\" value=\"true\" type=\"checkbox\" ${this.params.fetchCharaEnhancementTree ? "checked" : ""}>`
             + `\n      <label for=\"fetch_chara_enhance_tree_checkbox\">下载（官方未开放的）精神强化数据</label>`
+            + `\n    </div>`
+            + `\n    <div>`
+            + `\n      <input id=\"arena_simulate_checkbox\" name=\"arena_simulate\" value=\"true\" type=\"checkbox\" ${this.params.arenaSimulate ? "checked" : ""}>`
+            + `\n      <label for=\"arena_simulate_checkbox\"><b>（需至少1BP）</b>通过镜层演习获取好友队伍配置</label>`
             + `\n    </div>`
             + `\n    <div>`
             + `\n      <input id=\"concurrent_checkbox\" name=\"concurrent\" value=\"true\" type=\"checkbox\" ${this.params.concurrentFetch ? "checked" : ""}>`

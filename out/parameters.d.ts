@@ -15,6 +15,12 @@ export declare enum mode {
     ONLINE = 1,
     LOCAL_OFFLINE = 2
 }
+export declare type overrides = {
+    gameUser?: {
+        bgItemId?: string;
+        modifyChara?: [number, Record<string, string | number>];
+    };
+};
 export declare class params {
     static VERBOSE: boolean;
     static readonly defaultPath: string;
@@ -33,6 +39,9 @@ export declare class params {
         val: any;
     }> | string, path?: string): Promise<void>;
     checkModified(): boolean;
+    readonly overridesDB: Map<number, overrides>;
+    static readonly overridesDBPath: string;
+    saveOverrideDB(fileContent?: string): void;
     get mode(): mode;
     get autoOpenWeb(): boolean;
     get listenList(): listenList;
@@ -46,6 +55,7 @@ export declare class params {
     get bsgamesdkResponse(): bsgamesdkPwdAuthenticate.bsgamesdkResponse | undefined;
     get openIdTicket(): userdataDump.openIdTicket | undefined;
     get fetchCharaEnhancementTree(): boolean;
+    get arenaSimulate(): boolean;
     get concurrentFetch(): boolean;
     get crawlWebRes(): boolean;
     get crawlAssets(): boolean;

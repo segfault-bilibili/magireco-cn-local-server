@@ -38,12 +38,13 @@ const persistParams = {
     openIdTicket: undefined,
     magirecoIDs: undefined,
     fetchCharaEnhancementTree: false,
+    arenaSimulate: true,
     concurrentFetch: true,
     crawlWebRes: true,
     crawlAssets: true,
 };
 class params {
-    constructor(mapData, lastSaved, path) {
+    constructor(mapData, lastSaved, filePath) {
         this.supportH2Expire = 3600 * 1000;
         this.supportH2MaxSize = 1024;
         this.mapData = mapData;
@@ -58,7 +59,22 @@ class params {
         this.supportH2Map = new Map();
         this.lastSaved = lastSaved;
         this.unfinishedSave = [];
-        this.path = path;
+        this.path = filePath;
+        let overridesDB;
+        if (fs.existsSync(params.overridesDBPath) && fs.statSync(params.overridesDBPath).isFile()) {
+            try {
+                let content = fs.readFileSync(params.overridesDBPath, 'utf-8');
+                overridesDB = JSON.parse(content, reviver);
+                if (!(overridesDB instanceof Map))
+                    throw new Error("not instance of map");
+            }
+            catch (e) {
+                console.error(`error loading from ${params.overridesDBPath}, creating new one`, e);
+            }
+        }
+        if (overridesDB == null)
+            overridesDB = new Map();
+        this.overridesDB = overridesDB;
     }
     static async load(path) {
         if (path == null)
@@ -166,6 +182,27 @@ class params {
     checkModified() {
         return this.stringify() !== this.lastSaved;
     }
+    saveOverrideDB(fileContent) {
+        if (fileContent != null) {
+            try {
+                let parsed = JSON.parse(fileContent, reviver);
+                if (!(parsed instanceof Map))
+                    throw new Error(`parsed fileContent is not map`);
+                this.overridesDB.clear();
+                parsed.forEach((val, key) => this.overridesDB.set(key, val));
+            }
+            catch (e) {
+                console.error(`saveOverrideDB error`, e);
+                throw e;
+            }
+        }
+        try {
+            fs.writeFileSync(params.overridesDBPath, JSON.stringify(this.overridesDB, replacer), 'utf-8');
+        }
+        catch (e) {
+            console.error(`error writting to ${params.overridesDBPath}`, e);
+        }
+    }
     get mode() { return this.mapData.get("mode"); }
     get autoOpenWeb() { return this.mapData.get("autoOpenWeb"); }
     get listenList() { return this.mapData.get("listenList"); }
@@ -189,6 +226,7 @@ class params {
     get bsgamesdkResponse() { return this.mapData.get("bsgamesdkResponse"); }
     get openIdTicket() { return this.mapData.get("openIdTicket"); }
     get fetchCharaEnhancementTree() { return this.mapData.get("fetchCharaEnhancementTree"); }
+    get arenaSimulate() { return this.mapData.get("arenaSimulate"); }
     get concurrentFetch() { return this.mapData.get("concurrentFetch"); }
     get crawlWebRes() { return this.mapData.get("crawlWebRes"); }
     get crawlAssets() { return this.mapData.get("crawlAssets"); }
@@ -314,6 +352,7 @@ class params {
 exports.params = params;
 params.VERBOSE = false;
 params.defaultPath = path.join(".", "params.json");
+params.overridesDBPath = path.join(".", "overrides.json");
 // Author: Stefnotch
 // https://stackoverflow.com/questions/29085197/how-do-you-json-stringify-an-es6-map/73155667#73155667
 function replacer(key, value) {

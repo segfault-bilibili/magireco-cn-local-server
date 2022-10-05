@@ -10,7 +10,7 @@ export declare type openIdTicket = {
     uname?: string;
     timestamp?: number;
 };
-declare type snapshotRespEntry = {
+export declare type snapshotRespEntry = {
     ts?: number;
     body: any;
 };
@@ -62,9 +62,9 @@ export declare class userdataDmp {
     static readonly fakeFriends: string[];
     private getSecondRoundRequests;
     private getThirdRoundRequests;
+    private mirrorsSimulateAll;
     private readonly tsRegEx;
     private execHttpGetApi;
     private execHttpPostApi;
     static newRandomID(): magirecoIDs;
 }
-export {};
