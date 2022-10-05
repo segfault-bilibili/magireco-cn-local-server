@@ -1,4 +1,3 @@
-/// <reference types="node" />
 import * as parameters from "./parameters";
 import { localServer } from "./local_server";
 export declare type magirecoIDs = {
@@ -10,27 +9,30 @@ export declare type openIdTicket = {
     uname?: string;
     timestamp?: number;
 };
-export declare type snapshotRespEntry = {
+export declare type dumpRespEntry = {
     ts?: number;
-    body: any;
+    body?: any;
+    brBody: string;
 };
-export declare type snapshot = {
+export declare type dump = {
     uid: number;
     timestamp: number;
+    isBr: boolean;
     httpResp: {
-        get: Map<string, snapshotRespEntry>;
-        post: Map<string, Map<string, snapshotRespEntry>>;
+        get: Map<string, dumpRespEntry>;
+        post: Map<string, Map<string, dumpRespEntry>>;
     };
 };
+export declare const brBase64: (data: any) => string;
+export declare const unBrBase64: (brBase64?: string) => any;
+export declare const getUnBrBody: (map: Map<string, dumpRespEntry>, key: string) => any;
 export declare const guidRegEx: RegExp;
 export declare class userdataDmp {
     private readonly params;
     private localServer;
     private get magirecoIDs();
-    get lastSnapshot(): snapshot | undefined;
-    get lastSnapshotBr(): Buffer | undefined;
-    private _lastSnapshot?;
-    private _lastSnapshotBr?;
+    get lastDump(): dump | undefined;
+    private _lastDump?;
     get isDownloading(): boolean;
     private _isDownloading;
     get lastError(): any;
@@ -50,11 +52,12 @@ export declare class userdataDmp {
     get userdataDumpFileName(): string;
     private getUserdataDumpFileName;
     readonly userdataDumpFileNameRegEx: RegExp;
-    readonly internalUserdataDumpFileName = "lastUserdataDump.br";
+    readonly oldInternalUserdataDumpFileName = "lastUserdataDump.br";
+    readonly internalUserdataDumpFileName = "lastUserdataDumpBr.json";
     constructor(params: parameters.params, localServer: localServer);
-    getSnapshotAsync(): Promise<snapshot>;
-    private getSnapshotPromise;
-    loadLastSnapshot(): void;
+    getDumpAsync(): Promise<dump>;
+    private getDumpPromise;
+    loadLastDump(): void;
     private testLogin;
     private magirecoJsonRequst;
     private gameLogin;

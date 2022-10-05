@@ -256,10 +256,10 @@ class fakeMagirecoProdRespHook {
         return JSON.stringify(this.params.overridesDB, parameters.replacer);
     }
     get overrides() {
-        const lastSnapshot = this.userdataDmp.lastSnapshot;
-        if (lastSnapshot == null)
+        const lastDump = this.userdataDmp.lastDump;
+        if (lastDump == null)
             return;
-        const uid = lastSnapshot.uid;
+        const uid = lastDump.uid;
         let overrides = this.params.overridesDB.get(uid);
         if (overrides == null) {
             overrides = {};
@@ -303,7 +303,6 @@ class fakeMagirecoProdRespHook {
     set leaderId(val) { this.setOverrideValue("gameUser.leaderId", val); }
     // if matched, keep a copy of request/response data in memory
     matchRequest(method, url, httpVersion, headers) {
-        var _a;
         const mode = this.params.mode;
         if (mode !== parameters.mode.LOCAL_OFFLINE)
             return {
@@ -457,9 +456,9 @@ class fakeMagirecoProdRespHook {
                 case "page/CharaQuest":
                 case "page/EventQuest":
                     {
-                        const lastSnapshot = this.userdataDmp.lastSnapshot;
-                        if (lastSnapshot != null) {
-                            let respBodyObj = (_a = lastSnapshot.httpResp.get.get(this.pageKeys[apiName])) === null || _a === void 0 ? void 0 : _a.body;
+                        const lastDump = this.userdataDmp.lastDump;
+                        if (lastDump != null) {
+                            let respBodyObj = userdataDump.getUnBrBody(lastDump.httpResp.get, this.pageKeys[apiName]);
                             if (respBodyObj != null) {
                                 body = Buffer.from(JSON.stringify(respBodyObj), 'utf-8');
                             }
@@ -658,14 +657,13 @@ class fakeMagirecoProdRespHook {
         return Buffer.from(JSON.stringify(obj), 'utf-8');
     }
     fakeBsgamesdkLoginResp() {
-        var _a;
-        const lastSnapshot = this.userdataDmp.lastSnapshot;
-        if (lastSnapshot == null)
+        const lastDump = this.userdataDmp.lastDump;
+        if (lastDump == null)
             return;
-        const uid = lastSnapshot.uid;
+        const uid = lastDump.uid;
         if (typeof uid !== 'number' || isNaN(uid))
             return;
-        const topPage = (_a = lastSnapshot.httpResp.get.get(this.pageKeys["page/TopPage"])) === null || _a === void 0 ? void 0 : _a.body;
+        const topPage = userdataDump.getUnBrBody(lastDump.httpResp.get, this.pageKeys["page/TopPage"]);
         if (topPage == null)
             return;
         const user = topPage["user"];
@@ -699,11 +697,10 @@ class fakeMagirecoProdRespHook {
         return Buffer.from(JSON.stringify(obj), 'utf-8');
     }
     fakeSystemLogin() {
-        var _a;
-        const lastSnapshot = this.userdataDmp.lastSnapshot;
-        if (lastSnapshot == null)
+        const lastDump = this.userdataDmp.lastDump;
+        if (lastDump == null)
             return;
-        const topPage = (_a = lastSnapshot.httpResp.get.get(this.pageKeys["page/TopPage"])) === null || _a === void 0 ? void 0 : _a.body;
+        const topPage = userdataDump.getUnBrBody(lastDump.httpResp.get, this.pageKeys["page/TopPage"]);
         if (topPage == null)
             return;
         const loginName = topPage["loginName"];
@@ -753,15 +750,15 @@ class fakeMagirecoProdRespHook {
         return `${year}/${monthDate.join("/")} ${time.join(":")}`;
     }
     fakeMyPage(apiName) {
-        var _a, _b, _c;
+        var _a;
         if (apiName !== "page/MyPage") {
             console.error(`fakeMyPage invalid apiName=[${apiName}]`);
             return;
         }
-        const lastSnapshot = this.userdataDmp.lastSnapshot;
-        if (lastSnapshot == null)
+        const lastDump = this.userdataDmp.lastDump;
+        if (lastDump == null)
             return Buffer.from(this.fakeErrorResp("错误", "未加载个人账号数据"), 'utf-8');
-        let respBodyObj = (_a = lastSnapshot.httpResp.get.get(this.pageKeys[apiName])) === null || _a === void 0 ? void 0 : _a.body;
+        let respBodyObj = userdataDump.getUnBrBody(lastDump.httpResp.get, this.pageKeys[apiName]);
         if (respBodyObj == null)
             return Buffer.from(this.fakeErrorResp("错误", "读取个人账号数据出错"), 'utf-8');
         // make a replica to avoid changing original
@@ -769,7 +766,7 @@ class fakeMagirecoProdRespHook {
         // copy "missing" parts from other page to populate common.storage,
         // so that StoryCollection etc won't crash
         for (let pageKey in this.myPagePatchList) {
-            let page = (_b = lastSnapshot.httpResp.get.get(this.pageKeys[pageKey])) === null || _b === void 0 ? void 0 : _b.body;
+            let page = userdataDump.getUnBrBody(lastDump.httpResp.get, this.pageKeys[pageKey]);
             if (page == null) {
                 console.error(`[${pageKey}] is missing, cannot copy data from it to [${apiName}]`);
                 continue;
@@ -798,7 +795,7 @@ class fakeMagirecoProdRespHook {
             // setBackground
             const newBgItemId = this.bgItemId;
             if (newBgItemId != null && typeof newBgItemId === "string") {
-                const foundBgItem = (_c = userItemList.find((itemInfo) => (itemInfo === null || itemInfo === void 0 ? void 0 : itemInfo.itemId) === newBgItemId)) === null || _c === void 0 ? void 0 : _c.item;
+                const foundBgItem = (_a = userItemList.find((itemInfo) => (itemInfo === null || itemInfo === void 0 ? void 0 : itemInfo.itemId) === newBgItemId)) === null || _a === void 0 ? void 0 : _a.item;
                 if (foundBgItem != null) {
                     replicaGameUser.bgItemId = newBgItemId;
                     if (replicaGameUser.bgItem == null)
@@ -829,7 +826,6 @@ class fakeMagirecoProdRespHook {
         return Buffer.from(JSON.stringify(replica), 'utf-8');
     }
     modifyGameUser(apiName, reqBody) {
-        var _a;
         if (typeof reqBody !== 'string')
             return;
         const changeLeader = "gameUser/changeLeader";
@@ -843,8 +839,8 @@ class fakeMagirecoProdRespHook {
         }
         const reqKey = gameUserKeys[apiName][0];
         const gameUserKey = gameUserKeys[apiName][1];
-        const lastSnapshot = this.userdataDmp.lastSnapshot;
-        if (lastSnapshot == null)
+        const lastDump = this.userdataDmp.lastDump;
+        if (lastDump == null)
             return Buffer.from(this.fakeErrorResp("错误", "未加载个人账号数据"), 'utf-8');
         try {
             const parsed = JSON.parse(reqBody);
@@ -852,7 +848,7 @@ class fakeMagirecoProdRespHook {
             if (typeof setToVal === 'string' && setToVal !== "") {
                 this.setOverrideValue(`gameUser.${gameUserKey}`, setToVal);
             }
-            const myPage = (_a = lastSnapshot.httpResp.get.get(this.pageKeys["page/MyPage"])) === null || _a === void 0 ? void 0 : _a.body;
+            const myPage = userdataDump.getUnBrBody(lastDump.httpResp.get, this.pageKeys["page/MyPage"]);
             const gameUser = myPage["gameUser"];
             if (gameUser == null || typeof gameUser !== 'object')
                 throw new Error("unable to read gameUser from MyPage");
@@ -906,17 +902,16 @@ class fakeMagirecoProdRespHook {
         }
     }
     modifyGameChara(apiName, reqBody) {
-        var _a;
         if (typeof reqBody !== 'string')
             return;
         if (apiName !== "userChara/visualize" && apiName !== "userLive2d/set") {
             console.error(`modifyGameChara invalid apiName=[${apiName}]`);
             return;
         }
-        const lastSnapshot = this.userdataDmp.lastSnapshot;
-        if (lastSnapshot == null)
+        const lastDump = this.userdataDmp.lastDump;
+        if (lastDump == null)
             return Buffer.from(this.fakeErrorResp("错误", "未加载个人账号数据"), 'utf-8');
-        const myPage = (_a = lastSnapshot.httpResp.get.get(this.pageKeys["page/MyPage"])) === null || _a === void 0 ? void 0 : _a.body;
+        const myPage = userdataDump.getUnBrBody(lastDump.httpResp.get, this.pageKeys["page/MyPage"]);
         const userCharaList = myPage["userCharaList"];
         const userCardList = myPage["userCardList"];
         if (userCharaList == null || !Array.isArray(userCharaList)
@@ -1020,9 +1015,9 @@ class fakeMagirecoProdRespHook {
         }
     }
     fakePagedResult(apiName, reqBody) {
-        var _a, _b, _c;
-        const lastSnapshot = this.userdataDmp.lastSnapshot;
-        if (lastSnapshot == null)
+        var _a, _b;
+        const lastDump = this.userdataDmp.lastDump;
+        if (lastDump == null)
             return Buffer.from(this.fakeErrorResp("错误", "未加载个人账号数据"), 'utf-8');
         const urlBases = {
             ["page/PresentHistory"]: `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/PresentHistory`,
@@ -1037,20 +1032,19 @@ class fakeMagirecoProdRespHook {
         if (pageNum == null)
             return;
         if (pageNum == 1) {
-            const respBodyObj = (_a = lastSnapshot.httpResp.get.get(this.pageKeys[apiName])) === null || _a === void 0 ? void 0 : _a.body;
+            const respBodyObj = userdataDump.getUnBrBody(lastDump.httpResp.get, this.pageKeys[apiName]);
             if (respBodyObj == null)
                 return;
             return Buffer.from(JSON.stringify(respBodyObj), 'utf-8');
         }
         else {
-            const respBodyObj = (_c = (_b = lastSnapshot.httpResp.post.get(urlBase)) === null || _b === void 0 ? void 0 : _b.get(JSON.stringify({ page: `${pageNum}` }))) === null || _c === void 0 ? void 0 : _c.body;
+            const respBodyObj = userdataDump.unBrBase64((_b = (_a = lastDump.httpResp.post.get(urlBase)) === null || _a === void 0 ? void 0 : _a.get(JSON.stringify({ page: `${pageNum}` }))) === null || _b === void 0 ? void 0 : _b.brBody);
             if (respBodyObj == null)
                 return Buffer.from(this.fakeErrorResp("错误", "找不到指定页面"), 'utf-8');
             return Buffer.from(JSON.stringify(respBodyObj), 'utf-8');
         }
     }
     fakeGuidResult(apiName, pathname) {
-        var _a;
         const urlBases = {
             ["friend/user"]: `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/friend/user/`,
             ["gacha/result"]: `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/gacha/result/`,
@@ -1065,10 +1059,10 @@ class fakeMagirecoProdRespHook {
         if (userId == null) {
             return Buffer.from(this.fakeErrorResp("错误", "参数非法"), 'utf-8');
         }
-        const lastSnapshot = this.userdataDmp.lastSnapshot;
-        if (lastSnapshot == null)
+        const lastDump = this.userdataDmp.lastDump;
+        if (lastDump == null)
             return Buffer.from(this.fakeErrorResp("错误", "未加载个人账号数据"), 'utf-8');
-        let respBodyObj = (_a = lastSnapshot.httpResp.get.get(`${urlBase}${userId}`)) === null || _a === void 0 ? void 0 : _a.body;
+        let respBodyObj = userdataDump.getUnBrBody(lastDump.httpResp.get, `${urlBase}${userId}`);
         if (respBodyObj == null) {
             console.error(`fakeGuidResult userId=[${userId}] not found`);
             return Buffer.from(this.fakeErrorResp("错误", "找不到此项数据"), 'utf-8');
@@ -1076,13 +1070,13 @@ class fakeMagirecoProdRespHook {
         return Buffer.from(JSON.stringify(respBodyObj), 'utf-8');
     }
     fakeArenaResp(apiName, reqBody) {
-        var _a, _b, _c, _d, _e, _f, _g, _h, _j;
+        var _a, _b, _c, _d, _e, _f;
         if (typeof reqBody !== 'string')
             return;
-        const lastSnapshot = this.userdataDmp.lastSnapshot;
-        if (lastSnapshot == null)
+        const lastDump = this.userdataDmp.lastDump;
+        if (lastDump == null)
             return Buffer.from(this.fakeErrorResp("错误", "未加载个人账号数据"), 'utf-8');
-        const myUserId = (_c = (_b = (_a = lastSnapshot.httpResp.get.get(this.pageKeys["page/TopPage"])) === null || _a === void 0 ? void 0 : _a.body) === null || _b === void 0 ? void 0 : _b.gameUser) === null || _c === void 0 ? void 0 : _c.userId;
+        const myUserId = (_b = (_a = userdataDump.getUnBrBody(lastDump.httpResp.get, this.pageKeys["page/TopPage"])) === null || _a === void 0 ? void 0 : _a.gameUser) === null || _b === void 0 ? void 0 : _b.userId;
         if (typeof myUserId !== 'string' || !myUserId.match(userdataDump.guidRegEx)) {
             return Buffer.from(this.fakeErrorResp("错误", "无法读取用户ID"), 'utf-8');
         }
@@ -1157,13 +1151,13 @@ class fakeMagirecoProdRespHook {
                             return;
                         }
                         const arenaStartUrlStr = `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/arena/start`;
-                        let arenaStartMap = lastSnapshot.httpResp.post.get(arenaStartUrlStr);
+                        let arenaStartMap = lastDump.httpResp.post.get(arenaStartUrlStr);
                         if (arenaStartMap == null || !(arenaStartMap instanceof Map)) {
                             console.error(`fakeArenaNativeGet arenaStartMap is null or not map`);
                             return;
                         }
                         const nativeGetUrlStr = `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/quest/native/get`;
-                        let nativeGetMap = lastSnapshot.httpResp.post.get(nativeGetUrlStr);
+                        let nativeGetMap = lastDump.httpResp.post.get(nativeGetUrlStr);
                         if (nativeGetMap == null || !(nativeGetMap instanceof Map)) {
                             console.error(`fakeArenaNativeGet nativeGetMap is null or not map`);
                             return;
@@ -1180,7 +1174,7 @@ class fakeMagirecoProdRespHook {
                             console.error(`fakeArenaNativeGet foundArenaStartKey == null`);
                             return;
                         }
-                        const arenaStartResp = (_d = arenaStartMap.get(foundArenaStartKey)) === null || _d === void 0 ? void 0 : _d.body;
+                        const arenaStartResp = userdataDump.getUnBrBody(arenaStartMap, foundArenaStartKey);
                         if (arenaStartResp == null) {
                             console.error(`fakeArenaNativeGet arenaStartResp == null`);
                             return;
@@ -1191,20 +1185,20 @@ class fakeMagirecoProdRespHook {
                             console.error(`fakeArenaNativeGet cannot read userArenaBattleResultList`);
                             return;
                         }
-                        const origUserQuestBattleResultId = (_e = userArenaBattleResultList[0]) === null || _e === void 0 ? void 0 : _e.userQuestBattleResultId;
+                        const origUserQuestBattleResultId = (_c = userArenaBattleResultList[0]) === null || _c === void 0 ? void 0 : _c.userQuestBattleResultId;
                         if (typeof origUserQuestBattleResultId !== 'string' ||
                             !origUserQuestBattleResultId.match(userdataDump.guidRegEx)) {
                             console.error(`fakeArenaNativeGet origUserQuestBattleResultId must be guid`);
                             return;
                         }
                         const nativeGetKey = JSON.stringify({ userQuestBattleResultId: origUserQuestBattleResultId });
-                        let nativeGetResp = (_f = nativeGetMap.get(nativeGetKey)) === null || _f === void 0 ? void 0 : _f.body;
+                        let nativeGetResp = userdataDump.getUnBrBody(nativeGetMap, nativeGetKey);
                         if (nativeGetResp == null || typeof nativeGetResp !== 'object') {
                             console.error(`fakeArenaNativeGet nativeGetResp must be object`);
                             return;
                         }
                         const replica = JSON.parse(JSON.stringify(nativeGetResp));
-                        const replicaUserArenaBattleResultList = (_g = replica.webData) === null || _g === void 0 ? void 0 : _g.userArenaBattleResultList;
+                        const replicaUserArenaBattleResultList = (_d = replica.webData) === null || _d === void 0 ? void 0 : _d.userArenaBattleResultList;
                         if (replicaUserArenaBattleResultList == null || !Array.isArray(replicaUserArenaBattleResultList)) {
                             console.error(`fakeArenaNativeGet replicaUserArenaBattleResultList must be array`);
                             return;
@@ -1212,7 +1206,7 @@ class fakeMagirecoProdRespHook {
                         replicaUserArenaBattleResultList.forEach((item) => {
                             item.userQuestBattleResultId = userQuestBattleResultId;
                         });
-                        const replicaUserQuestBattleResultList = (_h = replica.webData) === null || _h === void 0 ? void 0 : _h.userQuestBattleResultList;
+                        const replicaUserQuestBattleResultList = (_e = replica.webData) === null || _e === void 0 ? void 0 : _e.userQuestBattleResultList;
                         if (replicaUserQuestBattleResultList == null || !Array.isArray(replicaUserQuestBattleResultList)) {
                             console.error(`fakeArenaNativeGet replicaUserQuestBattleResultList must be array`);
                             return;
@@ -1220,7 +1214,7 @@ class fakeMagirecoProdRespHook {
                         replicaUserQuestBattleResultList.forEach((item) => {
                             item.id = userQuestBattleResultId;
                         });
-                        if (((_j = replica.webData) === null || _j === void 0 ? void 0 : _j.gameUser) == null) {
+                        if (((_f = replica.webData) === null || _f === void 0 ? void 0 : _f.gameUser) == null) {
                             console.error(`fakeArenaNativeGet replica.webData?.gameUser == null`);
                             return;
                         }

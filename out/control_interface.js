@@ -2,7 +2,6 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.controlInterface = void 0;
 const stream = require("stream");
-const zlib = require("zlib");
 const fs = require("fs");
 const net = require("net");
 const http = require("http");
@@ -228,8 +227,8 @@ class controlInterface {
                                 { key: "arenaSimulate", val: arenaSimulate },
                                 { key: "concurrent", val: concurrent }
                             ]);
-                            const lastSnapshot = this.userdataDmp.lastSnapshot;
-                            const alreadyDownloaded = lastSnapshot != null;
+                            const lastDump = this.userdataDmp.lastDump;
+                            const alreadyDownloaded = lastDump != null;
                             const lastError = this.userdataDmp.lastError;
                             const hasDownloadResultOrError = alreadyDownloaded || lastError != null;
                             const isDownloading = this.userdataDmp.isDownloading;
@@ -237,7 +236,7 @@ class controlInterface {
                                 this.sendResultAsync(res, 403, "cannot dump userdata in local offline mode");
                             }
                             else if (!isDownloading && (requestingNewDownload || !hasDownloadResultOrError)) {
-                                this.userdataDmp.getSnapshotAsync()
+                                this.userdataDmp.getDumpAsync()
                                     .catch((e) => console.error(`${apiName} error`, e)); // prevent crash
                                 this.sendResultAsync(res, 200, "downloading");
                             }
@@ -426,8 +425,8 @@ class controlInterface {
             }
             if (req.url.match(this.userdataDmp.userdataDumpFileNameRegEx)) {
                 console.log(`serving ${req.url}`);
-                let snapshot = this.userdataDmp.lastSnapshot;
-                if (snapshot != null) {
+                let dump = this.userdataDmp.lastDump;
+                if (dump != null) {
                     let algo;
                     let acceptEncodings = req.headers["accept-encoding"];
                     if (acceptEncodings != null && acceptEncodings.length > 0) {
@@ -442,22 +441,13 @@ class controlInterface {
                         ["Content-Disposition"]: `attachment; filename=\"${userdataDumpFileName}\"`,
                     };
                     let pipelineList;
-                    let lastSnapshotBr = this.userdataDmp.lastSnapshotBr;
-                    if (lastSnapshotBr != null) {
-                        let fromCompressed = stream.Readable.from(lastSnapshotBr);
-                        pipelineList = [fromCompressed];
-                        let decompressor = zlib.createBrotliDecompress();
-                        pipelineList.push(decompressor);
-                    }
-                    else {
-                        console.log(`(should never go here!) stringifying object to [${userdataDumpFileName}] ...`);
-                        let stringified = JSON.stringify(snapshot, parameters.replacer);
-                        console.log(`stringified object to [${userdataDumpFileName}]. creating buffer...`);
-                        let stringifiedBuf = Buffer.from(stringified, 'utf-8');
-                        console.log(`created buffer for [${userdataDumpFileName}], sending it`);
-                        let fromStringified = stream.Readable.from(stringifiedBuf);
-                        pipelineList = [fromStringified];
-                    }
+                    console.log(`stringifying object to [${userdataDumpFileName}] ...`);
+                    let stringified = JSON.stringify(dump, parameters.replacer);
+                    console.log(`stringified object to [${userdataDumpFileName}]. creating buffer...`);
+                    let stringifiedBuf = Buffer.from(stringified, 'utf-8');
+                    console.log(`created buffer for [${userdataDumpFileName}], sending it`);
+                    let fromStringified = stream.Readable.from(stringifiedBuf);
+                    pipelineList = [fromStringified];
                     pipelineList.push(res);
                     res.writeHead(200, headers);
                     let doneCallback = (err) => {
@@ -1087,10 +1077,10 @@ class controlInterface {
             + `\n  </form>`
             + `\n  </fieldset>`
             + `\n  <fieldset>`
-            + `\n  <legend>${this.userdataDmp.lastSnapshot == null ? "尚未下载，无链接可显示" : "将下载到的数据另存为文件"}</legend>`
-            + `\n    ${this.userdataDmp.lastSnapshot == null ? "" : "<b>↓点击下面的链接即可下载↓</b>"}`
-            + `\n    ${this.userdataDmp.lastSnapshot == null ? "" : "<br>" + aHref(this.userdataDmp.userdataDumpFileName, `/${this.userdataDmp.userdataDumpFileName}`)}`
-            + `\n    ${this.userdataDmp.lastSnapshot == null ? "" : "<br><i>在某品牌手机上，曾经观察到第一次下载回来是0字节空文件的问题，如果碰到这个问题可以再次点击或长按链接重试下载，或者换个浏览器试试。</i>"}`
+            + `\n  <legend>${this.userdataDmp.lastDump == null ? "尚未下载，无链接可显示" : "将下载到的数据另存为文件"}</legend>`
+            + `\n    ${this.userdataDmp.lastDump == null ? "" : "<b>↓点击下面的链接即可下载↓</b>"}`
+            + `\n    ${this.userdataDmp.lastDump == null ? "" : "<br>" + aHref(this.userdataDmp.userdataDumpFileName, `/${this.userdataDmp.userdataDumpFileName}`)}`
+            + `\n    ${this.userdataDmp.lastDump == null ? "" : "<br><i>在某品牌手机上，曾经观察到第一次下载回来是0字节空文件的问题，如果碰到这个问题可以再次点击或长按链接重试下载，或者换个浏览器试试。</i>"}`
             + `\n  </fieldset>`
             + `\n  <hr>`
             + `\n  <h2 id=\"crawlstaticdata\">爬取游戏静态资源文件</h2>`
@@ -1159,11 +1149,11 @@ class controlInterface {
         let userdataDumpStatus = "尚未开始从官服下载", userdataDumpStatusStyle = "color: red";
         ;
         const isDownloading = this.userdataDmp.isDownloading;
-        const lastSnapshot = this.userdataDmp.lastSnapshot;
+        const lastDump = this.userdataDmp.lastDump;
         if (isDownloading)
             userdataDumpStatus = `从官服下载中 ${this.userdataDmp.fetchStatus}`, userdataDumpStatusStyle = "color: blue";
-        else if (lastSnapshot != null) {
-            const lastUid = lastSnapshot.uid;
+        else if (lastDump != null) {
+            const lastUid = lastDump.uid;
             if (lastUid != null && lastUid === gameUid) {
                 userdataDumpStatus = "从官服下载数据完毕", userdataDumpStatusStyle = "color: green";
             }

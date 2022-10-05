@@ -1,12 +1,40 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.userdataDmp = exports.guidRegEx = void 0;
+exports.userdataDmp = exports.guidRegEx = exports.getUnBrBody = exports.unBrBase64 = exports.brBase64 = void 0;
 const crypto = require("crypto");
 const http2 = require("http2");
 const fs = require("fs");
 const path = require("path");
 const parameters = require("./parameters");
 const local_server_1 = require("./local_server");
+const brBase64 = (data) => {
+    const stringified = JSON.stringify(data, parameters.replacer);
+    const buf = Buffer.from(stringified, 'utf-8');
+    const compressedBase64 = local_server_1.localServer.compress(buf, "br").toString('base64');
+    return compressedBase64;
+};
+exports.brBase64 = brBase64;
+const unBrBase64 = (brBase64) => {
+    if (brBase64 == null)
+        return brBase64;
+    const compressedBuf = Buffer.from(brBase64, 'base64');
+    const decompressedStr = local_server_1.localServer.decompress(compressedBuf, "br").toString("utf-8");
+    const parsed = JSON.parse(decompressedStr, parameters.reviver);
+    return parsed;
+};
+exports.unBrBase64 = unBrBase64;
+const getUnBrBody = (map, key) => {
+    const val = map.get(key);
+    if (val == null)
+        return;
+    if (val.brBody == null)
+        throw new Error("val.brBody == null");
+    const buf = Buffer.from(val.brBody, 'base64');
+    const decompressed = local_server_1.localServer.decompress(buf, "br").toString('utf-8');
+    const parsed = JSON.parse(decompressed, parameters.reviver);
+    return parsed;
+};
+exports.getUnBrBody = getUnBrBody;
 exports.guidRegEx = /^[\da-f]{8}-([\da-f]{4}-){3}[\da-f]{12}$/i;
 class userdataDmp {
     constructor(params, localServer) {
@@ -14,19 +42,17 @@ class userdataDmp {
         this._fetchStatus = "";
         this._flag = 1;
         this.userdataDumpFileNameRegEx = /^\/magireco_cn_dump[^\/\\]*\.json$/;
-        this.internalUserdataDumpFileName = "lastUserdataDump.br";
+        this.oldInternalUserdataDumpFileName = "lastUserdataDump.br";
+        this.internalUserdataDumpFileName = "lastUserdataDumpBr.json";
         this.tsRegEx = /(?<=timeStamp\=)\d+/;
         this.params = params;
         this.localServer = localServer;
         this.clientSessionId = 100 + Math.floor(Math.random() * 899);
-        this.loadLastSnapshot();
+        this.loadLastDump();
     }
     get magirecoIDs() { return this.params.magirecoIDs; }
-    get lastSnapshot() {
-        return this._lastSnapshot;
-    }
-    get lastSnapshotBr() {
-        return this._lastSnapshotBr;
+    get lastDump() {
+        return this._lastDump;
     }
     get isDownloading() {
         return this._isDownloading;
@@ -108,17 +134,17 @@ class userdataDmp {
     }
     getUserdataDumpFileName(includeDateTime) {
         var _a;
-        let time = (_a = this._lastSnapshot) === null || _a === void 0 ? void 0 : _a.timestamp;
+        let time = (_a = this._lastDump) === null || _a === void 0 ? void 0 : _a.timestamp;
         const dateTimeNumberStr = includeDateTime ? this.dateTimeNumberStr(time == null ? new Date().getTime() : time)
             : "last";
         const filenameWithoutUid = `magireco_cn_dump_${dateTimeNumberStr}.json`;
-        const lastSnapshot = this.lastSnapshot;
-        if (lastSnapshot == null)
+        const lastDump = this.lastDump;
+        if (lastDump == null)
             return filenameWithoutUid;
-        return `magireco_cn_dump_uid_${lastSnapshot.uid}_${dateTimeNumberStr}.json`;
+        return `magireco_cn_dump_uid_${lastDump.uid}_${dateTimeNumberStr}.json`;
     }
-    getSnapshotAsync() {
-        return new Promise((resolve, reject) => this.getSnapshotPromise()
+    getDumpAsync() {
+        return new Promise((resolve, reject) => this.getDumpPromise()
             .then((result) => resolve(result))
             .catch((err) => {
             this.params.save({ key: "openIdTicket", val: undefined })
@@ -128,7 +154,7 @@ class userdataDmp {
             });
         }));
     }
-    async getSnapshotPromise(concurrent = 8) {
+    async getDumpPromise(concurrent = 8) {
         if (this.params.mode === parameters.mode.LOCAL_OFFLINE)
             throw new Error("cannot dump userdata in local offline mode");
         if (this.isDownloading)
@@ -149,8 +175,12 @@ class userdataDmp {
             for (let start = 0, total = seeds.length; start < total; start += concurrent) {
                 let end = Math.min(start + concurrent, total);
                 let requests = seeds.slice(start, end);
-                let promises = requests.map((request) => request.postData == null ? this.execHttpGetApi(request.url)
-                    : this.execHttpPostApi(request.url, request.postData));
+                let promises = requests.map((request) => (request.postData == null ? this.execHttpGetApi(request.url)
+                    : this.execHttpPostApi(request.url, request.postData)).then((result) => {
+                    result.respBrBody = (0, exports.brBase64)(result.respBody);
+                    delete result.respBody;
+                    return result;
+                }));
                 let settleStatus = await Promise.allSettled(promises);
                 let failed = settleStatus.filter((s) => s.status !== 'fulfilled').length;
                 if (failed > 0) {
@@ -178,23 +208,23 @@ class userdataDmp {
             crops.map((result) => {
                 if (result.postData == null) {
                     const map = httpGetMap;
-                    const key = result.url, body = result.respBody, ts = result.ts;
+                    const key = result.url, brBody = result.respBrBody, ts = result.ts;
                     if (map.has(key))
                         throw new Error(`key=[${key}] already exists`);
-                    let val = { body: body };
+                    let val = { brBody: brBody };
                     if (ts != null)
                         val.ts = ts;
                     map.set(key, val);
                 }
                 else {
                     const map = httpPostMap;
-                    const key = result.url, body = result.respBody, ts = result.ts;
+                    const key = result.url, brBody = result.respBrBody, ts = result.ts;
                     const existingValMap = map.get(key);
                     const valMap = existingValMap != null ? existingValMap : new Map();
                     const valMapKey = JSON.stringify(result.postData.obj);
                     if (valMap.has(valMapKey))
                         throw new Error(`key=[${key}] already exists`);
-                    let valMapVal = { body: body };
+                    let valMapVal = { brBody: brBody };
                     if (ts != null)
                         valMapVal.ts = ts;
                     valMap.set(valMapKey, valMapVal);
@@ -210,26 +240,27 @@ class userdataDmp {
                 throw new Error("login test failed, cannot login");
         }
         const requests1 = this.firstRoundUrlList.map((url) => { return { url: url }; });
-        console.log(`userdataDmp.getSnapshot() 1st round fetching...`);
+        console.log(`userdataDmp.getDump() 1st round fetching...`);
         const responses1 = await grow(requests1);
-        console.log(`userdataDmp.getSnapshot() 1st round collecting...`);
+        console.log(`userdataDmp.getDump() 1st round collecting...`);
         reap(responses1, httpGetRespMap, httpPostRespMap);
-        console.log(`userdataDmp.getSnapshot() 1st round completed`);
-        console.log(`userdataDmp.getSnapshot() 2nd round fetching...`);
+        console.log(`userdataDmp.getDump() 1st round completed`);
+        console.log(`userdataDmp.getDump() 2nd round fetching...`);
         const responses2 = await grow(this.getSecondRoundRequests(httpGetRespMap));
-        console.log(`userdataDmp.getSnapshot() 2nd round collecting...`);
+        console.log(`userdataDmp.getDump() 2nd round collecting...`);
         reap(responses2, httpGetRespMap, httpPostRespMap);
-        console.log(`userdataDmp.getSnapshot() 2nd round completed`);
-        console.log(`userdataDmp.getSnapshot() 3rd round fetching...`);
+        console.log(`userdataDmp.getDump() 2nd round completed`);
+        console.log(`userdataDmp.getDump() 3rd round fetching...`);
         const responses3 = await grow(this.getThirdRoundRequests(httpGetRespMap, httpPostRespMap));
-        console.log(`userdataDmp.getSnapshot() 3rd round collecting...`);
+        console.log(`userdataDmp.getDump() 3rd round collecting...`);
         reap(responses3, httpGetRespMap, httpPostRespMap);
-        console.log(`userdataDmp.getSnapshot() 3rd round completed`);
+        console.log(`userdataDmp.getDump() 3rd round completed`);
         if (this.params.arenaSimulate) {
             await this.mirrorsSimulateAll(httpGetRespMap, httpPostRespMap);
         }
-        this._lastSnapshot = {
+        this._lastDump = {
             uid: this.uid,
+            isBr: true,
             timestamp: timestamp,
             httpResp: {
                 get: httpGetRespMap,
@@ -237,35 +268,51 @@ class userdataDmp {
             },
         };
         console.log(this._fetchStatus = "JSON.stringify()...");
-        let jsonBuf = Buffer.from(JSON.stringify(this._lastSnapshot, parameters.replacer), 'utf-8');
-        console.log(this._fetchStatus = "brotli compressing...");
-        this._lastSnapshotBr = local_server_1.localServer.compress(jsonBuf, "br");
-        console.log(this._fetchStatus = `brotli compressed. [${jsonBuf.byteLength}] => [${this._lastSnapshotBr.byteLength}]`);
+        let jsonBuf = Buffer.from(JSON.stringify(this._lastDump, parameters.replacer), 'utf-8');
         console.log(this._fetchStatus = `writting to [${this.internalUserdataDumpFileName}] ...`);
-        fs.writeFileSync(path.join(".", this.internalUserdataDumpFileName), this._lastSnapshotBr);
+        fs.writeFileSync(path.join(".", this.internalUserdataDumpFileName), jsonBuf);
         console.log(this._fetchStatus = `written to [${this.internalUserdataDumpFileName}]`);
         this._isDownloading = false;
-        return this._lastSnapshot;
+        return this._lastDump;
     }
-    loadLastSnapshot() {
-        if (this._lastSnapshot != null) {
-            console.log("won't replace current snapshot");
+    loadLastDump() {
+        if (this._lastDump != null) {
+            console.log("won't replace current dump");
             return;
         }
         try {
             const filePath = path.join(".", this.internalUserdataDumpFileName);
-            if (fs.existsSync(filePath)) {
+            const legacyFilePath = path.join(".", this.oldInternalUserdataDumpFileName);
+            if (fs.existsSync(legacyFilePath) && fs.statSync(legacyFilePath).isFile()) {
+                console.log(`converting [${legacyFilePath}] ...`);
+                let compressed = fs.readFileSync(legacyFilePath);
+                let decompressedStr = local_server_1.localServer.decompress(compressed, "br").toString('utf-8');
+                let parsed = JSON.parse(decompressedStr, parameters.reviver);
+                let mapArray = [parsed.httpResp.get];
+                parsed.httpResp.post.forEach((val) => mapArray.push(val));
+                mapArray.forEach((map) => {
+                    map.forEach((val) => {
+                        let stringified = JSON.stringify(val.body, parameters.replacer);
+                        let compressedBase64 = local_server_1.localServer.compress(Buffer.from(stringified, 'utf-8'), "br")
+                            .toString('base64');
+                        val.brBody = compressedBase64;
+                        delete val.body;
+                    });
+                });
+                parsed.isBr = true;
+                let convertedStr = JSON.stringify(parsed, parameters.replacer);
+                fs.writeFileSync(filePath, convertedStr);
+                fs.rmSync(legacyFilePath);
+            }
+            if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
                 console.log(`loading [${filePath}] ...`);
-                let lastSnapshotBr = fs.readFileSync(filePath);
-                let decompressedBuf = local_server_1.localServer.decompress(lastSnapshotBr, "br");
-                let decompressed = decompressedBuf.toString('utf-8');
-                this._lastSnapshot = JSON.parse(decompressed, parameters.reviver);
-                this._lastSnapshotBr = lastSnapshotBr;
+                let lastDumpStr = fs.readFileSync(filePath, 'utf-8');
+                this._lastDump = JSON.parse(lastDumpStr, parameters.reviver);
                 console.log(`loaded ${this.userdataDumpFileName}`);
             }
         }
         catch (e) {
-            console.log(`loadLastSnapshot`, e);
+            console.log(`loadLastDump`, e);
         }
     }
     async testLogin() {
@@ -360,6 +407,7 @@ class userdataDmp {
                                 if (result.respBody === "")
                                     reject(new Error("respBody is empty"));
                                 const respBodyParsed = JSON.parse(result.respBody);
+                                delete result.respBody; // FIXME workaround memleak
                                 if (respBodyParsed == null)
                                     reject(new Error("respBodyParsed == null"));
                                 else
@@ -571,7 +619,6 @@ class userdataDmp {
         return list;
     }
     getSecondRoundRequests(map) {
-        var _a, _b, _c, _d, _e, _f, _g, _h;
         const requests = [];
         const getPageCount = (total, perPage) => {
             let remainder = total % perPage;
@@ -581,15 +628,15 @@ class userdataDmp {
                 pageCount += 1;
             return pageCount;
         };
-        const topPage = (_a = map.get(`https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/TopPage?value=`
+        const topPage = (0, exports.getUnBrBody)(map, `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/TopPage?value=`
             + `user`
             + `%2CgameUser`
             + `%2CitemList`
             + `%2CgiftList`
             + `%2CpieceList`
             + `%2CuserQuestAdventureList`
-            + `&timeStamp=`)) === null || _a === void 0 ? void 0 : _a.body;
-        const myPage = (_b = map.get(`https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/MyPage?value=`
+            + `&timeStamp=`);
+        const myPage = (0, exports.getUnBrBody)(map, `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/MyPage?value=`
             + `user`
             + `%2CgameUser`
             + `%2CuserStatusList`
@@ -609,7 +656,7 @@ class userdataDmp {
             + `%2CuserPieceSetList`
             + `%2CuserDeckList`
             + `%2CuserLive2dList`
-            + `&timeStamp=`)) === null || _b === void 0 ? void 0 : _b.body;
+            + `&timeStamp=`);
         //左上角个人头像
         const userLive2dList = myPage["userLive2dList"];
         if (userLive2dList == null || !Array.isArray(userLive2dList))
@@ -638,9 +685,9 @@ class userdataDmp {
         //好友
         const friendList = new Set();
         //关注列表
-        const followTop = (_c = map.get(`https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/FollowTop?value=`
+        const followTop = (0, exports.getUnBrBody)(map, `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/FollowTop?value=`
             + `userFollowList`
-            + `&timeStamp=`)) === null || _c === void 0 ? void 0 : _c.body;
+            + `&timeStamp=`);
         const userFollowList = followTop["userFollowList"];
         if (userFollowList == null || !Array.isArray(userFollowList))
             throw new Error("unable to read userFollowList");
@@ -653,7 +700,7 @@ class userdataDmp {
             friendList.add(followUserId);
         });
         //粉丝列表
-        const friendFollowerList = (_d = map.get(`https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/friend/follower/list/1`)) === null || _d === void 0 ? void 0 : _d.body;
+        const friendFollowerList = (0, exports.getUnBrBody)(map, `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/friend/follower/list/1`);
         if (friendFollowerList == null || !Array.isArray(friendFollowerList))
             throw new Error("unable to read friendFollowerList");
         friendFollowerList.forEach((item) => {
@@ -681,8 +728,8 @@ class userdataDmp {
         });
         //扭蛋获得履历（仅GUID）
         const gachasPerPage = 50;
-        const gachaHistory = (_e = map.get(`https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/GachaHistory?value=`
-            + `&timeStamp=`)) === null || _e === void 0 ? void 0 : _e.body;
+        const gachaHistory = (0, exports.getUnBrBody)(map, `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/GachaHistory?value=`
+            + `&timeStamp=`);
         const gachaHistoryCount = gachaHistory["gachaHistoryCount"];
         if (typeof gachaHistoryCount !== 'number' || isNaN(gachaHistoryCount))
             throw new Error("gachaHistoryCount must be number");
@@ -695,8 +742,8 @@ class userdataDmp {
         }
         //礼物奖励箱
         const presentPerPage = 50;
-        const presentList = (_f = map.get(`https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/PresentList?value=`
-            + `&timeStamp=`)) === null || _f === void 0 ? void 0 : _f.body;
+        const presentList = (0, exports.getUnBrBody)(map, `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/PresentList?value=`
+            + `&timeStamp=`);
         const presentCount = presentList["presentCount"];
         if (typeof presentCount !== 'number' || isNaN(presentCount))
             throw new Error("presentCount must be number");
@@ -709,8 +756,8 @@ class userdataDmp {
         }
         //获得履历
         const presentHistoryPerPage = 100;
-        const presentHistory = (_g = map.get(`https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/PresentHistory?value=`
-            + `&timeStamp=`)) === null || _g === void 0 ? void 0 : _g.body;
+        const presentHistory = (0, exports.getUnBrBody)(map, `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/PresentHistory?value=`
+            + `&timeStamp=`);
         const presentHistoryCount = presentHistory["presentHistoryCount"];
         if (typeof presentHistoryCount !== 'number' || isNaN(presentHistoryCount))
             throw new Error("presentHistoryCount must be number");
@@ -723,10 +770,10 @@ class userdataDmp {
         }
         //精神强化（未开放）
         if (this.params.fetchCharaEnhancementTree) {
-            const userFormationSheetList = (_h = map.get(`https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/ProfileFormationSupport?value=`
+            const userFormationSheetList = (0, exports.getUnBrBody)(map, `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/ProfileFormationSupport?value=`
                 + `userFormationSheetList`
                 + `%2CuserCharaEnhancementCellList`
-                + `&timeStamp=`)) === null || _h === void 0 ? void 0 : _h.body;
+                + `&timeStamp=`);
             const userCharaEnhancementCellList = userFormationSheetList["userCharaEnhancementCellList"];
             if (userCharaEnhancementCellList == null || !Array.isArray(userCharaEnhancementCellList))
                 throw new Error("unable to read userCharaEnhancementCellList");
@@ -746,15 +793,15 @@ class userdataDmp {
         return requests;
     }
     getThirdRoundRequests(httpGetMap, httpPostMap) {
-        var _a, _b, _c, _d, _e;
+        var _a, _b, _c, _d;
         //扭蛋获得履历
         const gachaHistoryPages = [];
         const gachaIds = [];
-        const gachaHistoryFirstPage = (_a = httpGetMap.get(`https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/GachaHistory?value=`
-            + `&timeStamp=`)) === null || _a === void 0 ? void 0 : _a.body;
+        const gachaHistoryFirstPage = (0, exports.getUnBrBody)(httpGetMap, `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/GachaHistory?value=`
+            + `&timeStamp=`);
         gachaHistoryPages.push(gachaHistoryFirstPage);
         const gachaHistoryMap = httpPostMap.get(`https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/GachaHistory`);
-        gachaHistoryMap === null || gachaHistoryMap === void 0 ? void 0 : gachaHistoryMap.forEach((resp) => gachaHistoryPages.push(resp.body));
+        gachaHistoryMap === null || gachaHistoryMap === void 0 ? void 0 : gachaHistoryMap.forEach((resp) => gachaHistoryPages.push((0, exports.unBrBase64)(resp.brBody)));
         gachaHistoryPages.map((item) => {
             let gachaHistoryList = item["gachaHistoryList"];
             if (gachaHistoryList == null || !Array.isArray(gachaHistoryList))
@@ -774,7 +821,7 @@ class userdataDmp {
         //好友
         const friendList = new Set();
         //好友推荐
-        const friend_search = (_c = (_b = httpPostMap.get(`https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/search/friend_search/_search`)) === null || _b === void 0 ? void 0 : _b.get(JSON.stringify({ type: 0, }))) === null || _c === void 0 ? void 0 : _c.body;
+        const friend_search = (0, exports.unBrBase64)((_b = (_a = httpPostMap.get(`https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/search/friend_search/_search`)) === null || _a === void 0 ? void 0 : _a.get(JSON.stringify({ type: 0, }))) === null || _b === void 0 ? void 0 : _b.brBody);
         if (friend_search == null || !Array.isArray(friend_search))
             throw new Error("unable to read friend_search type 0");
         friend_search.forEach((item) => {
@@ -786,10 +833,10 @@ class userdataDmp {
             friendList.add(id);
         });
         //214水波
-        const SupportSelect = (_e = (_d = httpPostMap.get(`https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/SupportSelect`)) === null || _d === void 0 ? void 0 : _d.get(JSON.stringify({
+        const SupportSelect = (0, exports.unBrBase64)((_d = (_c = httpPostMap.get(`https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/SupportSelect`)) === null || _c === void 0 ? void 0 : _c.get(JSON.stringify({
             strUserIds: userdataDmp.fakeFriends.join(","),
             strNpcHelpIds: "102", //214水波的NPC桃子
-        }))) === null || _e === void 0 ? void 0 : _e.body;
+        }))) === null || _d === void 0 ? void 0 : _d.brBody);
         const supportUserList = SupportSelect["supportUserList"];
         if (supportUserList == null || !Array.isArray(supportUserList))
             throw new Error("unable to read supportUserList");
@@ -810,7 +857,7 @@ class userdataDmp {
         return requests;
     }
     async mirrorsSimulateAll(httpGetMap, httpPostMap) {
-        var _a, _b, _c, _d, _e, _f;
+        var _a, _b, _c, _d, _e;
         if (!this.params.arenaSimulate)
             return;
         //镜层演习开战
@@ -827,9 +874,9 @@ class userdataDmp {
             httpPostMap.set(nativeGetUrlStr, nativeGetMap);
         }
         const requests = [];
-        const arenaSimulate = (_a = httpGetMap.get(`https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/ArenaSimulate?value=`
-            + `&timeStamp=`)) === null || _a === void 0 ? void 0 : _a.body;
-        const opponentUserArenaBattleInfoList = (_b = arenaSimulate === null || arenaSimulate === void 0 ? void 0 : arenaSimulate.userArenaBattleMatch) === null || _b === void 0 ? void 0 : _b.opponentUserArenaBattleInfoList;
+        const arenaSimulate = (0, exports.getUnBrBody)(httpGetMap, `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/ArenaSimulate?value=`
+            + `&timeStamp=`);
+        const opponentUserArenaBattleInfoList = (_a = arenaSimulate === null || arenaSimulate === void 0 ? void 0 : arenaSimulate.userArenaBattleMatch) === null || _a === void 0 ? void 0 : _a.opponentUserArenaBattleInfoList;
         if (opponentUserArenaBattleInfoList == null || !Array.isArray(opponentUserArenaBattleInfoList))
             throw new Error("unable to read opponentUserArenaBattleInfoList");
         opponentUserArenaBattleInfoList.forEach((item) => {
@@ -855,7 +902,7 @@ class userdataDmp {
         for (let i = 0; i < requests.length; i++) {
             let req = requests[i];
             let resp = await this.execHttpPostApi(req.url, req.postData);
-            let userArenaBattleResultList1 = (_c = resp.respBody) === null || _c === void 0 ? void 0 : _c.userArenaBattleResultList;
+            let userArenaBattleResultList1 = (_b = resp.respBody) === null || _b === void 0 ? void 0 : _b.userArenaBattleResultList;
             if (userArenaBattleResultList1 == null)
                 throw new Error("userArenaBattleResultList1 == null");
             if (!Array.isArray(userArenaBattleResultList1))
@@ -872,7 +919,7 @@ class userdataDmp {
                 postData: { obj: { userQuestBattleResultId: userQuestBattleResultId } },
             };
             let startBattleResp = await this.execHttpPostApi(startBattleReq.url, startBattleReq.postData, true);
-            let playerList = (_d = startBattleResp.respBody) === null || _d === void 0 ? void 0 : _d.playerList;
+            let playerList = (_c = startBattleResp.respBody) === null || _c === void 0 ? void 0 : _c.playerList;
             if (playerList == null || !Array.isArray(playerList))
                 throw new Error("cannot read playerList from battleStartResp");
             let playerListInResult = playerList.map((player) => ({
@@ -950,12 +997,12 @@ class userdataDmp {
                 postData: { obj: { param: JSON.stringify(resultObj) } }
             };
             let stopBattleResp = await this.execHttpPostApi(stopBattleReq.url, stopBattleReq.postData, true);
-            let userArenaBattleResultList = (_e = stopBattleResp.respBody) === null || _e === void 0 ? void 0 : _e.userArenaBattleResultList;
+            let userArenaBattleResultList = (_d = stopBattleResp.respBody) === null || _d === void 0 ? void 0 : _d.userArenaBattleResultList;
             if (userArenaBattleResultList == null || !Array.isArray(userArenaBattleResultList))
                 throw new Error("cannot read userArenaBattleResultList");
             if (userArenaBattleResultList.length == 0)
                 throw new Error("userArenaBattleResultList is empty");
-            let opponentUserId = (_f = userArenaBattleResultList[0]) === null || _f === void 0 ? void 0 : _f.opponentUserId;
+            let opponentUserId = (_e = userArenaBattleResultList[0]) === null || _e === void 0 ? void 0 : _e.opponentUserId;
             if (typeof opponentUserId !== 'string')
                 throw new Error("opponentUserId must be string");
             if (!opponentUserId.match(exports.guidRegEx))
@@ -966,10 +1013,10 @@ class userdataDmp {
             };
             await this.execHttpPostApi(arenaResultReq.url, arenaResultReq.postData);
             arenaStartMap.set(JSON.stringify(req.postData.obj), {
-                body: resp.respBody,
+                brBody: (0, exports.brBase64)(resp.respBody),
             });
             nativeGetMap.set(JSON.stringify(startBattleReq.postData.obj), {
-                body: startBattleResp.respBody,
+                brBody: (0, exports.brBase64)(startBattleResp.respBody),
             });
             console.log(this._fetchStatus = `mirrorsSimulateAll [${i + 1}/${requests.length}] completed`);
         }
