@@ -918,6 +918,9 @@ export class fakeMagirecoProdRespHook implements hook {
         //记忆结晶首页
         ["page/MemoriaTop"]: `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/MemoriaTop?value=`
             + `&timeStamp=`,
+        //记忆结晶保管库
+        ["page/PieceArchive"]: `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/PieceArchive?value=`
+            + `&timeStamp=`,
         //扭蛋首页
         ["page/GachaTop"]: `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/GachaTop?value=`
             + `&timeStamp=`,

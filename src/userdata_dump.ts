@@ -472,7 +472,7 @@ export class userdataDmp {
             new URL(`https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/MemoriaTop?value=`
                 + `&timeStamp=${ts}`
             ),
-            //记忆结晶仓库
+            //记忆结晶保管库
             new URL(`https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/PieceArchive?value=`
                 + `&timeStamp=${ts}`),
             //扭蛋首页
