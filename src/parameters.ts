@@ -69,6 +69,13 @@ const persistParams: {
     crawlAssets: true,
 }
 
+export type overrides = {
+    gameUser?: {
+        bgItemId?: string,
+        modifyChara?: [number, Record<string, string | number>],
+    }
+}
+
 export class params {
     static VERBOSE = false;
 
@@ -164,6 +171,28 @@ export class params {
         return this.stringify() !== this.lastSaved;
     }
 
+    readonly overridesDB: Map<number, overrides>;
+    static readonly overridesDBPath = path.join(".", "overrides.json");
+    saveOverrideDB(fileContent?: string): void {
+        if (fileContent != null) {
+            try {
+                let parsed = JSON.parse(fileContent, reviver);
+                if (!(parsed instanceof Map)) throw new Error(`parsed fileContent is not map`);
+                this.overridesDB.clear();
+                parsed.forEach((val, key) => this.overridesDB.set(key, val));
+            } catch (e) {
+                console.error(`saveOverrideDB error`, e);
+                throw e;
+            }
+        }
+        try {
+            fs.writeFileSync(params.overridesDBPath,
+                JSON.stringify(this.overridesDB, replacer), 'utf-8');
+        } catch (e) {
+            console.error(`error writting to ${params.overridesDBPath}`, e);
+        }
+    }
+
     get mode(): mode { return this.mapData.get("mode"); }
     get autoOpenWeb(): boolean { return this.mapData.get("autoOpenWeb"); }
     get listenList(): listenList { return this.mapData.get("listenList"); }
@@ -201,7 +230,7 @@ export class params {
     private supportH2Expire = 3600 * 1000;
     private supportH2MaxSize = 1024;
 
-    private constructor(mapData: Map<string, any>, lastSaved: string, path: string) {
+    private constructor(mapData: Map<string, any>, lastSaved: string, filePath: string) {
         this.mapData = mapData;
         const CACerts = tls.rootCertificates.slice();
         CACerts.push(this.CACertPEM);
@@ -214,7 +243,20 @@ export class params {
         this.supportH2Map = new Map<string, { h2: boolean, time: number }>();
         this.lastSaved = lastSaved;
         this.unfinishedSave = [];
-        this.path = path;
+        this.path = filePath;
+
+        let overridesDB: Map<number, overrides> | undefined;
+        if (fs.existsSync(params.overridesDBPath) && fs.statSync(params.overridesDBPath).isFile()) {
+            try {
+                let content = fs.readFileSync(params.overridesDBPath, 'utf-8');
+                overridesDB = JSON.parse(content, reviver);
+                if (!(overridesDB instanceof Map)) throw new Error("not instance of map");
+            } catch (e) {
+                console.error(`error loading from ${params.overridesDBPath}, creating new one`, e);
+            }
+        }
+        if (overridesDB == null) overridesDB = new Map<number, overrides>();
+        this.overridesDB = overridesDB;
     }
     private refreshCACert(): void {
         const CACerts = tls.rootCertificates.slice();

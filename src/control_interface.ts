@@ -162,6 +162,22 @@ export class controlInterface {
                             this.sendResultAsync(res, 500, e instanceof Error ? e.message : `${apiName} error`);
                         }
                         return;
+                    case "upload_overrides":
+                        try {
+                            let postData = await this.getPostData(req);
+                            if (typeof postData === 'string') throw new Error("postData is string");
+                            let uploaded_overrides = postData.find((item) => item.name === "uploaded_overrides");
+                            if (!uploaded_overrides?.filename?.match(/\.json$/i)) throw new Error("filename not ended with .json");
+                            let newOverridesStr: string | undefined = uploaded_overrides.data.toString();
+                            if (newOverridesStr === "") newOverridesStr = undefined;
+                            if (newOverridesStr == null) throw new Error("nothing uploaded");
+                            await this.params.saveOverrideDB(newOverridesStr);
+                            this.sendResultAsync(res, 200, "saved new overrides");
+                        } catch (e) {
+                            console.error(`${apiName} error`, e);
+                            this.sendResultAsync(res, 500, e instanceof Error ? e.message : `${apiName} error`);
+                        }
+                        return;
                     case "upload_upstream_proxy_cacert":
                         try {
                             let postData = await this.getPostData(req);
@@ -418,6 +434,14 @@ export class controlInterface {
                         ["Content-Disposition"]: `attachment; filename=\"${req.url.replace(/^\//, "")}\"`,
                     });
                     res.end(this.params.stringify());
+                    return;
+                case "/overrides.json":
+                    console.log(`serving overrides.json`);
+                    res.writeHead(200, {
+                        ["Content-Type"]: "application/json; charset=utf-8",
+                        ["Content-Disposition"]: `attachment; filename=\"${req.url.replace(/^\//, "")}\"`,
+                    });
+                    res.end(JSON.stringify(this.params.overridesDB, parameters.replacer));
                     return;
             }
 
@@ -780,21 +804,37 @@ export class controlInterface {
             + `\n  </fieldset>`
             + `\n  <fieldset>`
             + `\n  <legend>下载配置数据</legend>`
-            + `\n  <div>`
-            + `\n    <label for=\"paramsjson\"><b style=\"color: red\">（含有登录密钥等敏感数据，请勿分享）</b></label>`
-            + `\n    ${aHref("params.json", "/params.json")}`
-            + `\n  </div>`
+            + `\n    <fieldset><legend>服务器配置</legend>`
+            + `\n      <label for=\"paramsjson\"><b style=\"color: red\">（含有登录密钥等敏感数据，请勿分享）</b></label>`
+            + `\n      ${aHref("params.json", "/params.json")}`
+            + `\n    </fieldset>`
+            + `\n    <fieldset><legend>玩家配置（如看板背景等）</legend>`
+            + `\n      <label for=\"overridesjson\"></label>`
+            + `\n      ${aHref("overrides.json", "/overrides.json")}`
+            + `\n    </fieldset>`
             + `\n  </fieldset>`
             + `\n  <fieldset>`
             + `\n  <legend>上传配置数据</legend>`
-            + `\n  <form enctype=\"multipart/form-data\" action=\"/api/upload_params\" method=\"post\">`
-            + `\n    <div>`
-            + `\n      <input type=\"file\" name=\"uploaded_params\" id=\"params_file\">`
-            + `\n    </div>`
-            + `\n    <div>`
-            + `\n      <input type=\"submit\" value=\"上传配置数据\" id=\"upload_params_btn\">`
-            + `\n    </div>`
-            + `\n  </form>`
+            + `\n    <fieldset><legend>服务器配置</legend>`
+            + `\n      <form enctype=\"multipart/form-data\" action=\"/api/upload_params\" method=\"post\">`
+            + `\n        <div>`
+            + `\n          <input type=\"file\" name=\"uploaded_params\" id=\"params_file\">`
+            + `\n        </div>`
+            + `\n        <div>`
+            + `\n          <input type=\"submit\" value=\"上传配置数据\" id=\"upload_params_btn\">`
+            + `\n        </div>`
+            + `\n      </form>`
+            + `\n    </fieldset>`
+            + `\n    <fieldset><legend>玩家配置（如看板背景等）</legend>`
+            + `\n      <form enctype=\"multipart/form-data\" action=\"/api/upload_overrides\" method=\"post\">`
+            + `\n        <div>`
+            + `\n          <input type=\"file\" name=\"uploaded_overrides\" id=\"overrides_file\">`
+            + `\n        </div>`
+            + `\n        <div>`
+            + `\n          <input type=\"submit\" value=\"上传配置数据\" id=\"upload_overrides_btn\">`
+            + `\n        </div>`
+            + `\n      </form>`
+            + `\n    </fieldset>`
             + `\n  </fieldset>`
             + `\n  <hr>`
             + `\n  <h2>说明</h2>`
