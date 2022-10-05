@@ -356,6 +356,7 @@ export class fakeMagirecoProdRespHook implements hook {
             switch (apiName) {
                 case "test/logger/error":
                     {
+                        console.error(`onMatchedRequest ${apiName} reqBody=[${reqBody}]`);
                         respBody = Buffer.from(JSON.stringify({ resultCode: "success" }));
                         break;
                     }
