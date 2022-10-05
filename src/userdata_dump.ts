@@ -429,6 +429,7 @@ export class userdataDmp {
                         else try {
                             if (result.respBody === "") reject(new Error("respBody is empty"));
                             const respBodyParsed = JSON.parse(result.respBody);
+                            delete (result as any).respBody; // FIXME workaround memleak
                             if (respBodyParsed == null) reject(new Error("respBodyParsed == null"));
                             else resolve(respBodyParsed);
                         } catch (e) {
