@@ -23,7 +23,7 @@ type httpGetApiResult = { url: string, ts?: number, respBody: any }
 type httpPostApiResult = { url: string, ts?: number, postData: postData, respBody: any }
 type httpApiResult = { url: string, ts?: number, postData?: postData, respBody: any }
 
-type snapshotRespEntry = { ts?: number, body: any }
+export type snapshotRespEntry = { ts?: number, body: any }
 
 export type snapshot = {
     uid: number,

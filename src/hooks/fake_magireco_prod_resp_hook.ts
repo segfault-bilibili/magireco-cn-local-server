@@ -20,6 +20,8 @@ export class fakeMagirecoProdRespHook implements hook {
     private readonly bsgameSdkLoginRegEx: RegExp;
     private readonly bsgameSdkCipherRegEx: RegExp;
 
+    private readonly arenaSimulateMap: Map<string, string>;
+
     get stringifiedOverrideDB(): string {
         return JSON.stringify(this.params.overridesDB, parameters.replacer);
     }
@@ -75,6 +77,8 @@ export class fakeMagirecoProdRespHook implements hook {
 
         this.bsgameSdkLoginRegEx = /^(http|https):\/\/line\d+-sdk-center-login-sh\.biligame\.net\/api\/external\/(login|user\.token\.oauth\.login)\/v3((|\?.*)$)/;
         this.bsgameSdkCipherRegEx = /^(http|https):\/\/line\d+-sdk-center-login-sh\.biligame\.net\/api\/external\/issue\/cipher\/v3((|\?.*)$)/;
+
+        this.arenaSimulateMap = new Map<string, string>();
     }
 
     // if matched, keep a copy of request/response data in memory
@@ -145,6 +149,10 @@ export class fakeMagirecoProdRespHook implements hook {
                 case "gameUser/changeLeader":
                 case "userChara/visualize":
                 case "userLive2d/set":
+                case "arena/start":
+                case "quest/native/get":
+                case "quest/native/result/send":
+                case "page/ArenaResult":
                     {
                         return {
                             nextAction: "passOnRequest",
@@ -159,6 +167,7 @@ export class fakeMagirecoProdRespHook implements hook {
                 case "page/CharaListCustomize":
                 case "page/CharaListEquip":
                 case "page/QuestBattleSelect":
+                case "page/QuestBackground":
                 case "page/MainQuestSingleRaid":
                 case "page/MainQuestBranch":
                 case "page/MemoriaEquip":
@@ -293,7 +302,7 @@ export class fakeMagirecoProdRespHook implements hook {
                 statusCode = 404;
                 contentType = "application/xml";
                 body = Buffer.from(this.get404xml(url.hostname, url.pathname), 'utf-8');
-                if (!this.crawler.isKnown404(url.pathname)) console.error(`responding 404[${url.pathname}]`);
+                if (!this.crawler.isKnown404(url.pathname)) console.error(`responding 404 [${url.pathname}]`);
             } else {
                 statusCode = 200;
             }
@@ -376,6 +385,14 @@ export class fakeMagirecoProdRespHook implements hook {
                 case "page/GachaHistory":
                     {
                         respBody = this.fakePagedResult(apiName, reqBody);
+                        break;
+                    }
+                case "arena/start":
+                case "quest/native/get":
+                case "quest/native/result/send":
+                case "page/ArenaResult":
+                    {
+                        respBody = this.fakeArenaResp(apiName, reqBody);
                         break;
                     }
                 default:
@@ -486,7 +503,7 @@ export class fakeMagirecoProdRespHook implements hook {
 
         const obj = {
             data: {
-                open_id: `${this.getRandomOpenId()}`,
+                open_id: `${this.getRandomGuid()}`,
                 uname: `${loginName}`,
                 code: 0,
                 timestamp: new Date().getTime(),
@@ -857,6 +874,283 @@ export class fakeMagirecoProdRespHook implements hook {
         return Buffer.from(JSON.stringify(respBodyObj), 'utf-8');
     }
 
+    private fakeArenaResp(apiName: string, reqBody: string | Buffer | undefined): Buffer | undefined {
+        if (typeof reqBody !== 'string') return;
+
+        const lastSnapshot = this.userdataDmp.lastSnapshot;
+        if (lastSnapshot == null) return Buffer.from(this.fakeErrorResp("错误", "未加载个人账号数据"), 'utf-8');
+
+        const myUserId = lastSnapshot.httpResp.get.get(this.pageKeys["page/TopPage"])?.body?.gameUser?.userId;
+        if (typeof myUserId !== 'string' || !myUserId.match(userdataDump.guidRegEx)) {
+            return Buffer.from(this.fakeErrorResp("错误", "无法读取用户ID"), 'utf-8');
+        }
+
+        switch (apiName) {
+            case "arena/start":
+                {
+                    let opponentUserId: string | undefined;
+                    let arenaBattleOpponentTeamType: string | undefined;
+                    try {
+                        const parsed = JSON.parse(reqBody);
+                        if (parsed.arenaBattleType !== "SIMULATE") {
+                            return Buffer.from(this.fakeErrorResp("错误", "目前镜层只支持演习", false), 'utf-8');
+                        }
+                        opponentUserId = parsed.opponentUserId;
+                        if (typeof opponentUserId !== 'string' || !opponentUserId.match(userdataDump.guidRegEx)) {
+                            console.error("opponentUserId must be string and guid");
+                            return;
+                        }
+                        arenaBattleOpponentTeamType = parsed.arenaBattleOpponentTeamType;
+                        if (typeof arenaBattleOpponentTeamType !== 'string') {
+                            console.error("arenaBattleOpponentTeamType must be string");
+                            return;
+                        }
+                    } catch (e) {
+                        console.error(`fakeArenaStart error parsing`, e);
+                        return;
+                    }
+
+                    const userQuestBattleResultId = this.getRandomGuid();
+                    this.arenaSimulateMap.set(userQuestBattleResultId, opponentUserId);
+
+                    const createdAt = this.getDateTimeString();
+
+                    const obj = {
+                        userQuestBattleResultList: [
+                            {
+                                id: userQuestBattleResultId,
+                                userId: myUserId,
+                                createdAt: createdAt,
+                            }
+                        ],
+                        resultCode: "success",
+                        userArenaBattleResultList: [
+                            {
+                                userQuestBattleResultId: userQuestBattleResultId,
+                                userId: myUserId,
+                                opponentUserId: opponentUserId,
+                                arenaBattleType: "SIMULATE",
+                                arenaBattleStatus: "CREATED",
+                                arenaBattleOpponentType: "HIGHER",
+                                arenaBattleOpponentTeamType: arenaBattleOpponentTeamType,
+                                numberOfConsecutiveWins: 0,
+                                point: 0,
+                                createdAt: createdAt,
+                            }
+                        ]
+                    }
+                    return Buffer.from(JSON.stringify(obj), 'utf-8');
+                    break;
+                }
+            case "quest/native/get":
+                {
+                    try {
+                        const parsed = JSON.parse(reqBody);
+                        const userQuestBattleResultId = parsed?.userQuestBattleResultId;
+                        if (
+                            typeof userQuestBattleResultId !== 'string'
+                            || !userQuestBattleResultId.match(userdataDump.guidRegEx)
+                        ) {
+                            console.error(`fakeArenaNativeGet userQuestBattleResultId must be guid`);
+                            return;
+                        }
+                        const opponentUserId = this.arenaSimulateMap.get(userQuestBattleResultId);
+                        if (typeof opponentUserId !== 'string' || !opponentUserId.match(userdataDump.guidRegEx)) {
+                            console.error(`fakeArenaNativeGet opponentUserId not found or invalid`);
+                            return;
+                        }
+
+                        const arenaStartUrlStr = `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/arena/start`;
+                        let arenaStartMap = lastSnapshot.httpResp.post.get(arenaStartUrlStr);
+                        if (arenaStartMap == null || !(arenaStartMap instanceof Map)) {
+                            console.error(`fakeArenaNativeGet arenaStartMap is null or not map`);
+                            return;
+                        }
+                        const nativeGetUrlStr = `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/quest/native/get`;
+                        let nativeGetMap = lastSnapshot.httpResp.post.get(nativeGetUrlStr);
+                        if (nativeGetMap == null || !(nativeGetMap instanceof Map)) {
+                            console.error(`fakeArenaNativeGet nativeGetMap is null or not map`);
+                            return;
+                        }
+
+                        let foundArenaStartKey: string | undefined;
+                        for (let key of arenaStartMap.keys()) {
+                            let postDataObj = JSON.parse(key);
+                            if (postDataObj.opponentUserId === opponentUserId) {
+                                foundArenaStartKey = key;
+                                break;
+                            }
+                        }
+                        if (foundArenaStartKey == null) {
+                            console.error(`fakeArenaNativeGet foundArenaStartKey == null`);
+                            return;
+                        }
+                        const arenaStartResp = arenaStartMap.get(foundArenaStartKey)?.body;
+                        if (arenaStartResp == null) {
+                            console.error(`fakeArenaNativeGet arenaStartResp == null`);
+                            return;
+                        }
+                        const userArenaBattleResultList = arenaStartResp.userArenaBattleResultList;
+                        if (
+                            userArenaBattleResultList == null || !Array.isArray(userArenaBattleResultList)
+                            || userArenaBattleResultList.length == 0
+                        ) {
+                            console.error(`fakeArenaNativeGet cannot read userArenaBattleResultList`);
+                            return;
+                        }
+                        const origUserQuestBattleResultId = userArenaBattleResultList[0]?.userQuestBattleResultId;
+                        if (
+                            typeof origUserQuestBattleResultId !== 'string' ||
+                            !origUserQuestBattleResultId.match(userdataDump.guidRegEx)
+                        ) {
+                            console.error(`fakeArenaNativeGet origUserQuestBattleResultId must be guid`);
+                            return;
+                        }
+                        const nativeGetKey = JSON.stringify({ userQuestBattleResultId: origUserQuestBattleResultId });
+                        let nativeGetResp = nativeGetMap.get(nativeGetKey)?.body;
+                        if (nativeGetResp == null || typeof nativeGetResp !== 'object') {
+                            console.error(`fakeArenaNativeGet nativeGetResp must be object`);
+                            return;
+                        }
+                        const replica = JSON.parse(JSON.stringify(nativeGetResp));
+                        const replicaUserArenaBattleResultList = replica.webData?.userArenaBattleResultList;
+                        if (replicaUserArenaBattleResultList == null || !Array.isArray(replicaUserArenaBattleResultList)) {
+                            console.error(`fakeArenaNativeGet replicaUserArenaBattleResultList must be array`);
+                            return;
+                        }
+                        replicaUserArenaBattleResultList.forEach((item) => {
+                            item.userQuestBattleResultId = userQuestBattleResultId;
+                        });
+                        const replicaUserQuestBattleResultList = replica.webData?.userQuestBattleResultList;
+                        if (replicaUserQuestBattleResultList == null || !Array.isArray(replicaUserQuestBattleResultList)) {
+                            console.error(`fakeArenaNativeGet replicaUserQuestBattleResultList must be array`);
+                            return;
+                        }
+                        replicaUserQuestBattleResultList.forEach((item) => {
+                            item.id = userQuestBattleResultId;
+                        });
+                        if (replica.webData?.gameUser == null) {
+                            console.error(`fakeArenaNativeGet replica.webData?.gameUser == null`);
+                            return;
+                        }
+                        replica.webData.gameUser.userQuestBattleResultId = userQuestBattleResultId;
+                        console.error(`fakeArenaNativeGet faked quest/native/get response`);
+                        return Buffer.from(JSON.stringify(replica), 'utf-8');
+                    } catch (e) {
+                        console.error(`fakeArenaNativeGet error parsing`, e);
+                        return;
+                    }
+                    break;
+                }
+            case "quest/native/result/send":
+                {
+                    try {
+                        const parsed = JSON.parse(JSON.parse(reqBody).param);
+                        const userQuestBattleResultId = parsed.userQuestBattleResultId;
+                        if (
+                            typeof userQuestBattleResultId !== 'string'
+                            || !userQuestBattleResultId.match(userdataDump.guidRegEx)
+                        ) {
+                            console.error(`fakeArenaNativeResultSend userQuestBattleResultId must be string and guid`);
+                            return;
+                        }
+                        const opponentUserId = this.arenaSimulateMap.get(userQuestBattleResultId);
+                        if (typeof opponentUserId !== 'string' || !opponentUserId.match(userdataDump.guidRegEx)) {
+                            console.error(`fakeArenaNativeResultSend opponentUserId must be string and guid`);
+                            return;
+                        }
+
+                        // FIXME
+                        return Buffer.from(JSON.stringify({
+                            resultCode: "success",
+                            gameUser: {
+                                userId: myUserId,
+                                freeRankArenaPoint: 18000,
+                            },
+                            userArenaBattle: {
+                                userId: myUserId,
+                                freeRankArenaPoint: 18000,
+                                currentFreeRankClass: {
+                                    arenaBattleFreeRankClass: "FREE_RANK_30",
+                                    prevClass: "FREE_RANK_29",
+                                    nextClass: "FREE_RANK_30",
+                                    requiredPoint: 18000,
+                                    className: "第30镜层",
+                                },
+                                previousFreeRankClass: {
+                                    arenaBattleFreeRankClass: "FREE_RANK_29",
+                                    prevClass: "FREE_RANK_28",
+                                    nextClass: "FREE_RANK_30",
+                                    requiredPoint: 18000,
+                                    className: "第29镜层",
+                                    nextClassName: "第30镜层",
+                                }
+                            },
+                            userQuestBattleResultList: [
+                                {
+                                    id: userQuestBattleResultId,
+                                    userId: myUserId,
+                                }
+                            ],
+                            userArenaBattleResultList: [
+                                {
+                                    userQuestBattleResultId: userQuestBattleResultId,
+                                    userId: myUserId,
+                                    opponentUserId: opponentUserId,
+                                    arenaBattleStatus: parsed.result === "FAILED" ? "LOSE" : "WIN",
+                                    completedAt: this.getDateTimeString(),
+                                    createdAt: this.getDateTimeString(),
+                                }
+                            ]
+                        }));
+                    } catch (e) {
+                        console.error(`fakeArenaNativeResultSend error parsing`, e);
+                    }
+                    break;
+                }
+            case "page/ArenaResult":
+                {
+                    try {
+                        const parsed = JSON.parse(reqBody);
+                        const strUserId = parsed.strUserId;
+                        if (typeof strUserId !== 'string' || !strUserId.match(userdataDump.guidRegEx)) {
+                            console.error(`fakeArenaResult strUserId must be guid`);
+                            return;
+                        }
+                        // FIXME
+                        return Buffer.from(JSON.stringify({
+                            resultCode: "success",
+                            userProfile: {
+                                userId: strUserId,
+                                userDeck: {
+                                    userId: strUserId,
+                                },
+                                leaderUserCard: {
+                                    displayCardId: 10011,
+                                },
+                                userArenaBattle: {
+                                    freeRankArenaPoint: 18000,
+                                    arenaBattleFreeRankClass: "FREE_RANK_30",
+                                    prevClass: "FREE_RANK_29",
+                                    nextClass: "FREE_RANK_30",
+                                    requiredPoint: 18000,
+                                    className: "第30镜层",
+                                }
+                            }
+                        }), 'utf-8');
+                    } catch (e) {
+                        console.error(`fakeArenaResult error parsing`, e);
+                    }
+                    break;
+                }
+            default:
+                {
+                    console.error(`fakeArena invalid apiName=[${apiName}]`);
+                    return;
+                }
+        }
+    }
+
     private get404xml(host: string, key: string): string {
         return `<? xml version = "1.0" encoding = "UTF-8" ?> `
             + `\n<Error>`
@@ -1120,7 +1414,7 @@ export class fakeMagirecoProdRespHook implements hook {
         return crypto.randomBytes(Math.trunc((charCount + 1) / 2)).toString('hex').substring(0, charCount);
     }
 
-    private getRandomOpenId(): string {
+    private getRandomGuid(): string {
         return [8, 4, 4, 4, 12].map((len) => crypto.randomBytes(Math.trunc((len + 1) / 2))
             .toString('hex').substring(0, len)).join("-");
     }
