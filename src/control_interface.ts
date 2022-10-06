@@ -1146,10 +1146,24 @@ export class controlInterface {
         if (isDownloading) userdataDumpStatus = `从官服下载中 ${this.userdataDmp.fetchStatus}`, userdataDumpStatusStyle = "color: blue";
         else if (lastDump != null) {
             const lastUid = lastDump.uid;
-            if (lastUid != null && lastUid === gameUid) {
-                userdataDumpStatus = "从官服下载数据完毕", userdataDumpStatusStyle = "color: green";
+            const topPageUrl = `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/TopPage?value=`
+                + `user`
+                + `%2CgameUser`
+                + `%2CitemList`
+                + `%2CgiftList`
+                + `%2CpieceList`
+                + `%2CuserQuestAdventureList`
+                + `&timeStamp=`;
+            const topPage = userdataDump.getUnBrBody(lastDump.httpResp.get, topPageUrl);
+            const loginName = topPage?.user?.loginName;
+            const downloadDate = new Date(lastDump.timestamp);
+            const downloadDateStr = `${downloadDate.toLocaleDateString()} ${downloadDate.toLocaleTimeString()}`;
+            userdataDumpStatus = `从官服下载数据完毕 uid=[${lastUid}] 玩家名(非B站用户名)=[${loginName}] 下载时间(按系统本地时区显示)=[${downloadDateStr}]`;
+            if (this.userdataDmp.lastError != null) {
+                userdataDumpStatus = `本次下载过程出错 status=[${this.userdataDmp.fetchStatus}] lastError=[${this.userdataDmp.lastError}] （先前${userdataDumpStatus}）`;
+                userdataDumpStatusStyle = "color: orange";
             } else {
-                userdataDumpStatus = `从官服下载数据完毕（uid=[${lastUid}]，不属于当前登录账号uid=[${gameUid}]）`, userdataDumpStatusStyle = "color: orange";
+                userdataDumpStatusStyle = "color: green";
             }
         } else if (this.userdataDmp.lastError != null) userdataDumpStatus = `从官服下载数据过程中出错  ${this.userdataDmp.fetchStatus}`, userdataDumpStatusStyle = "color: red";
 
