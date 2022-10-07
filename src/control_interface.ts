@@ -99,6 +99,19 @@ export class controlInterface {
                 return;
             }
 
+            const isHomepage = req.url === "/" && req.headers.referer == null;
+            const isCACert = req.url === "/ca.crt" || req.url === "/ca_subject_hash_old.txt";
+            const selfHost = this.params.listenList.controlInterface.host;
+            const selfPort = this.params.listenList.controlInterface.port;
+            const refererRegEx = new RegExp(`^(http|https)://(magireco\\.local|${selfHost.replace(/\./g, "\\.")})(|:${selfPort})($|/.*)`);
+            const isReferrerAllowed = req.headers.referer?.match(refererRegEx) != null;
+            if (!isHomepage && !isCACert && !isReferrerAllowed) {
+                console.error(`rejected disallowed referer`);
+                res.writeHead(403, { ["Content-Type"]: "text/plain" });
+                res.end("403 Forbidden");
+                return;
+            }
+
             if (req.url.startsWith("/api/")) {
                 const apiName = req.url.replace(/(^\/api\/)|(\?.*$)/g, "");
                 console.log(`controlInterface received api request [${apiName}]`);
