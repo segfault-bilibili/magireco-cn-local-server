@@ -92,7 +92,7 @@ class localServer {
                     }
                     return fakedResponse ? false : nextAction.interceptResponse;
                 });
-                if (this.params.mode === parameters.mode.LOCAL_OFFLINE) {
+                if (this.checkOfflineMode(reqHeaders["host"])) {
                     if (matchedHooks.length == 0 && !fakedResponse)
                         cliReq.destroy();
                 }
@@ -102,7 +102,7 @@ class localServer {
                 let respHeaders;
                 const respBodyBufArray = [];
                 let svrReq;
-                if (this.params.mode !== parameters.mode.LOCAL_OFFLINE && !fakedResponse) {
+                if (!this.checkOfflineMode(reqHeaders["host"]) && !fakedResponse) {
                     let socket;
                     if (reqHeaders.host.match(/^(|www\.)magireco\.local(|:\d{1,5})$/)) {
                         let controlInterfaceHost = this.params.listenList.controlInterface.host;
@@ -261,7 +261,7 @@ class localServer {
                             }
                             return fakedResponse ? false : nextAction.interceptResponse;
                         });
-                        if (this.params.mode === parameters.mode.LOCAL_OFFLINE) {
+                        if (this.checkOfflineMode(reqHeaders["host"])) {
                             if (matchedHooks.length == 0 && !fakedResponse)
                                 cliReq.destroy();
                         }
@@ -370,7 +370,7 @@ class localServer {
                     }
                     return fakedResponse ? false : nextAction.interceptResponse;
                 });
-                if (this.params.mode === parameters.mode.LOCAL_OFFLINE) {
+                if (this.checkOfflineMode(reqHeaders[":authority"])) {
                     if (matchedHooks.length == 0 && !fakedResponse)
                         cliReqStream.destroy();
                 }
@@ -381,7 +381,7 @@ class localServer {
                 const respBodyBufArray = [];
                 const authorityURL = new url_1.URL(`https://${reqHeaders[":authority"]}`);
                 let sess, svrReq;
-                if (this.params.mode !== parameters.mode.LOCAL_OFFLINE && !fakedResponse) {
+                if (!this.checkOfflineMode(reqHeaders[":authority"]) && !fakedResponse) {
                     sess = await this.getH2SessionAsync(authorityURL, alpn, reqHeaders[":authority"] != null ? authorityURL.hostname : sni);
                     svrReq = sess.request(reqHeaders);
                 }
@@ -510,7 +510,7 @@ class localServer {
                             }
                             return fakedResponse ? false : nextAction.interceptResponse;
                         });
-                        if (this.params.mode === parameters.mode.LOCAL_OFFLINE) {
+                        if (this.checkOfflineMode(reqHeaders[":authority"])) {
                             if (matchedHooks.length == 0 && !fakedResponse)
                                 cliReqStream.destroy();
                         }
@@ -637,6 +637,18 @@ class localServer {
                 server.close();
             });
         }));
+    }
+    checkOfflineMode(hostname) {
+        if (this.params.mode !== parameters.mode.LOCAL_OFFLINE)
+            return false;
+        if (hostname == null)
+            return true;
+        if (!net.isIPv6(hostname))
+            hostname = hostname.replace(/:\d+$/i, "");
+        if (localServer.offlineModeHostnameWhiteList.find((regEx) => hostname === null || hostname === void 0 ? void 0 : hostname.match(regEx)))
+            return false;
+        else
+            return true;
     }
     addHook(newHook) {
         if (this.hooks.find((hook) => hook === newHook) == null)
@@ -1001,3 +1013,10 @@ class localServer {
     }
 }
 exports.localServer = localServer;
+localServer.offlineModeHostnameWhiteList = [
+    /(\.|^)github\.com$/,
+    /(\.|^)githubusercontent\.com$/,
+    /(\.|^)github\.io$/,
+    /(\.|^)jsdelivr\.net$/,
+    /(\.|^)pages\.dev$/,
+];

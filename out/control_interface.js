@@ -33,8 +33,20 @@ class controlInterface {
         ];
         hooks.forEach((hook) => localsvr.addHook(hook));
         const httpServerSelf = http.createServer(async (req, res) => {
-            var _a, _b;
+            var _a, _b, _c;
             if (req.url == null) {
+                res.writeHead(403, { ["Content-Type"]: "text/plain" });
+                res.end("403 Forbidden");
+                return;
+            }
+            const isHomepage = req.url === "/" && req.headers.referer == null;
+            const isCACert = req.url === "/ca.crt" || req.url === "/ca_subject_hash_old.txt";
+            const selfHost = this.params.listenList.controlInterface.host;
+            const selfPort = this.params.listenList.controlInterface.port;
+            const refererRegEx = new RegExp(`^(http|https)://(magireco\\.local|${selfHost.replace(/\./g, "\\.")})(|:${selfPort})($|/.*)`);
+            const isReferrerAllowed = ((_a = req.headers.referer) === null || _a === void 0 ? void 0 : _a.match(refererRegEx)) != null;
+            if (!isHomepage && !isCACert && !isReferrerAllowed) {
+                console.error(`rejected disallowed referer`);
                 res.writeHead(403, { ["Content-Type"]: "text/plain" });
                 res.end("403 Forbidden");
                 return;
@@ -96,7 +108,7 @@ class controlInterface {
                             if (typeof postData === 'string')
                                 throw new Error("postData is string");
                             let uploaded_params = postData.find((item) => item.name === "uploaded_params");
-                            if (!((_a = uploaded_params === null || uploaded_params === void 0 ? void 0 : uploaded_params.filename) === null || _a === void 0 ? void 0 : _a.match(/\.json$/i)))
+                            if (!((_b = uploaded_params === null || uploaded_params === void 0 ? void 0 : uploaded_params.filename) === null || _b === void 0 ? void 0 : _b.match(/\.json$/i)))
                                 throw new Error("filename not ended with .json");
                             let newParamStr = uploaded_params.data.toString();
                             if (newParamStr === "")
@@ -117,7 +129,7 @@ class controlInterface {
                             if (typeof postData === 'string')
                                 throw new Error("postData is string");
                             let uploaded_overrides = postData.find((item) => item.name === "uploaded_overrides");
-                            if (!((_b = uploaded_overrides === null || uploaded_overrides === void 0 ? void 0 : uploaded_overrides.filename) === null || _b === void 0 ? void 0 : _b.match(/\.json$/i)))
+                            if (!((_c = uploaded_overrides === null || uploaded_overrides === void 0 ? void 0 : uploaded_overrides.filename) === null || _c === void 0 ? void 0 : _c.match(/\.json$/i)))
                                 throw new Error("filename not ended with .json");
                             let newOverridesStr = uploaded_overrides.data.toString();
                             if (newOverridesStr === "")

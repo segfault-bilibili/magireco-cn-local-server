@@ -51,6 +51,8 @@ export declare class localServer {
     private readonly hooks;
     constructor(params: parameters.params);
     close(): Promise<void>;
+    private checkOfflineMode;
+    private static readonly offlineModeHostnameWhiteList;
     addHook(newHook: hook): void;
     private static isHostSelfAsync;
     private static socketRemoteIPAsync;

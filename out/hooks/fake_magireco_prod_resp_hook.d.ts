@@ -17,6 +17,7 @@ export declare class fakeMagirecoProdRespHook implements hook {
     private readonly slashGuidEndRegEx;
     private readonly bsgameSdkLoginRegEx;
     private readonly bsgameSdkCipherRegEx;
+    private readonly bilibiliGameAgreementRegEx;
     private readonly arenaSimulateMap;
     get stringifiedOverrideDB(): string;
     private get overrides();

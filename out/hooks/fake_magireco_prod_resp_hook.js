@@ -250,6 +250,7 @@ class fakeMagirecoProdRespHook {
         this.slashGuidEndRegEx = /\/[\da-f]{8}(-[\da-f]{4}){3}-[\da-f]{12}$/;
         this.bsgameSdkLoginRegEx = /^(http|https):\/\/line\d+-sdk-center-login-sh\.biligame\.net\/api\/external\/(login|user\.token\.oauth\.login)\/v3((|\?.*)$)/;
         this.bsgameSdkCipherRegEx = /^(http|https):\/\/line\d+-sdk-center-login-sh\.biligame\.net\/api\/external\/issue\/cipher\/v3((|\?.*)$)/;
+        this.bilibiliGameAgreementRegEx = /^(http|https):\/\/game\.bilibili\.com\/agreement\/(userterms|privacy)\/.+$/;
         this.arenaSimulateMap = new Map();
     }
     get stringifiedOverrideDB() {
@@ -260,6 +261,8 @@ class fakeMagirecoProdRespHook {
         if (lastDump == null)
             return;
         const uid = lastDump.uid;
+        if (typeof uid !== 'number' || isNaN(uid))
+            return;
         let overrides = this.params.overridesDB.get(uid);
         if (overrides == null) {
             overrides = {};
@@ -313,7 +316,8 @@ class fakeMagirecoProdRespHook {
         const isMagiRecoPatch = (url === null || url === void 0 ? void 0 : url.href.match(this.magirecoPatchUrlRegEx)) != null;
         const isBsgamesdkLogin = (url === null || url === void 0 ? void 0 : url.href.match(this.bsgameSdkLoginRegEx)) != null;
         const isBsgamesdkCipher = (url === null || url === void 0 ? void 0 : url.href.match(this.bsgameSdkCipherRegEx)) != null;
-        if (!isMagiRecoProd && !isMagiRecoPatch && !isBsgamesdkLogin && !isBsgamesdkCipher)
+        const isBilibiliGameAgreement = (url === null || url === void 0 ? void 0 : url.href.match(this.bilibiliGameAgreementRegEx)) != null;
+        if (!isMagiRecoProd && !isMagiRecoPatch && !isBsgamesdkLogin && !isBsgamesdkCipher && !isBilibiliGameAgreement)
             return {
                 nextAction: "passOnRequest",
                 interceptResponse: false,
@@ -346,6 +350,28 @@ class fakeMagirecoProdRespHook {
                     interceptResponse: false,
                 };
             }
+        }
+        if (isBilibiliGameAgreement) {
+            const headers = {
+                [http2.constants.HTTP2_HEADER_CONTENT_TYPE]: "text/html; charset=utf-8",
+            };
+            const html = `<!doctype html><html><head><meta charset=\"UTF-8\"><script>`
+                + `document.addEventListener(\"WebViewJavascriptBridgeReady\",function(){`
+                + `var obj={status:1,type:1,event:1};`
+                + `[obj,JSON.stringify(obj)].forEach(o=>{try{window.bridge.callHandler("finishWithJson",o,function(){});}catch(e){}});`
+                + `});`
+                + `</script></head></html>`;
+            const respBody = Buffer.from(html, 'utf-8');
+            return {
+                nextAction: "fakeResponse",
+                fakeResponse: {
+                    statusCode: 200,
+                    statusMessage: "OK",
+                    headers: headers,
+                    body: respBody,
+                },
+                interceptResponse: false,
+            };
         }
         const isApi = url.pathname.match(this.apiPathNameRegEx) != null;
         let apiUnimplemented = false;
