@@ -149,7 +149,7 @@ export class localServer {
                     }
                     return fakedResponse ? false : nextAction.interceptResponse;
                 });
-                if (this.params.mode === parameters.mode.LOCAL_OFFLINE) {
+                if (this.checkOfflineMode(reqHeaders["host"])) {
                     if (matchedHooks.length == 0 && !fakedResponse) cliReq.destroy();
                 }
 
@@ -160,7 +160,7 @@ export class localServer {
                 const respBodyBufArray: Array<Buffer> = [];
 
                 let svrReq: http.ClientRequest | undefined;
-                if (this.params.mode !== parameters.mode.LOCAL_OFFLINE && !fakedResponse) {
+                if (!this.checkOfflineMode(reqHeaders["host"]) && !fakedResponse) {
                     let socket: net.Socket | tls.TLSSocket;
                     if (reqHeaders.host.match(/^(|www\.)magireco\.local(|:\d{1,5})$/)) {
                         let controlInterfaceHost = this.params.listenList.controlInterface.host;
@@ -307,7 +307,7 @@ export class localServer {
                             }
                             return fakedResponse ? false : nextAction.interceptResponse;
                         });
-                        if (this.params.mode === parameters.mode.LOCAL_OFFLINE) {
+                        if (this.checkOfflineMode(reqHeaders["host"])) {
                             if (matchedHooks.length == 0 && !fakedResponse) cliReq.destroy();
                         }
                     }
@@ -410,7 +410,7 @@ export class localServer {
                     }
                     return fakedResponse ? false : nextAction.interceptResponse;
                 });
-                if (this.params.mode === parameters.mode.LOCAL_OFFLINE) {
+                if (this.checkOfflineMode(reqHeaders[":authority"])) {
                     if (matchedHooks.length == 0 && !fakedResponse) cliReqStream.destroy();
                 }
 
@@ -422,7 +422,7 @@ export class localServer {
 
                 const authorityURL = new URL(`https://${reqHeaders[":authority"]}`);
                 let sess: http2.ClientHttp2Session | undefined, svrReq: http2.ClientHttp2Stream | undefined;
-                if (this.params.mode !== parameters.mode.LOCAL_OFFLINE && !fakedResponse) {
+                if (!this.checkOfflineMode(reqHeaders[":authority"]) && !fakedResponse) {
                     sess = await this.getH2SessionAsync(authorityURL,
                         alpn, reqHeaders[":authority"] != null ? authorityURL.hostname : sni);
                     svrReq = sess.request(reqHeaders);
@@ -546,7 +546,7 @@ export class localServer {
                             }
                             return fakedResponse ? false : nextAction.interceptResponse;
                         });
-                        if (this.params.mode === parameters.mode.LOCAL_OFFLINE) {
+                        if (this.checkOfflineMode(reqHeaders[":authority"])) {
                             if (matchedHooks.length == 0 && !fakedResponse) cliReqStream.destroy();
                         }
                     }
@@ -666,6 +666,21 @@ export class localServer {
             })
         }));
     }
+
+    private checkOfflineMode(hostname: string | undefined): boolean {
+        if (this.params.mode !== parameters.mode.LOCAL_OFFLINE) return false;
+        if (hostname == null) return true;
+        if (!net.isIPv6(hostname)) hostname = hostname.replace(/:\d+$/i, "");
+        if (localServer.offlineModeHostnameWhiteList.find((regEx) => hostname?.match(regEx))) return false;
+        else return true;
+    }
+    private static readonly offlineModeHostnameWhiteList: Array<RegExp> = [
+        /(\.|^)github\.com$/,
+        /(\.|^)githubusercontent\.com$/,
+        /(\.|^)github\.io$/,
+        /(\.|^)jsdelivr\.net$/,
+        /(\.|^)pages\.dev$/,
+    ];
 
     addHook(newHook: hook) {
         if (this.hooks.find((hook) => hook === newHook) == null) this.hooks.push(newHook);
