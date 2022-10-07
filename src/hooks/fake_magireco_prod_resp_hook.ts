@@ -30,6 +30,7 @@ export class fakeMagirecoProdRespHook implements hook {
         const lastDump = this.userdataDmp.lastDump;
         if (lastDump == null) return;
         const uid = lastDump.uid;
+        if (typeof uid !== 'number' || isNaN(uid)) return;
         let overrides = this.params.overridesDB.get(uid);
         if (overrides == null) {
             overrides = {};
