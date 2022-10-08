@@ -1157,7 +1157,7 @@ class controlInterface {
             + `\n    </div>`
             + `\n    <div>`
             + `\n      <input id=\"arena_simulate_checkbox\" name=\"arena_simulate\" value=\"true\" type=\"checkbox\" ${this.params.arenaSimulate ? "checked" : ""}>`
-            + `\n      <label for=\"arena_simulate_checkbox\"><b>（需至少1BP）</b>通过镜层演习获取好友队伍配置</label>`
+            + `\n      <label for=\"arena_simulate_checkbox\"><b>（需通关第二章开启镜层且至少有1BP）</b>通过镜层演习获取好友队伍配置</label>`
             + `\n    </div>`
             + `\n    <div>`
             + `\n      <input id=\"concurrent_checkbox\" name=\"concurrent\" value=\"true\" type=\"checkbox\" ${this.params.concurrentFetch ? "checked" : ""}>`

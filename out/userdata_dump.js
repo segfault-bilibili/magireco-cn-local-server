@@ -265,7 +265,12 @@ class userdataDmp {
         reap(responses3, httpGetRespMap, httpPostRespMap);
         console.log(`userdataDmp.getDump() 3rd round completed`);
         if (this.params.arenaSimulate) {
-            await this.mirrorsSimulateAll(httpGetRespMap, httpPostRespMap);
+            try {
+                await this.mirrorsSimulateAll(httpGetRespMap, httpPostRespMap);
+            }
+            catch (e) {
+                console.error(`mirrorsSimulateAll failed`, e); //FIXME unknown failure
+            }
         }
         this._lastDump = {
             uid: this.uid,
