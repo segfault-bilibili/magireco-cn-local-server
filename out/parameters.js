@@ -213,7 +213,7 @@ class params {
         return `mode: global`
             + `\n`
             + `\nproxies:`
-            + `\n - name: "magirecolocal"`
+            + `\n - name: "magirecolocal${port}"`
             + `\n   type: http`
             + `\n   server: ${host}`
             + `\n   port: ${port}`;

@@ -445,14 +445,6 @@ class controlInterface {
                     res.writeHead(200, { ["Content-Type"]: "text/plain" });
                     res.end(ca_subject_hash_old);
                     return;
-                case "/magirecolocal.yaml":
-                    console.log(`servering magirecolocal.yaml`);
-                    res.writeHead(200, {
-                        ["Content-Type"]: "application/x-yaml",
-                        ["Content-Disposition"]: `attachment; filename=\"${req.url.replace(/^\//, "")}\"`,
-                    });
-                    res.end(this.params.clashYaml);
-                    return;
                 case "/params.json":
                     console.log(`servering params.json`);
                     res.writeHead(200, {
@@ -469,6 +461,16 @@ class controlInterface {
                     });
                     res.end(JSON.stringify(this.params.overridesDB, parameters.replacer));
                     return;
+            }
+            const yamlRegEx = /^\/magirecolocal\d*\.yaml$/;
+            if (req.url.match(yamlRegEx)) {
+                console.log(`servering ${req.url}`);
+                res.writeHead(200, {
+                    ["Content-Type"]: "application/x-yaml",
+                    ["Content-Disposition"]: `attachment; filename=\"${req.url.replace(/^\//, "")}\"`,
+                });
+                res.end(this.params.clashYaml);
+                return;
             }
             if (req.url.match(this.userdataDmp.userdataDumpFileNameRegEx)) {
                 console.log(`serving ${req.url}`);
@@ -710,6 +712,8 @@ class controlInterface {
         const autoBattleURL = new URL("https://www.bilibili.com/video/BV1nf4y1y713");
         const nodeJsUrl = new URL("https://nodejs.org/zh-cn/download/current/");
         const npmRepoUrl = new URL("https://www.npmjs.com/package/magireco-cn-local-server");
+        const mumuXURL = new URL("https://mumu.163.com/update/");
+        const patchedApkURL = new URL("https://share.weiyun.com/HhJbXRP7");
         const aHref = (text, url, newTab = true) => `<a target=\"${newTab ? "_blank" : "_self"}\" href=${url}>${text}</a>`;
         const isOnlineMode = this.params.mode === parameters.mode.ONLINE;
         const isLocalOfflineMode = this.params.mode === parameters.mode.LOCAL_OFFLINE;
@@ -920,12 +924,15 @@ class controlInterface {
             + `\n  <legend>下载CA证书</legend>`
             + `\n  <div>`
             + `\n    ${aHref("ca.crt", "/ca.crt")}`
+            + `\n    <br><i>注意，如果是模拟器，模拟器系统更新后需要重新安装CA证书。</i>`
+            + `\n    <br><i>（${aHref("离线补丁版", "#verbosedesc", false)}游戏客户端则不需要安装CA证书）</i>`
             + `\n  </div>`
             + `\n  </fieldset>`
             + `\n  <fieldset>`
             + `\n  <legend>下载Clash配置文件</legend>`
             + `\n  <div>`
-            + `\n    ${aHref("magirecolocal.yaml", "/magirecolocal.yaml")}`
+            + `\n    ${aHref(`magirecolocal${httpProxyPort}.yaml`, `/magirecolocal${httpProxyPort}.yaml`)}`
+            + `\n    <br><i>文件名中含有HTTP代理端口号，请注意核对端口号是否与上面显示的一致。</i>`
             + `\n  </div>`
             + `\n  </fieldset>`
             + `\n  <fieldset>`
@@ -980,14 +987,19 @@ class controlInterface {
             + `\n  ${aHref("（点击隐藏详细设置说明，即让游戏客户端连接到本地服务器而不是直连官服）", "javascript:swapVerboseDesc();", false)}`
             + `\n    <ul>`
             + `\n      <li>`
-            + `\n        比如电脑上用${aHref("最新版NodeJS", nodeJsUrl.href)}直接跑${aHref("这个本地服务器", npmRepoUrl.href)}、用Android模拟器跑${aHref("游戏客户端", officialURL.href)}和${aHref("Clash for Android", clashURL.href)}，`
+            + `\n        ${aHref("离线补丁版", patchedApkURL.href)}游戏客户端不需要CA证书；`
+            + `\n        <br>但模拟器中，目前仅发现${aHref("Android12的MuMuX模拟器", mumuXURL.href)}可以运行；`
+            + `\n        <br>真机理论上只支持Android9以上系统，实际上目前仅在Android12上测试过。`
+            + `\n        <br>而且它目前只能免去对CA证书的需求，仍然需要继续设置Clash。`
+            + `\n      </li><li>`
+            + `\n        电脑上应该用${aHref("最新版NodeJS", nodeJsUrl.href)}直接跑${aHref("这个本地服务器", npmRepoUrl.href)}<b>（不推荐在模拟器里通过Termux运行本地服务器）</b>、用Android模拟器跑${aHref("游戏客户端", officialURL.href)}和${aHref("Clash for Android", clashURL.href)}，`
             + `\n        <br>然后用<code>adb -e reverse tcp:${httpProxyPort} tcp:${httpProxyPort}</code>命令设置端口映射来让模拟器里的Clash能连到外边；`
-            + `\n        <br>CA证书也安装在（跑着游戏客户端和Clash的）Android模拟器里；`
+            + `\n        <br>CA证书也安装在（跑着游戏客户端和Clash的）Android模拟器里；或者改用不需要CA证书的${aHref("离线补丁版", patchedApkURL.href)}游戏客户端；`
             + `\n        <br>（<code>adb</code>的<code>-e</code>参数指定连接至模拟器而不是真机；<code>-d</code>则反之。若有多个设备/模拟器则可用<code>-t</code>指定<code>adb devices -l</code>列出的transport_id编号，比如<code>-t 2</code>）`
             + `\n      </li><li>`
             + `\n        或是在Android真机上用${aHref("Termux", termuxURL.href)}跑这个本地服务器，`
             + `\n        <br>然后用类似${aHref("光速", gsxnjURL.href)}之类虚拟机来跑${aHref("游戏客户端", officialURL.href)}，`
-            + `\n        <br>并在虚拟机内安装CA证书。`
+            + `\n        <br>并在虚拟机内安装CA证书（若是${aHref("离线补丁版", patchedApkURL.href)}游戏客户端则不需要CA证书）。`
             + `\n        <br>Clash则直接跑在真机上，然后需要设置Clash分流来<b>只让跑着游戏客户端的虚拟机App走代理，不能让跑着本地服务器的Termux也走代理</b>，`
             + `\n        <br>也就是在Clash的[网络]=>[访问控制模式]中选择<b>[仅允许已选择的应用]</b>，然后在[访问控制应用包列表]中<b>只勾选虚拟机App</b>（虚拟机里跑着游戏客户端以及下文提到的autoBattle脚本）。`
             + `\n        <br><i>（否则很显然，本地服务器转发到游戏官服时又被Clash拦截送回本地服务器，这样网络通信就“死循环”了）</i>`
@@ -996,7 +1008,7 @@ class controlInterface {
             + `\n      </li><li>`
             + `\n        必须在Clash设置中启用<b>[DNS劫持]</b>。`
             + `\n      </li><li>`
-            + `\n        <b>CA证书必须安装为Android的系统证书</b>`
+            + `\n        <b>如果不是${aHref("离线补丁版", patchedApkURL.href)}游戏客户端，则必须安装CA证书，且必须安装为Android的系统证书</b>`
             + `\n        <br><i>（必须<b>Root权限</b>，所以对于获取Root权限不便的真机，需要在虚拟机内安装游戏客户端；而虚拟机内可能不支持运行Clash，故Clash需要跑在虚拟机外）。</i>`
             + `\n        <br>安装CA证书这一步可以用${aHref("autoBattle脚本", autoBattleURL.href)}（安装后请先下拉在线更新到最新版）选择运行[安装CA证书]这个脚本自动完成。`
             + `\n      </li><li>`
