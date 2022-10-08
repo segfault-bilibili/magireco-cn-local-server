@@ -1,3 +1,4 @@
+/// <reference types="node" />
 import * as parameters from "./parameters";
 import { localServer } from "./local_server";
 export declare type magirecoIDs = {
@@ -39,6 +40,10 @@ export declare class userdataDmp {
     private _lastError?;
     get fetchStatus(): string;
     private _fetchStatus;
+    get isImporting(): boolean;
+    private _isImporting;
+    get lastImportError(): any;
+    private _lastImportError?;
     private get timeStamp();
     private get flag();
     private _flag;
@@ -58,6 +63,9 @@ export declare class userdataDmp {
     getDumpAsync(): Promise<dump>;
     private getDumpPromise;
     loadLastDump(): void;
+    importDumpAsync(src: Buffer): Promise<void>;
+    private getImportDumpPromise;
+    private static convertDumpToBrBase64;
     private testLogin;
     private magirecoJsonRequst;
     private gameLogin;

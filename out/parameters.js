@@ -42,6 +42,7 @@ const persistParams = {
     concurrentFetch: true,
     crawlWebRes: true,
     crawlAssets: true,
+    lastDownloadedFileName: undefined,
 };
 class params {
     constructor(mapData, lastSaved, filePath) {
@@ -230,6 +231,8 @@ class params {
     get concurrentFetch() { return this.mapData.get("concurrentFetch"); }
     get crawlWebRes() { return this.mapData.get("crawlWebRes"); }
     get crawlAssets() { return this.mapData.get("crawlAssets"); }
+    get lastDownloadedFileName() { return this.mapData.get("lastDownloadedFileName"); }
+    set lastDownloadedFileName(fileName) { this.mapData.set("lastDownloadedFileName", fileName); }
     get CACertPEM() { return this.CACertAndKey.cert; }
     get CACertSubjectHashOld() { return "9489bdaf"; } //FIXME
     refreshCACert() {

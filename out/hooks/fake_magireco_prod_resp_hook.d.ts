@@ -17,6 +17,7 @@ export declare class fakeMagirecoProdRespHook implements hook {
     private readonly slashGuidEndRegEx;
     private readonly bsgameSdkLoginRegEx;
     private readonly bsgameSdkCipherRegEx;
+    private readonly bsgameSdkOtpSendRegEx;
     private readonly bilibiliGameAgreementRegEx;
     private readonly arenaSimulateMap;
     get stringifiedOverrideDB(): string;
@@ -32,6 +33,7 @@ export declare class fakeMagirecoProdRespHook implements hook {
     onMatchedRequest(method?: string, url?: URL, httpVersion?: string, headers?: http.IncomingHttpHeaders | http2.IncomingHttpHeaders, reqBody?: string | Buffer): fakeResponse | passOnRequestBody;
     onMatchedResponse(statusCode?: number, statusMessage?: string, httpVersion?: string, headers?: http.IncomingHttpHeaders | (http2.IncomingHttpHeaders & http2.IncomingHttpStatusHeader), body?: string | Buffer): void;
     private fakeBsgamesdkCipherResp;
+    private fakeBsgamesdkOtpSendResp;
     private fakeBsgamesdkLoginResp;
     private fakeSystemLogin;
     private fakeEmptyResp;

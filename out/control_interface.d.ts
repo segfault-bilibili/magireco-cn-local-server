@@ -18,6 +18,8 @@ export declare class controlInterface {
     restart(): Promise<void>;
     private getParsedPostData;
     private getPostData;
+    private static binarySearch;
+    private static stripFileData;
     private homepageHTML;
     private getGameUid;
     private getStatus;
