@@ -463,14 +463,6 @@ export class controlInterface {
                     res.writeHead(200, { ["Content-Type"]: "text/plain" });
                     res.end(ca_subject_hash_old);
                     return;
-                case "/magirecolocal.yaml":
-                    console.log(`servering magirecolocal.yaml`);
-                    res.writeHead(200, {
-                        ["Content-Type"]: "application/x-yaml",
-                        ["Content-Disposition"]: `attachment; filename=\"${req.url.replace(/^\//, "")}\"`,
-                    });
-                    res.end(this.params.clashYaml);
-                    return;
                 case "/params.json":
                     console.log(`servering params.json`);
                     res.writeHead(200, {
@@ -486,6 +478,17 @@ export class controlInterface {
                         ["Content-Disposition"]: `attachment; filename=\"${req.url.replace(/^\//, "")}\"`,
                     });
                     res.end(JSON.stringify(this.params.overridesDB, parameters.replacer));
+                    return;
+            }
+
+            const yamlRegEx = /^\/magirecolocal\d*\.yaml$/;
+            if (req.url.match(yamlRegEx)) {
+                    console.log(`servering ${req.url}`);
+                    res.writeHead(200, {
+                        ["Content-Type"]: "application/x-yaml",
+                        ["Content-Disposition"]: `attachment; filename=\"${req.url.replace(/^\//, "")}\"`,
+                    });
+                    res.end(this.params.clashYaml);
                     return;
             }
 
@@ -902,7 +905,7 @@ export class controlInterface {
             + `\n  <fieldset>`
             + `\n  <legend>下载Clash配置文件</legend>`
             + `\n  <div>`
-            + `\n    ${aHref("magirecolocal.yaml", "/magirecolocal.yaml")}`
+            + `\n    ${aHref(`magirecolocal${httpProxyPort}.yaml`, `/magirecolocal${httpProxyPort}.yaml`)}`
             + `\n  </div>`
             + `\n  </fieldset>`
             + `\n  <fieldset>`
