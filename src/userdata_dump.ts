@@ -84,6 +84,15 @@ export class userdataDmp {
     }
     private _fetchStatus = "";
 
+    get isImporting(): boolean {
+        return this._isImporting;
+    }
+    private _isImporting = false;
+    get lastImportError(): any {
+        return this._lastImportError;
+    }
+    private _lastImportError?: any;
+
     private get timeStamp(): string {
         return String(new Date().getTime());
     }
@@ -182,6 +191,7 @@ export class userdataDmp {
     private async getDumpPromise(concurrent = 8): Promise<dump> {
         if (this.params.mode === parameters.mode.LOCAL_OFFLINE) throw new Error("cannot dump userdata in local offline mode");
         if (this.isDownloading) throw new Error("previous download has not finished");
+        if (this.isImporting) throw new Error("previous import has not finished");
         this._isDownloading = true;
         this._lastError = undefined;
         this._fetchStatus = "";
@@ -316,21 +326,8 @@ export class userdataDmp {
             if (fs.existsSync(legacyFilePath) && fs.statSync(legacyFilePath).isFile()) {
                 console.log(`converting [${legacyFilePath}] ...`);
                 let compressed = fs.readFileSync(legacyFilePath);
-                let decompressedStr = localServer.decompress(compressed, "br").toString('utf-8');
-                let parsed: dump = JSON.parse(decompressedStr, parameters.reviver);
-                let mapArray = [parsed.httpResp.get];
-                parsed.httpResp.post.forEach((val) => mapArray.push(val));
-                mapArray.forEach((map) => {
-                    map.forEach((val) => {
-                        let stringified = JSON.stringify(val.body, parameters.replacer);
-                        let compressedBase64 = localServer.compress(Buffer.from(stringified, 'utf-8'), "br")
-                            .toString('base64');
-                        val.brBody = compressedBase64;
-                        delete val.body;
-                    });
-                });
-                parsed.isBr = true;
-                let convertedStr = JSON.stringify(parsed, parameters.replacer);
+                let converted = userdataDmp.convertDumpToBrBase64(compressed);
+                let convertedStr = JSON.stringify(converted, parameters.replacer);
                 fs.writeFileSync(filePath, convertedStr);
                 fs.rmSync(legacyFilePath);
             }
@@ -344,6 +341,86 @@ export class userdataDmp {
         } catch (e) {
             console.log(`loadLastDump`, e);
         }
+    }
+    importDumpAsync(src: Buffer): Promise<void> {
+        return new Promise((resolve, reject) =>
+            this.getImportDumpPromise(src)
+                .then(() => resolve())
+                .catch((err) => {
+                    this.params.save({ key: "openIdTicket", val: undefined })
+                        .finally(() => {
+                            this._isImporting = false;
+                            reject(this._lastImportError = err);
+                        });
+                })
+        );
+    }
+    private async getImportDumpPromise(src: Buffer): Promise<void> {
+        if (this.isDownloading) throw new Error("previous download has not finished");
+        if (this.isImporting) throw new Error("previous import has not finished");
+        this._isImporting = true;
+        this._lastImportError = undefined;
+
+        const filePath = path.join(".", this.internalUserdataDumpFileName);
+        let converted = userdataDmp.convertDumpToBrBase64(src);
+        let convertedStr = JSON.stringify(converted, parameters.replacer);
+        fs.writeFileSync(filePath, convertedStr);
+        this._lastDump = converted;
+        console.log(`imported dump uid=[${this._lastDump.uid}] timestamp=[${this.lastDump?.timestamp}]`);
+
+        this._isImporting = false;
+    }
+
+    private static convertDumpToBrBase64(src: Buffer): dump {
+        if (src.byteLength < 2) throw new Error(`convertToBrBase64 src.byteLength < 2`);
+        //handle #2
+        let decompressedStr: string;
+        const magic = Buffer.from(new Uint8Array(src).slice(0, 2)).toString('hex').toLowerCase();
+        switch (magic) {
+            case "7b22":
+                decompressedStr = src.toString("utf-8");
+                break;
+            case "1f8b":
+                decompressedStr = localServer.decompress(src, "gzip").toString("utf-8");
+                break;
+            case "7801":
+            case "789c":
+            case "78da":
+                decompressedStr = localServer.decompress(src, "deflate").toString("utf-8");
+                break;
+            default:
+                decompressedStr = localServer.decompress(src, "br").toString("utf-8");
+        }
+        let parsed: dump;
+        try {
+            parsed = JSON.parse(decompressedStr, parameters.reviver);
+        } catch (e) {
+            console.log(`reattempt parse after brotliDecompress`);
+            decompressedStr = localServer.decompress(src, "br").toString("utf-8");
+            parsed = JSON.parse(decompressedStr, parameters.reviver);
+        }
+        if (typeof parsed?.timestamp !== 'number' || isNaN(parsed?.timestamp))
+            throw new Error("timestamp is not number (make sure you are importing a userdata dump)");
+        if (typeof parsed?.uid !== 'number' || isNaN(parsed?.uid))
+            throw new Error("uid is not number (make sure you are importing a userdata dump)");
+        if (!(parsed?.httpResp?.get instanceof Map) || !(parsed?.httpResp?.post instanceof Map))
+            throw new Error("httpResp.get or post is not map (make sure you are importing a userdata dump)");
+        if (!parsed.isBr) {
+            // convert to BrBase64
+            let mapArray = [parsed.httpResp.get];
+            parsed.httpResp.post.forEach((val) => mapArray.push(val));
+            mapArray.forEach((map) => {
+                map.forEach((val) => {
+                    let stringified = JSON.stringify(val.body, parameters.replacer);
+                    let compressedBase64 = localServer.compress(Buffer.from(stringified, 'utf-8'), "br")
+                        .toString('base64');
+                    val.brBody = compressedBase64;
+                    delete val.body;
+                });
+            });
+            parsed.isBr = true;
+        }
+        return parsed;
     }
 
     private async testLogin(): Promise<boolean> {

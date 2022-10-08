@@ -1,5 +1,4 @@
 import * as stream from "stream";
-import * as zlib from "zlib";
 import * as fs from "fs";
 import * as net from "net";
 import * as http from "http";
@@ -18,6 +17,7 @@ import { fakeMagirecoProdRespHook } from "./hooks/fake_magireco_prod_resp_hook";
 import { saveAccessKeyHook } from "./hooks/save_access_key_hook";
 import { saveOpenIdTicketHook } from "./hooks/save_open_id_ticket_hook";
 
+type parsedMultiPart = Array<{ filename?: string, name?: string, type?: string, data: Buffer }>;
 export class controlInterface {
     private closing = false;
     private readonly params: parameters.params;
@@ -214,6 +214,31 @@ export class controlInterface {
                             this.sendResultAsync(res, 500, e instanceof Error ? e.message : `${apiName} error`);
                         }
                         return;
+                    case "upload_dump":
+                        try {
+                            let postData = await this.getPostData(req);
+                            const isDownloading = this.userdataDmp.isDownloading;
+                            const isImporting = this.userdataDmp.isImporting;
+                            const lastDownloadedFileName = this.params.lastDownloadedFileName;
+                            if (isDownloading) {
+                                this.sendResultAsync(res, 429, "download not yet finished");
+                            } else if (isImporting) {
+                                this.sendResultAsync(res, 429, "import not yet finished");
+                            } else if (lastDownloadedFileName !== this.userdataDmp.userdataDumpFileName) {
+                                this.sendResultAsync(res, 503, "为防止数据被覆盖丢失，请先把当前的个人账号数据下载另存！");
+                            } else {
+                                if (typeof postData === 'string') throw new Error("postData is string");
+                                let uploaded_dump = postData.find((item) => item.name === "uploaded_dump");
+                                if (!uploaded_dump?.filename?.match(/\.json$/i)) throw new Error("filename not ended with .json");
+                                this.sendResultAsync(res, 200, "processing new dump"); // send request before importing
+                                this.userdataDmp.importDumpAsync(uploaded_dump.data)
+                                    .catch((e) => console.error(`${apiName} error`, e)); // prevent crash
+                            }
+                        } catch (e) {
+                            console.error(`${apiName} error`, e);
+                            this.sendResultAsync(res, 500, e instanceof Error ? e.message : `${apiName} error`);
+                        }
+                        return;
                     case "set_upstream_proxy":
                         try {
                             let newUpstreamProxyParams = await this.getParsedPostData(req);
@@ -286,9 +311,10 @@ export class controlInterface {
                             const lastError = this.userdataDmp.lastError;
                             const hasDownloadResultOrError = alreadyDownloaded || lastError != null;
                             const isDownloading = this.userdataDmp.isDownloading;
+                            const isImporting = this.userdataDmp.isImporting;
                             if (this.params.mode === parameters.mode.LOCAL_OFFLINE) {
                                 this.sendResultAsync(res, 403, "cannot dump userdata in local offline mode");
-                            } else if (!isDownloading && (requestingNewDownload || !hasDownloadResultOrError)) {
+                            } else if (!isDownloading && !isImporting && (requestingNewDownload || !hasDownloadResultOrError)) {
                                 this.userdataDmp.getDumpAsync()
                                     .catch((e) => console.error(`${apiName} error`, e)); // prevent crash
                                 this.sendResultAsync(res, 200, "downloading");
@@ -297,6 +323,8 @@ export class controlInterface {
                                     this.sendResultAsync(res, 200, "download is already completed");
                                 } else if (isDownloading) {
                                     this.sendResultAsync(res, 429, `download not yet finished\n${this.userdataDmp.fetchStatus}`);
+                                } else if (isImporting) {
+                                    this.sendResultAsync(res, 429, `import not yet finished\n${this.userdataDmp.fetchStatus}`);
                                 } else {
                                     this.sendResultAsync(res, 500, `error ${lastError instanceof Error ? lastError.message : ""}`);
                                 }
@@ -492,8 +520,12 @@ export class controlInterface {
 
                     res.writeHead(200, headers);
                     let doneCallback = (err: NodeJS.ErrnoException | null) => {
-                        if (err != null) console.error(`error sending ${userdataDumpFileName}`, err);
-                        else console.log(`finished sending ${userdataDumpFileName}`);
+                        if (err != null) {
+                            console.error(`error sending ${userdataDumpFileName}`, err);
+                        } else {
+                            console.log(`finished sending ${userdataDumpFileName}`);
+                            this.params.lastDownloadedFileName = userdataDumpFileName;
+                        }
                     }
                     stream.pipeline(pipelineList, doneCallback);
                     return;
@@ -549,7 +581,7 @@ export class controlInterface {
         let bogusURL = new URL(`http://bogus/query?${postData}`);
         return bogusURL.searchParams;
     }
-    private getPostData(req: http.IncomingMessage): Promise<string | Array<{ filename?: string, name?: string, type?: string, data: Buffer }>> {
+    private getPostData(req: http.IncomingMessage): Promise<string | parsedMultiPart> {
         return new Promise((resolve, reject) => {
             const method = req.method;
             if (!method?.match(/^POST$/i)) reject(Error(`method=${method} is not POST`));
@@ -564,7 +596,14 @@ export class controlInterface {
                         if (contentType == null) throw new Error();
                         let boundary = multipart.getBoundary(contentType);
                         if (typeof boundary !== 'string' || boundary === "") throw new Error();
-                        let parts = multipart.parse(postData, boundary);
+                        let parts: parsedMultiPart;
+                        if (postData.length >= 32 * 1024 * 1024) {
+                            const result = controlInterface.stripFileData(postData, boundary);
+                            parts = multipart.parse(result.stripped, boundary);
+                            parts.forEach((item, index) => item.data = result.data[index]);
+                        } else {
+                            parts = multipart.parse(postData, boundary);
+                        }
                         resolve(parts);
                     } catch (e) {
                         try {
@@ -578,6 +617,56 @@ export class controlInterface {
                 });
             }
         });
+    }
+    private static binarySearch(haystack: Uint8Array, needle: Uint8Array, startFrom: number): number {
+        if (needle.length == 0) {
+            throw new Error(`binarySearch needle.length == 0`);
+        }
+        for (let start = startFrom, end = start + needle.length; end <= haystack.length; start++, end++) {
+            let matched = true;
+            for (let i = start; i < end; i++) {
+                if (haystack[i] !== needle[i - start]) {
+                    matched = false;
+                    break;
+                }
+            }
+            if (matched) return start;
+        }
+        return -1;
+    }
+    private static stripFileData(postDataBuf: Buffer, boundary: string): { stripped: Buffer, data: Array<Buffer> } {
+        const CRLFStr = "\r\n\r\n";
+        const CRLF = new Uint8Array(Buffer.from(CRLFStr, "utf-8"));
+        const doubleCRLFStr = "\r\n\r\n";
+        const doubleCRLF = new Uint8Array(Buffer.from(doubleCRLFStr, "utf-8"));
+
+        const postData = new Uint8Array(postDataBuf), bound = Buffer.from(`--${boundary}`, 'utf-8');
+        const boundOffsets: Array<number> = [];
+        for (
+            let found = this.binarySearch(postData, bound, 0);
+            found >= 0;
+            found = this.binarySearch(postData, bound, found + bound.length)
+        ) {
+            boundOffsets.push(found);
+        }
+
+        const strippedArray: Array<Buffer> = [], dataArray: Array<Buffer> = [];
+        let start = 0;
+        boundOffsets.forEach((offset) => {
+            if (start > offset) throw new Error("start > offset");
+            let data = postData.subarray(start, offset);
+            let dataStart = this.binarySearch(data, doubleCRLF, 0);
+            if (dataStart >= 0) {
+                dataStart += doubleCRLF.length;
+                strippedArray.push(Buffer.concat([data.subarray(0, dataStart), bound, CRLF]));
+                dataArray.push(Buffer.from(data.subarray(dataStart, data.length)));
+                start = offset = bound.length;
+            }
+        });
+        return {
+            stripped: Buffer.concat(strippedArray),
+            data: dataArray,
+        }
     }
 
     private homepageHTML(): string {
@@ -673,6 +762,9 @@ export class controlInterface {
         const fsckResultStyle = status.fsckResultStyle;
         const isFscking = status.isFscking;
 
+        const isImporting = status.isImporting;
+        const importStatus = status.importStatus;
+
         const crawlWebRes = this.params.crawlWebRes;
         const crawlAssets = this.params.crawlAssets;
         const isWebResCompleted = this.crawler.isWebResCompleted;
@@ -698,7 +790,7 @@ export class controlInterface {
             + `\n      }`
             + `\n    });`
             + `\n    function autoRefresh() {`
-            + `\n      if (isDownloading) {`
+            + `\n      if (isDownloading || isImporting) {`
             + `\n        window.location.reload(true);`
             + `\n      }`
             + `\n    }`
@@ -711,21 +803,21 @@ export class controlInterface {
             + `\n      swapVerboseDesc();`
             + `\n      document.getElementById(\"loginstatus\").textContent = \"${loginStatus}\";`
             + `\n      document.getElementById(\"openidticketstatus\").textContent = \"${openIdTicketStatus}\";`
-            + `\n      let initialCountdown = ${isDownloading || isCrawling || isFscking ? "20" : "0"};`
+            + `\n      let initialCountdown = ${isDownloading || isImporting || isCrawling || isFscking ? "20" : "0"};`
             + `\n      async function autoRefresh(countdown) {`
-            + `\n          let status = {isDownloading: true, isCrawling: true, isFscking: true};`
+            + `\n          let status = {isDownloading: true, isImporting: false, isCrawling: true, isFscking: true};`
             + `\n          try {`
             + `\n              status = await (await fetch(new URL(\"/api/get_status\", document.baseURI))).json();`
             + `\n              countdown = initialCountdown;`
             + `\n          } catch (e) {`
             + `\n              console.error(e);`
             + `\n          }`
-            + `\n          set_mode_btn.disabled = status.isDownloading || status.isCrawling;`
+            + `\n          set_mode_btn.disabled = status.isDownloading || status.isImporting || status.isCrawling;`
             + `\n          let isOfflineMode = status.mode == ${parameters.mode.LOCAL_OFFLINE};`
             + `\n          isOffline(isOfflineMode);`
             + `\n          let el = document.getElementById(\"userdatadumpstatus\");`
             + `\n          el.textContent = status.userdataDumpStatus; el.style = status.userdataDumpStatusStyle;`
-            + `\n          document.getElementById(\"prepare_download_btn\").disabled = isOfflineMode || status.isDownloading;`
+            + `\n          document.getElementById(\"prepare_download_btn\").disabled = isOfflineMode || status.isDownloading || status.isImporting;`
             + `\n          el = document.getElementById(\"crawlingstatus\");`
             + `\n          el.textContent = status.crawlingStatus; el.style = status.crawlingStatusStyle;`
             + `\n          document.getElementById(\"crawl_static_data_btn\").disabled = isOfflineMode || status.isCrawling;`
@@ -734,10 +826,13 @@ export class controlInterface {
             + `\n          el.textContent = status.isWebResCompleted ? \"已完成下载\" : \"未完成下载\"; el.style = status.isWebResCompleted ? \"color: green\" : \"\";`
             + `\n          el = document.getElementById(\"crawl_assets_lbl\");`
             + `\n          el.textContent = status.isAssetsCompleted ? \"已完成下载\" : \"未完成下载\";el.style = status.isAssetsCompleted ? \"color: green\": \"\"`
+            + `\n          el = document.getElementById(\"importstatus\");`
+            + `\n          el.textContent = status.importStatus; el.style = status.importStatusStyle;`
+            + `\n          document.getElementById(\"import_btn\").disabled = status.isDownloading || status.isImporting;`
             + `\n          el = document.getElementById(\"fsckresult\");`
             + `\n          el.textContent = status.fsckResult; el.style = status.fsckResultStyle;`
             + `\n          document.getElementById(\"fsck_btn\").disabled = status.isFscking;`
-            + `\n          if (countdown > 0 && (status.isDownloading || status.isCrawling || status.isFscking)) setTimeout(() => autoRefresh(--countdown), 500);`
+            + `\n          if (countdown > 0 && (status.isDownloading || status.isImporting || status.isCrawling || status.isFscking)) setTimeout(() => autoRefresh(--countdown), 500);`
             + `\n      }`
             + `\n      autoRefresh(initialCountdown);`
             + `\n    });`
@@ -1041,7 +1136,7 @@ export class controlInterface {
             + `\n      <label for=\"new_download_checkbox\" onclick=\"unlock_prepare_download_btn();\">重新从官服下载</label>`
             + `\n    </div>`
             + `\n    <div>`
-            + `\n      <input type=\"submit\" ${isDownloading ? "disabled" : ""} value=\"从官服下载\" id=\"prepare_download_btn\">`
+            + `\n      <input type=\"submit\" ${isDownloading || isImporting ? "disabled" : ""} value=\"从官服下载\" id=\"prepare_download_btn\">`
             + `\n      <br><i>从官服下载个人账号数据数据到本地服务器需要大约几分钟时间。下载完成后，下面会给出文件保存链接。</i>`
             + `\n      <br><i>请不要反复从官服下载，避免给官服增加压力。</i>`
             + `\n      <br><b style=\"color: red\">因为可能含有隐私敏感数据，请勿分享下载到的个人数据。</b>`
@@ -1069,10 +1164,29 @@ export class controlInterface {
             + `\n  </form>`
             + `\n  </fieldset>`
             + `\n  <fieldset>`
-            + `\n  <legend>${this.userdataDmp.lastDump == null ? "尚未下载，无链接可显示" : "将下载到的数据另存为文件"}</legend>`
-            + `\n    ${this.userdataDmp.lastDump == null ? "" : "<b>↓点击下面的链接即可下载↓</b>"}`
+            + `\n  <legend>${this.userdataDmp.lastDump == null ? "尚未下载，无链接可显示" : "将下载到的数据导出另存为文件"}</legend>`
+            + `\n    ${this.userdataDmp.lastDump == null ? "" : "<b>↓点击下面的下载链接即可另存↓</b>"}`
             + `\n    ${this.userdataDmp.lastDump == null ? "" : "<br>" + aHref(this.userdataDmp.userdataDumpFileName, `/${this.userdataDmp.userdataDumpFileName}`)}`
-            + `\n    ${this.userdataDmp.lastDump == null ? "" : "<br><i>在某品牌手机上，曾经观察到第一次下载回来是0字节空文件的问题，如果碰到这个问题可以再次点击或长按链接重试下载，或者换个浏览器试试。</i>"}`
+            + `\n    ${this.userdataDmp.lastDump == null ? "" : "<br><i>在某品牌手机上，曾经观察到第一次点击此链接下载回来是0字节空文件的问题，如果碰到这个问题可以再次点击或长按链接重试下载，或者换个浏览器试试。</i>"}`
+            + `\n  </fieldset>`
+            + `\n  <fieldset>`
+            + `\n  <legend>导入之前另存的个人账号数据</legend>`
+            + `\n    <form enctype=\"multipart/form-data\" action=\"/api/upload_dump\" method=\"post\">`
+            + `\n      <div>`
+            + `\n        <input type=\"file\" name=\"uploaded_dump\" id=\"dump_file\">`
+            + `\n      </div>`
+            + `\n      <div>`
+            + `\n        <input type=\"submit\" value=\"上传并导入\" id=\"import_btn\" ${isDownloading || isImporting ? "disabled" : ""}>`
+            + `\n        <label for=\"import_btn\"><b>上传并导入后，将会覆盖当前的数据！</b></label>`
+            + `\n      </div>`
+            + `\n    </form>`
+            + `\n    <fieldset>`
+            + `\n    <legend>导入进度</legend>`
+            + `\n    <div>`
+            + `\n      <button id=\"refreshbtn7\" onclick=\"window.location.reload(true);\">刷新</button>`
+            + `\n      <label id=\"importstatus\" style=\"${userdataDumpStatusStyle}\" for=\"refreshbtn7\">TO_BE_FILLED_BY_JAVASCRIPT</label>`
+            + `\n    </div>`
+            + `\n    </fieldset>`
             + `\n  </fieldset>`
             + `\n  <hr>`
             + `\n  <h2 id=\"crawlstaticdata\">爬取游戏静态资源文件</h2>`
@@ -1152,6 +1266,9 @@ export class controlInterface {
         fsckResultStyle: string,
         isWebResCompleted: boolean,
         isAssetsCompleted: boolean,
+        isImporting: boolean,
+        importStatus: string,
+        importStatusStyle: string,
     } {
         let userdataDumpStatus = "尚未开始从官服下载", userdataDumpStatusStyle = "color: red";;
         const isDownloading = this.userdataDmp.isDownloading;
@@ -1208,6 +1325,21 @@ export class controlInterface {
         const isWebResCompleted = this.crawler.isWebResCompleted;
         const isAssetsCompleted = this.crawler.isAssetsCompleted;
 
+        const isImporting = this.userdataDmp.isImporting;
+        let importStatus = "", importStatusStyle = "color: red";
+        if (isImporting) {
+            importStatus = "正在导入..."; importStatusStyle = "color: blue";
+        } else {
+            const lastImportError = this.userdataDmp.lastImportError;
+            if (lastImportError == null) {
+                importStatus = "已导入";
+                importStatusStyle = "color: green";
+            } else {
+                importStatus = "导入过程出错"; importStatusStyle = "color: red";
+                if (lastImportError instanceof Error) importStatus += ` [${lastImportError.message}]`;
+            }
+        }
+
         return {
             mode: this.params.mode,
             isDownloading: isDownloading,
@@ -1221,6 +1353,9 @@ export class controlInterface {
             fsckResultStyle: fsckResultStyle,
             isWebResCompleted: isWebResCompleted,
             isAssetsCompleted: isAssetsCompleted,
+            isImporting: isImporting,
+            importStatus: importStatus,
+            importStatusStyle: importStatusStyle,
         }
     }
 

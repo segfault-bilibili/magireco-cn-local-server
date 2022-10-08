@@ -43,6 +43,7 @@ const persistParams: {
     concurrentFetch: boolean,
     crawlWebRes: boolean,
     crawlAssets: boolean,
+    lastDownloadedFileName?: string,
 } = {
     mode: mode.ONLINE,
     autoOpenWeb: true,
@@ -69,6 +70,7 @@ const persistParams: {
     concurrentFetch: true,
     crawlWebRes: true,
     crawlAssets: true,
+    lastDownloadedFileName: undefined,
 }
 
 export type overrides = {
@@ -225,6 +227,9 @@ export class params {
 
     get crawlWebRes(): boolean { return this.mapData.get("crawlWebRes"); }
     get crawlAssets(): boolean { return this.mapData.get("crawlAssets"); }
+
+    get lastDownloadedFileName(): string { return this.mapData.get("lastDownloadedFileName"); }
+    set lastDownloadedFileName(fileName: string) { this.mapData.set("lastDownloadedFileName", fileName); }
 
     get CACertPEM(): string { return this.CACertAndKey.cert; }
     get CACertSubjectHashOld(): string { return "9489bdaf"; }//FIXME
