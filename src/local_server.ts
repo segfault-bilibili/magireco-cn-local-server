@@ -1039,6 +1039,14 @@ export class localServer {
     }
     static decompress(data: Buffer, encoding?: string): Buffer {
         if (encoding == null) return data = Buffer.concat([data]);
+        let decompressed = data;
+        encoding.replace(/\s/g, "").split(",").filter((enc) => enc !== "").reverse().forEach((enc) => {
+            decompressed = this.decompressSingle(decompressed, enc);
+        });
+        return decompressed;
+    }
+    private static decompressSingle(data: Buffer, encoding?: string): Buffer {
+        if (encoding == null) return data = Buffer.concat([data]);
         let decompressed: Buffer;
         switch (encoding) {
             case 'gzip':
