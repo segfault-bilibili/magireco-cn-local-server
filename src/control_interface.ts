@@ -485,7 +485,8 @@ export class controlInterface {
             if (req.url.match(yamlRegEx)) {
                 console.log(`servering ${req.url}`);
                 res.writeHead(200, {
-                    ["Content-Type"]: "application/x-yaml",
+                    //["Content-Type"]: "application/x-yaml",
+                    ["Content-Type"]: "text/plain",
                     ["Content-Disposition"]: `attachment; filename=\"${req.url.replace(/^\//, "")}\"`,
                 });
                 res.end(this.params.clashYaml);
