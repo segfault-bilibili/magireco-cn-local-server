@@ -981,7 +981,7 @@ class userdataDmp {
                 }
             });
         });
-        for (let i = 0; i < requests.length; i++)
+        for (let i = 0, errCount = 0; i < requests.length && errCount < 3; i++)
             try {
                 let req = requests[i];
                 let resp = await this.execHttpPostApi(req.url, req.postData);
@@ -1107,6 +1107,7 @@ class userdataDmp {
                 if (e instanceof Error)
                     this._fetchStatus = `mirrorsSimulateAll [${i + 1}/${requests.length}] error ${e.message}`;
                 console.error(`mirrorsSimulateAll [${i + 1}/${requests.length}] error`, e);
+                errCount++;
             }
     }
     async execHttpGetApi(url) {
