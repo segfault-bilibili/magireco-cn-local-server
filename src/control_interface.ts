@@ -114,7 +114,7 @@ export class controlInterface {
 
             if (req.url.startsWith("/api/")) {
                 const apiName = req.url.replace(/(^\/api\/)|(\?.*$)/g, "");
-                console.log(`controlInterface received api request [${apiName}]`);
+                if (apiName !== "get_status") console.log(`controlInterface received api request [${apiName}]`);
                 switch (apiName) {
                     case "get_status":
                         try {
