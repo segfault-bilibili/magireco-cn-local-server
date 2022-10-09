@@ -981,127 +981,133 @@ class userdataDmp {
                 }
             });
         });
-        for (let i = 0; i < requests.length; i++) {
-            let req = requests[i];
-            let resp = await this.execHttpPostApi(req.url, req.postData);
-            let userArenaBattleResultList1 = (_b = resp.respBody) === null || _b === void 0 ? void 0 : _b.userArenaBattleResultList;
-            if (userArenaBattleResultList1 == null)
-                throw new Error("userArenaBattleResultList1 == null");
-            if (!Array.isArray(userArenaBattleResultList1))
-                throw new Error("userArenaBattleResultList1 must be array");
-            if (userArenaBattleResultList1.length == 0)
-                throw new Error("userArenaBattleResultList1 is empty");
-            let userQuestBattleResultId = userArenaBattleResultList1[0].userQuestBattleResultId;
-            if (typeof userQuestBattleResultId !== 'string')
-                throw new Error("userQuestBattleResultId must be string");
-            if (!userQuestBattleResultId.match(exports.guidRegEx))
-                throw new Error("userQuestBattleResultId must be guid");
-            let startBattleReq = {
-                url: new URL(nativeGetUrlStr),
-                postData: { obj: { userQuestBattleResultId: userQuestBattleResultId } },
-            };
-            let startBattleResp = await this.execHttpPostApi(startBattleReq.url, startBattleReq.postData, true);
-            let playerList = (_c = startBattleResp.respBody) === null || _c === void 0 ? void 0 : _c.playerList;
-            if (playerList == null || !Array.isArray(playerList))
-                throw new Error("cannot read playerList from battleStartResp");
-            let playerListInResult = playerList.map((player) => ({
-                cardId: player.cardId,
-                pos: player.pos,
-                hp: player.hp,
-                hpRemain: 0,
-                mpRemain: 1000,
-                attack: player.attack,
-                defence: player.defence,
-                mpup: player.mpup,
-                blast: 0,
-                charge: 0,
-                rateGainMpAtk: player.rateGainMpAtk,
-                rateGainMpDef: player.rateGainMpDef,
-            }));
-            let resultObj = {
-                userQuestBattleResultId: userQuestBattleResultId,
-                totalWave: 1,
-                totalTurn: 1,
-                continueNum: 0,
-                clearTime: 59,
-                result: 'FAILED',
-                finishType: 'UNKNOWN',
-                lastAttackCardId: null,
-                isFinishLeader: false,
-                killNum: 0,
-                rateHp: 0,
-                questLoop: false,
-                stackedChargeNum: 0,
-                deadNum: playerList.length,
-                diskAcceleNum: 0,
-                diskBlastNum: 0,
-                diskChargeNum: 0,
-                comboAcceleNum: 0,
-                comboBlastNum: 0,
-                comboChargeNum: 0,
-                chainNum: 0,
-                chargeNum: 0,
-                chargeMax: 0,
-                skillNum: 0,
-                connectNum: 0,
-                magiaNum: 0,
-                doppelNum: 0,
-                abnormalNum: 0,
-                avoidNum: 0,
-                counterNum: 0,
-                totalDamageByFire: 0,
-                totalDamageByWater: 0,
-                totalDamageByTimber: 0,
-                totalDamageByLight: 0,
-                totalDamageByDark: 0,
-                totalDamageBySkill: 0,
-                totalDamageByVoid: 0,
-                totalDamage: 999999,
-                totalDamageFromPoison: 0,
-                badCharmNum: 0,
-                badStunNum: 0,
-                badRestraintNum: 0,
-                badPoisonNum: 0,
-                badBurnNum: 0,
-                badCurseNum: 0,
-                badFogNum: 0,
-                badDarknessNum: 0,
-                badBlindnessNum: 0,
-                badBanSkillNum: 0,
-                badBanMagiaNum: 0,
-                badInvalidHealHpNum: 0,
-                badInvalidHealMpNum: 0,
-                waveList: [{ totalDamage: 0, mostDamage: 0 }],
-                playerList: playerListInResult
-            };
-            let stopBattleReq = {
-                url: new URL(`https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/quest/native/result/send`),
-                postData: { obj: { param: JSON.stringify(resultObj) } }
-            };
-            let stopBattleResp = await this.execHttpPostApi(stopBattleReq.url, stopBattleReq.postData, true);
-            let userArenaBattleResultList = (_d = stopBattleResp.respBody) === null || _d === void 0 ? void 0 : _d.userArenaBattleResultList;
-            if (userArenaBattleResultList == null || !Array.isArray(userArenaBattleResultList))
-                throw new Error("cannot read userArenaBattleResultList");
-            if (userArenaBattleResultList.length == 0)
-                throw new Error("userArenaBattleResultList is empty");
-            let opponentUserId = (_e = userArenaBattleResultList[0]) === null || _e === void 0 ? void 0 : _e.opponentUserId;
-            if (typeof opponentUserId !== 'string')
-                throw new Error("opponentUserId must be string");
-            if (!opponentUserId.match(exports.guidRegEx))
-                throw new Error("opponentUserId must be guid");
-            let arenaResultReq = {
-                url: new URL(`https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/ArenaResult`),
-                postData: { obj: { strUserId: opponentUserId } }
-            };
-            await this.execHttpPostApi(arenaResultReq.url, arenaResultReq.postData);
-            arenaStartMap.set(JSON.stringify(req.postData.obj), {
-                brBody: (0, exports.brBase64)(resp.respBody),
-            });
-            nativeGetMap.set(JSON.stringify(startBattleReq.postData.obj), {
-                brBody: (0, exports.brBase64)(startBattleResp.respBody),
-            });
-            console.log(this._fetchStatus = `mirrorsSimulateAll [${i + 1}/${requests.length}] completed`);
-        }
+        for (let i = 0; i < requests.length; i++)
+            try {
+                let req = requests[i];
+                let resp = await this.execHttpPostApi(req.url, req.postData);
+                let userArenaBattleResultList1 = (_b = resp.respBody) === null || _b === void 0 ? void 0 : _b.userArenaBattleResultList;
+                if (userArenaBattleResultList1 == null)
+                    throw new Error("userArenaBattleResultList1 == null");
+                if (!Array.isArray(userArenaBattleResultList1))
+                    throw new Error("userArenaBattleResultList1 must be array");
+                if (userArenaBattleResultList1.length == 0)
+                    throw new Error("userArenaBattleResultList1 is empty");
+                let userQuestBattleResultId = userArenaBattleResultList1[0].userQuestBattleResultId;
+                if (typeof userQuestBattleResultId !== 'string')
+                    throw new Error("userQuestBattleResultId must be string");
+                if (!userQuestBattleResultId.match(exports.guidRegEx))
+                    throw new Error("userQuestBattleResultId must be guid");
+                let startBattleReq = {
+                    url: new URL(nativeGetUrlStr),
+                    postData: { obj: { userQuestBattleResultId: userQuestBattleResultId } },
+                };
+                let startBattleResp = await this.execHttpPostApi(startBattleReq.url, startBattleReq.postData, true);
+                let playerList = (_c = startBattleResp.respBody) === null || _c === void 0 ? void 0 : _c.playerList;
+                if (playerList == null || !Array.isArray(playerList))
+                    throw new Error("cannot read playerList from battleStartResp");
+                let playerListInResult = playerList.map((player) => ({
+                    cardId: player.cardId,
+                    pos: player.pos,
+                    hp: player.hp,
+                    hpRemain: 0,
+                    mpRemain: 1000,
+                    attack: player.attack,
+                    defence: player.defence,
+                    mpup: player.mpup,
+                    blast: 0,
+                    charge: 0,
+                    rateGainMpAtk: player.rateGainMpAtk,
+                    rateGainMpDef: player.rateGainMpDef,
+                }));
+                let resultObj = {
+                    userQuestBattleResultId: userQuestBattleResultId,
+                    totalWave: 1,
+                    totalTurn: 1,
+                    continueNum: 0,
+                    clearTime: 59,
+                    result: 'FAILED',
+                    finishType: 'UNKNOWN',
+                    lastAttackCardId: null,
+                    isFinishLeader: false,
+                    killNum: 0,
+                    rateHp: 0,
+                    questLoop: false,
+                    stackedChargeNum: 0,
+                    deadNum: playerList.length,
+                    diskAcceleNum: 0,
+                    diskBlastNum: 0,
+                    diskChargeNum: 0,
+                    comboAcceleNum: 0,
+                    comboBlastNum: 0,
+                    comboChargeNum: 0,
+                    chainNum: 0,
+                    chargeNum: 0,
+                    chargeMax: 0,
+                    skillNum: 0,
+                    connectNum: 0,
+                    magiaNum: 0,
+                    doppelNum: 0,
+                    abnormalNum: 0,
+                    avoidNum: 0,
+                    counterNum: 0,
+                    totalDamageByFire: 0,
+                    totalDamageByWater: 0,
+                    totalDamageByTimber: 0,
+                    totalDamageByLight: 0,
+                    totalDamageByDark: 0,
+                    totalDamageBySkill: 0,
+                    totalDamageByVoid: 0,
+                    totalDamage: 999999,
+                    totalDamageFromPoison: 0,
+                    badCharmNum: 0,
+                    badStunNum: 0,
+                    badRestraintNum: 0,
+                    badPoisonNum: 0,
+                    badBurnNum: 0,
+                    badCurseNum: 0,
+                    badFogNum: 0,
+                    badDarknessNum: 0,
+                    badBlindnessNum: 0,
+                    badBanSkillNum: 0,
+                    badBanMagiaNum: 0,
+                    badInvalidHealHpNum: 0,
+                    badInvalidHealMpNum: 0,
+                    waveList: [{ totalDamage: 0, mostDamage: 0 }],
+                    playerList: playerListInResult
+                };
+                let stopBattleReq = {
+                    url: new URL(`https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/quest/native/result/send`),
+                    postData: { obj: { param: JSON.stringify(resultObj) } }
+                };
+                let stopBattleResp = await this.execHttpPostApi(stopBattleReq.url, stopBattleReq.postData, true);
+                let userArenaBattleResultList = (_d = stopBattleResp.respBody) === null || _d === void 0 ? void 0 : _d.userArenaBattleResultList;
+                if (userArenaBattleResultList == null || !Array.isArray(userArenaBattleResultList))
+                    throw new Error("cannot read userArenaBattleResultList");
+                if (userArenaBattleResultList.length == 0)
+                    throw new Error("userArenaBattleResultList is empty");
+                let opponentUserId = (_e = userArenaBattleResultList[0]) === null || _e === void 0 ? void 0 : _e.opponentUserId;
+                if (typeof opponentUserId !== 'string')
+                    throw new Error("opponentUserId must be string");
+                if (!opponentUserId.match(exports.guidRegEx))
+                    throw new Error("opponentUserId must be guid");
+                let arenaResultReq = {
+                    url: new URL(`https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/ArenaResult`),
+                    postData: { obj: { strUserId: opponentUserId } }
+                };
+                await this.execHttpPostApi(arenaResultReq.url, arenaResultReq.postData);
+                arenaStartMap.set(JSON.stringify(req.postData.obj), {
+                    brBody: (0, exports.brBase64)(resp.respBody),
+                });
+                nativeGetMap.set(JSON.stringify(startBattleReq.postData.obj), {
+                    brBody: (0, exports.brBase64)(startBattleResp.respBody),
+                });
+                console.log(this._fetchStatus = `mirrorsSimulateAll [${i + 1}/${requests.length}] completed`);
+            }
+            catch (e) {
+                if (e instanceof Error)
+                    this._fetchStatus = `mirrorsSimulateAll [${i + 1}/${requests.length}] error ${e.message}`;
+                console.error(`mirrorsSimulateAll [${i + 1}/${requests.length}] error`, e);
+            }
     }
     async execHttpGetApi(url) {
         let resp = await this.magirecoJsonRequst(url);
