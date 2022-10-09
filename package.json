@@ -1,6 +1,6 @@
 {
   "name": "magireco-cn-local-server",
-  "version": "1.5.2",
+  "version": "1.5.3",
   "description": "Magia Record CN Local Server",
   "main": "out/proxy_main.js",
   "bin": {
