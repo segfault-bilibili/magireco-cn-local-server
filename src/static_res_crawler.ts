@@ -590,7 +590,6 @@ export class crawler {
     }
 
     private async batchHttp2GetSave(stageStr: string, urlList: Array<{ url: URL, md5?: string }>,
-        concurrent = 8, retries = 5
     ): Promise<void> {
         let urlStrSet = new Set<string>(), abandonedSet = new Set<string>(), skippedSet = new Set<string>();
         let currentStaticFile404Set = new Set<string>();
@@ -602,10 +601,8 @@ export class crawler {
         });
         const total = urlList.length;
 
-        concurrent = Math.floor(concurrent);
-        if (concurrent < 1 || concurrent > 8) throw new Error("concurrent < 1 || concurrent > 8");
-        retries = Math.floor(retries);
-        if (retries < 0 || retries > 8) throw new Error("retries < 0 || retries > 8");
+        const concurrent = this.params.concurrentCrawl ? 8 : 1;
+        const retries = 5;
 
         let resultSet = new Set<string>();
 

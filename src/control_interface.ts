@@ -390,12 +390,14 @@ export class controlInterface {
                                 let crawlingParams = await this.getParsedPostData(req);
                                 let crawlWebRes = crawlingParams.get("crawl_web_res") != null;
                                 let crawlAssets = crawlingParams.get("crawl_assets") != null;
+                                let concurrentCrawl = crawlingParams.get("concurrent_crawl") != null;
                                 if (!crawlWebRes && !crawlAssets) {
                                     this.sendResultAsync(res, 400, "must crawl at least one part");
                                 } else {
                                     await this.params.save([
                                         { key: "crawlWebRes", val: crawlWebRes },
                                         { key: "crawlAssets", val: crawlAssets },
+                                        { key: "concurrentCrawl", val: concurrentCrawl },
                                     ]);
                                     this.crawler.fetchAllAsync()
                                         .catch((e) => console.error(`${apiName} error`, e)); // prevent crash
@@ -1221,6 +1223,10 @@ export class controlInterface {
             + `\n    <div>`
             + `\n      <input id=\"crawl_assets\" name=\"crawl_assets\" value=\"true\" type=\"checkbox\" ${crawlAssets ? "checked" : ""}>`
             + `\n      <label for=\"crawl_assets\">下载本地资源（<b id=\"crawl_assets_lbl\">TO_BE_FILLED_BY_JAVASCRIPT</b>，此部分可自动恢复上次进度）</label>`
+            + `\n    </div>`
+            + `\n    <div>`
+            + `\n      <input id=\"concurrent_crawl_checkbox\" name=\"concurrent_crawl\" value=\"true\" type=\"checkbox\" ${this.params.concurrentCrawl ? "checked" : ""}>`
+            + `\n      <label for=\"concurrent_crawl_checkbox\">开启并行下载</label>`
             + `\n    </div>`
             + `\n    <div>`
             + `\n      <input type=\"submit\" id=\"crawl_static_data_btn\" ${isCrawling ? "disabled" : ""} value=\"开始爬取\">`

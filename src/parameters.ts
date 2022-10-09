@@ -43,6 +43,7 @@ const persistParams: {
     concurrentFetch: boolean,
     crawlWebRes: boolean,
     crawlAssets: boolean,
+    concurrentCrawl: boolean,
     lastDownloadedFileName?: string,
 } = {
     mode: mode.ONLINE,
@@ -70,6 +71,7 @@ const persistParams: {
     concurrentFetch: true,
     crawlWebRes: true,
     crawlAssets: true,
+    concurrentCrawl: true,
     lastDownloadedFileName: undefined,
 }
 
@@ -227,6 +229,7 @@ export class params {
 
     get crawlWebRes(): boolean { return this.mapData.get("crawlWebRes"); }
     get crawlAssets(): boolean { return this.mapData.get("crawlAssets"); }
+    get concurrentCrawl(): boolean { return this.mapData.get("concurrentCrawl"); }
 
     get lastDownloadedFileName(): string { return this.mapData.get("lastDownloadedFileName"); }
     set lastDownloadedFileName(fileName: string) { this.mapData.set("lastDownloadedFileName", fileName); }
