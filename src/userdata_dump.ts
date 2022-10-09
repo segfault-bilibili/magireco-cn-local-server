@@ -1066,7 +1066,7 @@ export class userdataDmp {
             })
         });
 
-        for (let i = 0; i < requests.length; i++) {
+        for (let i = 0; i < requests.length; i++) try {
             let req = requests[i];
             let resp = await this.execHttpPostApi(req.url, req.postData);
             let userArenaBattleResultList1 = resp.respBody?.userArenaBattleResultList;
@@ -1180,6 +1180,9 @@ export class userdataDmp {
             });
 
             console.log(this._fetchStatus = `mirrorsSimulateAll [${i + 1}/${requests.length}] completed`);
+        } catch (e) {
+            if (e instanceof Error) this._fetchStatus = `mirrorsSimulateAll [${i + 1}/${requests.length}] error ${e.message}`;
+            console.error(`mirrorsSimulateAll [${i + 1}/${requests.length}] error`, e);
         }
     }
 
