@@ -996,9 +996,34 @@ class localServer {
         if (encoding == null)
             return data = Buffer.concat([data]);
         let decompressed = data;
-        encoding.replace(/\s/g, "").split(",").filter((enc) => enc !== "").reverse().forEach((enc) => {
-            decompressed = this.decompressSingle(decompressed, enc);
-        });
+        let encodingArray = encoding.replace(/\s/g, "").split(",").filter((enc) => enc !== "");
+        try {
+            encodingArray.forEach((enc) => {
+                decompressed = this.decompressSingle(decompressed, enc);
+            });
+        }
+        catch (e) {
+            console.error(`decompress failed, try reverse...`, e);
+            try {
+                decompressed = data;
+                encodingArray.reverse().forEach((enc) => {
+                    decompressed = this.decompressSingle(decompressed, enc);
+                });
+            }
+            catch (e2) {
+                console.error(`decompressing in reversed order failed, try JSON.parse...`, e2);
+                try {
+                    JSON.parse(data.toString('utf-8'));
+                    console.warn(`data is uncompressed json`);
+                    return data = Buffer.concat([data]);
+                }
+                catch (e3) {
+                    let msg = `JSON.parse after decompress decompressing in reversed order attempt failed`;
+                    console.error(msg, e3);
+                    throw new Error(msg);
+                }
+            }
+        }
         return decompressed;
     }
     static decompressSingle(data, encoding) {
