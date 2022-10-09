@@ -732,7 +732,7 @@ class localServer {
             let func = (err) => {
                 console.error(`error in http2 session authority=[${authorityURL}]`, err);
                 this.openSess.delete(authorityURL.href);
-                sess.close();
+                sess.destroy(); // force-close
             };
             return func;
         })(sess);
@@ -740,7 +740,7 @@ class localServer {
         let timeoutListener = ((sess) => {
             let func = () => {
                 this.openSess.delete(authorityURL.href);
-                sess.close();
+                sess.destroy(); // force-close
             };
             return func;
         })(sess);
@@ -748,7 +748,7 @@ class localServer {
         let goawayListener = ((sess) => {
             let func = (errorCode, lastStreamID, opaqueData) => {
                 this.openSess.delete(authorityURL.href);
-                sess.close();
+                sess.destroy(); // force-close
             };
             return func;
         })(sess);
