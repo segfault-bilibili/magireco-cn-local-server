@@ -59,6 +59,7 @@ export declare class params {
     get concurrentFetch(): boolean;
     get crawlWebRes(): boolean;
     get crawlAssets(): boolean;
+    get concurrentCrawl(): boolean;
     get lastDownloadedFileName(): string;
     set lastDownloadedFileName(fileName: string);
     get CACertPEM(): string;

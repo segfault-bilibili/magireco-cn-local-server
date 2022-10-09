@@ -522,7 +522,7 @@ class crawler {
     async http2PostRetBuf(url, postData, overrideReqHeaders) {
         return await this.http2Request(url, overrideReqHeaders, false, postData);
     }
-    async batchHttp2GetSave(stageStr, urlList, concurrent = 8, retries = 5) {
+    async batchHttp2GetSave(stageStr, urlList) {
         let urlStrSet = new Set(), abandonedSet = new Set(), skippedSet = new Set();
         let currentStaticFile404Set = new Set();
         urlList.forEach((item) => {
@@ -533,12 +533,8 @@ class crawler {
             urlStrSet.add(key);
         });
         const total = urlList.length;
-        concurrent = Math.floor(concurrent);
-        if (concurrent < 1 || concurrent > 8)
-            throw new Error("concurrent < 1 || concurrent > 8");
-        retries = Math.floor(retries);
-        if (retries < 0 || retries > 8)
-            throw new Error("retries < 0 || retries > 8");
+        const concurrent = this.params.concurrentCrawl ? 8 : 1;
+        const retries = 5;
         let resultSet = new Set();
         let hasError = false, stoppedCrawling = false;
         const saveFileMetaInterval = 10000;
