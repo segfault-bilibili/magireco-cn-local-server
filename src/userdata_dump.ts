@@ -426,6 +426,21 @@ export class userdataDmp {
         }
         return parsed;
     }
+    clear(): void {
+        delete this._lastDump;
+        try {
+            const filePath = path.join(".", this.internalUserdataDumpFileName);
+            if (fs.existsSync(filePath)) fs.rmSync(filePath);
+        } catch (e) {
+            console.error(`userdataDmp.clear() error`, e);
+        }
+        try {
+            const legacyFilePath = path.join(".", this.oldInternalUserdataDumpFileName);
+            if (fs.existsSync(legacyFilePath)) fs.rmSync(legacyFilePath);
+        } catch (e) {
+            console.error(`userdataDmp.clear() error`, e);
+        }
+    }
 
     private async testLogin(): Promise<boolean> {
         const testURL = new URL(`https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/announcements/red/obvious`);

@@ -5,6 +5,7 @@ import * as http from "http";
 import * as process from "process";
 import * as ChildProcess from "child_process";
 import * as parameters from "./parameters";
+import * as crypto from "crypto";
 import { httpProxy } from "./http_proxy";
 import { localServer } from "./local_server";
 import * as bsgamesdkPwdAuthenticate from "./bsgamesdk-pwd-authenticate";
@@ -37,8 +38,9 @@ export class controlInterface {
     }
     openWebOnAndroid(): void {
         try {
+            const lastSessionKey = this.params.lastSessionKey;
             const addr = this.params.listenList.controlInterface;
-            const webUrl = `http://${addr.host}:${addr.port}/`;
+            const webUrl = `http://${addr.host}:${addr.port}/${lastSessionKey != null ? "login/" + lastSessionKey : ""}`;
 
             let shellCmd: string | undefined;
 
@@ -105,11 +107,64 @@ export class controlInterface {
             const selfPort = this.params.listenList.controlInterface.port;
             const refererRegEx = new RegExp(`^(http|https)://(magireco\\.local|${selfHost.replace(/\./g, "\\.")})(|:${selfPort})($|/.*)`);
             const isReferrerAllowed = req.headers.referer?.match(refererRegEx) != null;
-            if (!isHomepage && !isCACert && !isReferrerAllowed) {
+            const isLogin = req.url.match(/^\/login\/[0-9a-f]{32}$/) != null && (req.headers.referer == null || isReferrerAllowed);
+            if (!isHomepage && !isLogin && !isCACert && !isReferrerAllowed) {
                 console.error(`rejected disallowed referer`);
                 res.writeHead(403, { ["Content-Type"]: "text/plain" });
                 res.end("403 Forbidden");
                 return;
+            }
+
+            if (isCACert) switch (req.url) {
+                case "/ca.crt":
+                    console.log("serving ca.crt");
+                    res.writeHead(200, {
+                        ["Content-Type"]: "application/x-x509-ca-cert",
+                        ["Content-Disposition"]: `attachment; filename=\"${req.url.replace(/^\//, "")}\"`,
+                    });
+                    res.end(this.params.CACertPEM);
+                    return;
+                case "/ca_subject_hash_old.txt":
+                    let ca_subject_hash_old = this.params.CACertSubjectHashOld;
+                    console.log(`servering ca_subject_hash_old=[${ca_subject_hash_old}]`);
+                    res.writeHead(200, { ["Content-Type"]: "text/plain" });
+                    res.end(ca_subject_hash_old);
+                    return;
+            }
+
+            const reqCookie = req.headers.cookie;
+            let sessionKey: string;
+            const lastSessionKey = this.params.lastSessionKey;
+            if (isLogin) {
+                sessionKey = req.url.replace(/^\/login\/(?=[0-9a-f]{32}$)/, "");
+                res.writeHead(302, {
+                    "Set-Cookie": `session=${sessionKey}; Secure; HttpOnly; Path=/`,
+                    "Location": `/`,
+                    "Content-Type": `text/html; charset=utf-8`
+                });
+                res.end(`<!doctype html><html><body>redirecting to <a href="/">homepage</a>...</body></html>`);
+                return;
+            }
+            if (lastSessionKey == null) {
+                sessionKey = this.getRandomHex(32);
+                await this.params.save({ key: "lastSessionKey", val: sessionKey });
+                res.setHeader("Set-Cookie", `session=${sessionKey}; Secure; HttpOnly; Path=/`);
+            } else {
+                if (reqCookie == null) {
+                    console.error(`rejected empty cookie`);
+                    res.writeHead(403, { ["Content-Type"]: "text/plain" });
+                    res.end("403 Forbidden");
+                    return;
+                } else {
+                    if (reqCookie.match(`session=${lastSessionKey}`) != null) {
+                        sessionKey = lastSessionKey;
+                    } else {
+                        console.error(`rejected invalid cookie`);
+                        res.writeHead(403, { ["Content-Type"]: "text/plain" });
+                        res.end("403 Forbidden");
+                        return;
+                    }
+                }
             }
 
             if (req.url.startsWith("/api/")) {
@@ -120,6 +175,16 @@ export class controlInterface {
                         try {
                             let gameUid = this.getGameUid(this.params.openIdTicket);
                             this.sendResultAsync(res, 200, JSON.stringify(this.getStatus(gameUid)), true);
+                        } catch (e) {
+                            console.error(`${apiName} error`, e);
+                            this.sendResultAsync(res, 500, e instanceof Error ? e.message : `${apiName} error`);
+                        }
+                        return;
+                    case "logout_and_clear":
+                        try {
+                            await this.params.save(undefined, undefined, true);
+                            this.userdataDmp.clear();
+                            this.sendResultAsync(res, 200, "logged out and cleared");
                         } catch (e) {
                             console.error(`${apiName} error`, e);
                             this.sendResultAsync(res, 500, e instanceof Error ? e.message : `${apiName} error`);
@@ -447,21 +512,7 @@ export class controlInterface {
                 case "/":
                     console.log("serving /");
                     res.writeHead(200, { ["Content-Type"]: "text/html" });
-                    res.end(this.homepageHTML());
-                    return;
-                case "/ca.crt":
-                    console.log("serving ca.crt");
-                    res.writeHead(200, {
-                        ["Content-Type"]: "application/x-x509-ca-cert",
-                        ["Content-Disposition"]: `attachment; filename=\"${req.url.replace(/^\//, "")}\"`,
-                    });
-                    res.end(this.params.CACertPEM);
-                    return;
-                case "/ca_subject_hash_old.txt":
-                    let ca_subject_hash_old = this.params.CACertSubjectHashOld;
-                    console.log(`servering ca_subject_hash_old=[${ca_subject_hash_old}]`);
-                    res.writeHead(200, { ["Content-Type"]: "text/plain" });
-                    res.end(ca_subject_hash_old);
+                    res.end(this.homepageHTML(sessionKey));
                     return;
                 case "/params.json":
                     console.log(`servering params.json`);
@@ -672,7 +723,7 @@ export class controlInterface {
         }
     }
 
-    private homepageHTML(): string {
+    private homepageHTML(sessionKey: string): string {
         const officialURL = new URL("https://game.bilibili.com/magireco/");
         const gsxnjURL = new URL("https://www.gsxnj.cn/");
         const clashURL = new URL("https://github.com/Kr328/ClashForAndroid/releases/latest");
@@ -799,13 +850,18 @@ export class controlInterface {
             + `\n        window.location.reload(true);`
             + `\n      }`
             + `\n    }`
-            + `\n    var verboseDescHtml = \"${aHref("（点击显示设置说明，即让游戏客户端连接到本地服务器而不是直连官服）", "javascript:swapVerboseDesc();", false).replace(/"/g, "\\\"")}\";`
+            + `\n    var verboseDescHtml = \"${aHref("（点击展开设置说明，即让游戏客户端连接到本地服务器而不是直连官服）", "javascript:swapVerboseDesc();", false).replace(/"/g, "\\\"")}\";`
             + `\n    function swapVerboseDesc() {`
             + `\n      let el = document.getElementById(\"verbosedesc\"); let innerHTML = el.innerHTML;`
             + `\n      el.innerHTML = verboseDescHtml; verboseDescHtml = innerHTML;`
             + `\n    }`
+            + `\n    var logoutAndClearHtml = \"${aHref("（危险操作，点击展开）", "javascript:swapLogoutAndClear();", false).replace(/"/g, "\\\"")}\";`
+            + `\n    function swapLogoutAndClear() {`
+            + `\n      let el = document.getElementById(\"logout_and_clear\"); let innerHTML = el.innerHTML;`
+            + `\n      el.innerHTML = logoutAndClearHtml; logoutAndClearHtml = innerHTML;`
+            + `\n    }`
             + `\n    window.addEventListener('load', (ev) => {`
-            + `\n      swapVerboseDesc();`
+            + `\n      swapVerboseDesc();swapLogoutAndClear();`
             + `\n      document.getElementById(\"loginstatus\").textContent = \"${loginStatus}\";`
             + `\n      document.getElementById(\"openidticketstatus\").textContent = \"${openIdTicketStatus}\";`
             + `\n      let initialCountdown = ${isDownloading || isImporting || isCrawling || isFscking ? "20" : "0"};`
@@ -877,6 +933,20 @@ export class controlInterface {
             + `\n</head>`
             + `\n<body>`
             + `\n  <h1>魔法纪录国服本地服务器${pkgVersionStr}</h1>`
+            + `\n  <fieldset><legend>会话</legend>`
+            + `\n    <fieldset><legend>登录链接</legend>`
+            + `\n      ${aHref(`登录链接`, `/login/${sessionKey}`, false)}`
+            + `\n      <br><b>请长按或右键复制并妥善保存这个链接地址（并且保密），否则将无法进入本地服务器设置页面！</b>`
+            + `\n    </fieldset>`
+            + `\n    <fieldset><legend>销毁会话</legend>`
+            + `\n      <div id=\"logout_and_clear\">`
+            + `\n        ${aHref("（危险操作，点击收起）", "javascript:swapLogoutAndClear();", false)}`
+            + `\n        <br>${aHref(`登出并清空数据`, `/api/logout_and_clear`, false)}`
+            + `\n        <br><b style=\"color: red\">登场并清空数据操作不可逆，数据删除后不可恢复！</b>`
+            + `\n        <br><b style=\"color: red\">另外，清空后原有登录链接会作废！</b>`
+            + `\n      </div>`
+            + `\n    </fieldset>`
+            + `\n  </fieldset>`
             + `\n  <fieldset>`
             + `\n  <legend>HTTP代理</legend>`
             + `\n  <div>`
@@ -933,6 +1003,7 @@ export class controlInterface {
             + `\n        </div>`
             + `\n        <div>`
             + `\n          <input type=\"submit\" value=\"上传配置数据\" id=\"upload_params_btn\">`
+            + `\n          <br><b>注意：上传后，原有登录链接将作废。请务必记得保存新的登录链接！</b>`
             + `\n        </div>`
             + `\n      </form>`
             + `\n    </fieldset>`
@@ -962,7 +1033,7 @@ export class controlInterface {
             + `\n  <br>接着就同样可以利用抓取到的登录信息来下载保存个人账号数据。`
             + `\n  </li>`
             + `\n  <li id=\"verbosedesc\">`
-            + `\n  ${aHref("（点击隐藏详细设置说明，即让游戏客户端连接到本地服务器而不是直连官服）", "javascript:swapVerboseDesc();", false)}`
+            + `\n  ${aHref("（点击收起详细设置说明，即让游戏客户端连接到本地服务器而不是直连官服）", "javascript:swapVerboseDesc();", false)}`
             + `\n    <ul>`
             + `\n      <li>`
             + `\n        ${aHref("离线补丁版", patchedApkURL.href)}游戏客户端不需要CA证书；`
@@ -1415,5 +1486,9 @@ export class controlInterface {
             res.writeHead(statusCode, { 'Content-Type': isJson ? 'application/json' : 'text/html' });
             res.end(result, () => resolve());
         });
+    }
+
+    private getRandomHex(charCount: number): string {
+        return crypto.randomBytes(Math.trunc((charCount + 1) / 2)).toString('hex').substring(0, charCount);
     }
 }

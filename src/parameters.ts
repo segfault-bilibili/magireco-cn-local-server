@@ -27,6 +27,7 @@ export enum mode {
 }
 
 const persistParams: {
+    lastSessionKey?: string,
     mode: mode,
     autoOpenWeb: boolean,
     listenList: listenList,
@@ -45,6 +46,7 @@ const persistParams: {
     crawlAssets: boolean,
     lastDownloadedFileName?: string,
 } = {
+    lastSessionKey: undefined,
     mode: mode.ONLINE,
     autoOpenWeb: true,
     listenList: {
@@ -124,11 +126,23 @@ export class params {
     stringify(): string {
         return JSON.stringify(this.mapData, replacer);
     }
-    save(param?: { key: string, val: any } | Array<{ key: string, val: any }> | string, path?: string): Promise<void> {
+    save(param?: { key: string, val: any } | Array<{ key: string, val: any }> | string,
+        path?: string,
+        clear = false
+    ): Promise<void> {
         let lastPromise = this.unfinishedSave.shift();
         let promise = new Promise<void>((resolve, reject) => {
             let doSave = () => {
-                let unmodifiedMap = JSON.parse(this.stringify(), reviver);
+                let unmodifiedMap: Map<string, any>;
+                if (clear) {
+                    unmodifiedMap = new Map<string, any>();
+                    unmodifiedMap.set("listenList", this.listenList);
+                    unmodifiedMap.set("autoOpenWeb", this.autoOpenWeb);
+                    this.overridesDB.clear();
+                    if (fs.existsSync(params.overridesDBPath)) fs.rmSync(params.overridesDBPath);
+                } else {
+                    unmodifiedMap = JSON.parse(this.stringify(), reviver);
+                }
                 let modified = false;
                 if (param != null) {
                     if (Array.isArray(param)) {
@@ -143,6 +157,7 @@ export class params {
                         if (!(parsed instanceof Map)) throw new Error("not a Map");
                         unmodifiedMap.clear();
                         parsed.forEach((val, key) => unmodifiedMap.set(key, val));
+                        unmodifiedMap.delete("lastSessionKey");
                         modified = true;
                     } catch (e) {
                         console.error(`cannot save whole params.json from string`, e);
@@ -197,6 +212,7 @@ export class params {
         }
     }
 
+    get lastSessionKey(): string | undefined { return this.mapData.get("lastSessionKey"); }
     get mode(): mode { return this.mapData.get("mode"); }
     get autoOpenWeb(): boolean { return this.mapData.get("autoOpenWeb"); }
     get listenList(): listenList { return this.mapData.get("listenList"); }
