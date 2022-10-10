@@ -300,6 +300,9 @@ export class fakeMagirecoProdRespHook implements hook {
                                 if (apiName === "page/MainQuest") {
                                     respBodyObj = this.patchMainQuest(apiName, respBodyObj);
                                 }
+                                if (apiName === "page/CharaListTop") {
+                                    respBodyObj = this.patchCharaListTop(apiName, respBodyObj);
+                                }
                                 body = Buffer.from(JSON.stringify(respBodyObj), 'utf-8');
                             }
                         }
@@ -660,11 +663,6 @@ export class fakeMagirecoProdRespHook implements hook {
                 replica[key] = page[key];
                 if (replica[key] == null) {
                     switch (key) {
-                        case "userCharaEnhancementCellList":
-                            {
-                                replica[key] = [];
-                                break;
-                            }
                         default: {
                             console.error(`cannot copy [${key}] from [${pageKey}] to [${apiName}]`);
                         }
@@ -1488,7 +1486,6 @@ export class fakeMagirecoProdRespHook implements hook {
         ],
         ["page/ProfileFormationSupport"]: [
             `userFormationSheetList`,
-            `userCharaEnhancementCellList`,
         ],
     }
 
@@ -1601,6 +1598,29 @@ export class fakeMagirecoProdRespHook implements hook {
             this.checkForMissing(respBodyObj.userChapterList, this.missingData.userChapterList, "chapterId");
             this.checkForMissing(respBodyObj.userSectionList, this.missingData.userSectionList, "sectionId");
             this.checkForMissing(respBodyObj.userQuestBattleList, this.missingData.userQuestBattleList, "questBattleId");
+        }
+        return respBodyObj;
+    }
+
+    private patchCharaListTop(apiName: string, respBodyObj: any): any {
+        if (apiName !== "page/CharaListTop") return respBodyObj;
+        const lastDump = this.userdataDmp.lastDump;
+        if (lastDump == null) return respBodyObj;
+        const myPage = userdataDump.getUnBrBody(lastDump.httpResp.get, this.pageKeys["page/MyPage"]);
+        const userId = myPage?.gameUser?.userId;
+        if (typeof userId === 'string') {
+            let pageKey = this.pageKeys["page/ProfileFormationSupport"];
+            const argName = `%2CuserCharaEnhancementCellList&`;
+            if (pageKey.match(argName) == null) {
+                pageKey = pageKey.replace(/&(timeStamp=)$/, `${argName}$1`);
+            }
+            let page = userdataDump.getUnBrBody(lastDump.httpResp.get, pageKey);
+            if (page == null) return respBodyObj;
+            const key = "userCharaEnhancementCellList";
+            respBodyObj[key] = page[key];
+            if (respBodyObj[key] == null) {
+                respBodyObj[key] = [];
+            }
         }
         return respBodyObj;
     }
