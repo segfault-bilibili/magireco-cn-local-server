@@ -199,6 +199,7 @@ export class userdataDmp {
         if (!this.params.concurrentFetch) concurrent = 1;
         concurrent = Math.trunc(concurrent);
         if (concurrent < 1 || concurrent > 8) throw new Error("concurrent < 1 || concurrent > 8");
+        console.log(`concurrent=[${concurrent}]`);
 
         const timestamp = new Date().getTime();
         const httpGetRespMap = new Map<string, dumpRespEntry>(),
