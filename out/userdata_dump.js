@@ -176,6 +176,7 @@ class userdataDmp {
         concurrent = Math.trunc(concurrent);
         if (concurrent < 1 || concurrent > 8)
             throw new Error("concurrent < 1 || concurrent > 8");
+        console.log(`concurrent=[${concurrent}]`);
         const timestamp = new Date().getTime();
         const httpGetRespMap = new Map(), httpPostRespMap = new Map();
         let stage = 1;
@@ -444,7 +445,7 @@ class userdataDmp {
                 ["Client-Session-Id"]: `${this.clientSessionId}`,
                 ["F4s-Client-Ver"]: "2.2.1",
                 [http2.constants.HTTP2_HEADER_REFERER]: `https://${host}/magica/index.html`,
-                [http2.constants.HTTP2_HEADER_CONTENT_ENCODING]: "gzip, deflate",
+                [http2.constants.HTTP2_HEADER_ACCEPT_ENCODING]: "gzip, deflate",
                 [http2.constants.HTTP2_HEADER_ACCEPT_LANGUAGE]: "zh-CN,en-US;q=0.9",
             };
             if (isPOST)
@@ -1117,9 +1118,9 @@ class userdataDmp {
             throw new Error(JSON.stringify(resp));
         }
         if (resp.interrupt != null) {
-            let interruptStr = JSON.stringify(resp.interrupt);
-            console.error(`execHttpGetApi unsuccessful interrupt=${interruptStr}`);
-            throw new Error(interruptStr);
+            let respStr = JSON.stringify(resp);
+            console.error(`execHttpGetApi unsuccessful (response has interrupt) ${respStr}`);
+            throw new Error(JSON.stringify(resp));
         }
         let ret = { url: url.href, respBody: resp };
         const urlTs = url.href.match(this.tsRegEx);

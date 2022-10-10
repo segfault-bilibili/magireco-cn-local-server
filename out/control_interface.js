@@ -265,11 +265,11 @@ class controlInterface {
                             const requestingNewDownload = dumpDataParams.get("new") != null;
                             const fetchCharaEnhancementTree = dumpDataParams.get("fetch_chara_enhance_tree") != null;
                             const arenaSimulate = dumpDataParams.get("arena_simulate") != null;
-                            const concurrent = dumpDataParams.get("concurrent") != null;
+                            const concurrentFetch = dumpDataParams.get("concurrent_fetch") != null;
                             await this.params.save([
                                 { key: "fetchCharaEnhancementTree", val: fetchCharaEnhancementTree },
                                 { key: "arenaSimulate", val: arenaSimulate },
-                                { key: "concurrent", val: concurrent }
+                                { key: "concurrentFetch", val: concurrentFetch }
                             ]);
                             const lastDump = this.userdataDmp.lastDump;
                             const alreadyDownloaded = lastDump != null;
@@ -1164,8 +1164,8 @@ class controlInterface {
             + `\n      <label for=\"arena_simulate_checkbox\"><b>（需通关第二章开启镜层且至少有1BP）</b>通过镜层演习获取好友队伍配置</label>`
             + `\n    </div>`
             + `\n    <div>`
-            + `\n      <input id=\"concurrent_checkbox\" name=\"concurrent\" value=\"true\" type=\"checkbox\" ${this.params.concurrentFetch ? "checked" : ""}>`
-            + `\n      <label for=\"concurrent_checkbox\">开启并行下载</label>`
+            + `\n      <input id=\"concurrent_fetch_checkbox\" name=\"concurrent_fetch\" value=\"true\" type=\"checkbox\" ${this.params.concurrentFetch ? "checked" : ""}>`
+            + `\n      <label for=\"concurrent_fetch_checkbox\">开启并行下载</label>`
             + `\n    </div>`
             + `\n  </fieldset>`
             + `\n  <fieldset>`
