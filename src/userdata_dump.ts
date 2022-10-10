@@ -475,7 +475,7 @@ export class userdataDmp {
                 ["Client-Session-Id"]: `${this.clientSessionId}`,
                 ["F4s-Client-Ver"]: "2.2.1",
                 [http2.constants.HTTP2_HEADER_REFERER]: `https://${host}/magica/index.html`,
-                [http2.constants.HTTP2_HEADER_CONTENT_ENCODING]: "gzip, deflate",
+                [http2.constants.HTTP2_HEADER_ACCEPT_ENCODING]: "gzip, deflate",
                 [http2.constants.HTTP2_HEADER_ACCEPT_LANGUAGE]: "zh-CN,en-US;q=0.9",
             }
             if (isPOST) reqHeaders[http2.constants.HTTP2_HEADER_CONTENT_TYPE] = "application/json; charset=utf-8";
