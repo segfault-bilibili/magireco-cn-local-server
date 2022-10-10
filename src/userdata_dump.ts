@@ -1195,9 +1195,9 @@ export class userdataDmp {
             throw new Error(JSON.stringify(resp));
         }
         if (resp.interrupt != null) {
-            let interruptStr = JSON.stringify(resp.interrupt);
-            console.error(`execHttpGetApi unsuccessful interrupt=${interruptStr}`);
-            throw new Error(interruptStr);
+            let respStr = JSON.stringify(resp);
+            console.error(`execHttpGetApi unsuccessful (response has interrupt) ${respStr}`);
+            throw new Error(JSON.stringify(resp));
         }
         let ret: httpGetApiResult = { url: url.href, respBody: resp };
         const urlTs = url.href.match(this.tsRegEx);
