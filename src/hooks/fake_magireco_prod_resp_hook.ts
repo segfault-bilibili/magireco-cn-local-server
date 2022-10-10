@@ -193,6 +193,7 @@ export class fakeMagirecoProdRespHook implements hook {
                 case "quest/native/get":
                 case "quest/native/result/send":
                 case "page/ArenaResult":
+                case "page/CharaEnhancementTree":
                     {
                         return {
                             nextAction: "passOnRequest",
@@ -330,6 +331,15 @@ export class fakeMagirecoProdRespHook implements hook {
                 console.error(`error serving[${url.pathname}]`, e);
                 body = undefined;
             }
+            if (body != null) {
+                if (url.pathname in this.staticModList) {
+                    const bodyStr = body.toString("utf-8");
+                    const mod = this.staticModList[url.pathname];
+                    if (bodyStr.match(mod.matchPattern)) {
+                        body = Buffer.from(bodyStr.replace(mod.replacePattern, mod.replacement), 'utf-8');
+                    }
+                }
+            }
             if (body == null && url.pathname.endsWith(".gz")) {
                 try {
                     let uncompressed = this.crawler.readFile(url.pathname.replace(/\.gz$/, ""));
@@ -427,10 +437,13 @@ export class fakeMagirecoProdRespHook implements hook {
                         respBody = this.modifyGameChara(apiName, reqBody);
                         break;
                     }
+
+                case "page/CharaEnhancementTree":
                 case "page/PresentHistory":
                 case "page/GachaHistory":
                     {
-                        respBody = this.fakePagedResult(apiName, reqBody);
+                        let type: "page" | "charaId" = apiName === "page/CharaEnhancementTree" ? "charaId" : "page";
+                        respBody = this.fakePagedResult(apiName, reqBody, type);
                         break;
                     }
                 case "arena/start":
@@ -854,14 +867,15 @@ export class fakeMagirecoProdRespHook implements hook {
         }
     }
 
-    private parsePageNum(reqBody: string | Buffer | undefined): number | undefined {
+    private parsePageNum(reqBody: string | Buffer | undefined, type: "page" | "charaId"): number | undefined {
         if (reqBody != null && typeof reqBody !== 'string') return;
 
         if (reqBody == null || reqBody === "") {
             return 1;
         } else {
             try {
-                const parsedPageNum = JSON.parse(reqBody)?.page;
+                const parsed = JSON.parse(reqBody);
+                const parsedPageNum = parsed != null ? parsed[type] : undefined;
                 if (
                     (typeof parsedPageNum !== 'number' && typeof parsedPageNum !== 'string')
                     || isNaN(Number(parsedPageNum))
@@ -874,13 +888,14 @@ export class fakeMagirecoProdRespHook implements hook {
             }
         }
     }
-    private fakePagedResult(apiName: string, reqBody: string | Buffer | undefined): Buffer | undefined {
+    private fakePagedResult(apiName: string, reqBody: string | Buffer | undefined, type: "page" | "charaId"): Buffer | undefined {
         const lastDump = this.userdataDmp.lastDump;
         if (lastDump == null) return Buffer.from(this.fakeErrorResp("错误", "未加载个人账号数据"), 'utf-8');
 
         const urlBases: Record<string, string> = {
             ["page/PresentHistory"]: `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/PresentHistory`,
             ["page/GachaHistory"]: `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/GachaHistory`,
+            ["page/CharaEnhancementTree"]: `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/CharaEnhancementTree`,
         }
         if (!(apiName in urlBases)) {
             console.error(`fakePagedResult invalid apiName=[${apiName}]`);
@@ -888,7 +903,7 @@ export class fakeMagirecoProdRespHook implements hook {
         }
         const urlBase = urlBases[apiName];
 
-        const pageNum: number | undefined = this.parsePageNum(reqBody);
+        const pageNum: number | undefined = this.parsePageNum(reqBody, type);
         if (pageNum == null) return;
 
         if (pageNum == 1) {
@@ -897,8 +912,8 @@ export class fakeMagirecoProdRespHook implements hook {
             return Buffer.from(JSON.stringify(respBodyObj), 'utf-8');
         } else {
             const respBodyObj = userdataDump.unBrBase64(
-                lastDump.httpResp.post.get(urlBase)?.get(JSON.stringify({ page: `${pageNum}` }))?.brBody);
-            if (respBodyObj == null) return Buffer.from(this.fakeErrorResp("错误", "找不到指定页面"), 'utf-8');
+                lastDump.httpResp.post.get(urlBase)?.get(JSON.stringify({ [type]: `${pageNum}` }))?.brBody);
+            if (respBodyObj == null) return Buffer.from(this.fakeErrorResp("错误", `找不到指定${type}`), 'utf-8');
             return Buffer.from(JSON.stringify(respBodyObj), 'utf-8');
         }
     }
@@ -1516,6 +1531,18 @@ export class fakeMagirecoProdRespHook implements hook {
             },
         ],
     }
+
+    private staticModList: Record<string, {
+        matchPattern: string | RegExp,
+        replacePattern: string | RegExp,
+        replacement: string,
+    }> = {
+            ["/magica/template/chara/CharaTop.html"]: {
+                matchPattern: /^<div id="CharaTop">/,
+                replacePattern: /(<li class="TE customize"><span class="linkBtn se_decide" data-href="#\/CharaListCustomize"><\/span><\/li>)/,
+                replacement: "$1 <li class=\"TE enhance\"><span class=\"enhanceLink se_decide\"></span></li>",
+            },
+        }
 
     private getRandomHex(charCount: number): string {
         return crypto.randomBytes(Math.trunc((charCount + 1) / 2)).toString('hex').substring(0, charCount);
