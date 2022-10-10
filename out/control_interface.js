@@ -181,7 +181,7 @@ class controlInterface {
                             else if (isImporting) {
                                 this.sendResultAsync(res, 429, "import not yet finished");
                             }
-                            else if (lastDownloadedFileName !== this.userdataDmp.userdataDumpFileName) {
+                            else if (this.userdataDmp.lastDump != null && lastDownloadedFileName !== this.userdataDmp.userdataDumpFileName) {
                                 this.sendResultAsync(res, 503, "为防止数据被覆盖丢失，请先把当前的个人账号数据下载另存！");
                             }
                             else {

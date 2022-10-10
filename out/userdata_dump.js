@@ -853,17 +853,14 @@ class userdataDmp {
         }
         //精神强化（未开放）
         if (this.params.fetchCharaEnhancementTree) {
-            const userFormationSheetList = (0, exports.getUnBrBody)(map, `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/ProfileFormationSupport?value=`
-                + `userFormationSheetList`
-                + `%2CuserCharaEnhancementCellList`
-                + `&timeStamp=`);
-            const userCharaEnhancementCellList = userFormationSheetList["userCharaEnhancementCellList"];
-            if (userCharaEnhancementCellList == null || !Array.isArray(userCharaEnhancementCellList))
-                throw new Error("unable to read userCharaEnhancementCellList");
-            const charaIds = userCharaEnhancementCellList.map((item) => {
-                let charaId = item["charaId"];
-                if (typeof charaId !== 'number' || isNaN(charaId))
-                    throw new Error("unable to read charaId");
+            const userCharaList = myPage === null || myPage === void 0 ? void 0 : myPage.userCharaList;
+            if (userCharaList == null || !Array.isArray(userCharaList))
+                throw new Error(`unable to read userCharaList`);
+            const charaIds = userCharaList.filter((chara) => chara.chara.enhancementGroupId)
+                .map((chara) => {
+                const charaId = chara.charaId;
+                if (typeof charaId != 'number' || isNaN(charaId))
+                    throw new Error(`fetchCharaEnhancementTree: a charaId is not number`);
                 return charaId;
             });
             charaIds.forEach((charaId) => {

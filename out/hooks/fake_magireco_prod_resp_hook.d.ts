@@ -19,8 +19,10 @@ export declare class fakeMagirecoProdRespHook implements hook {
     private readonly bsgameSdkCipherRegEx;
     private readonly bsgameSdkOtpSendRegEx;
     private readonly bilibiliGameAgreementRegEx;
+    private readonly part2Section3RegEx;
     private readonly arenaSimulateMap;
     get stringifiedOverrideDB(): string;
+    private missingData?;
     private get overrides();
     getOverrideValue(key: string): any;
     setOverrideValue(key: string, val: string | number | Map<number, Map<string, string | number>> | undefined): void;
@@ -52,6 +54,9 @@ export declare class fakeMagirecoProdRespHook implements hook {
     private readonly pageKeys;
     private readonly myPagePatchList;
     private readonly fakeResp;
+    private staticModList;
+    private checkForMissing;
+    private patchMainQuest;
     private getRandomHex;
     private getRandomGuid;
 }

@@ -7,6 +7,7 @@ const local_server_1 = require("../local_server");
 const parameters = require("../parameters");
 const userdataDump = require("../userdata_dump");
 const bsgamesdk_pwd_authenticate_1 = require("../bsgamesdk-pwd-authenticate");
+const missing_data_1 = require("./etc/missing_data");
 class fakeMagirecoProdRespHook {
     constructor(params, crawler, dmp) {
         this.pageKeys = {
@@ -161,6 +162,9 @@ class fakeMagirecoProdRespHook {
                 + `&timeStamp=`,
         };
         this.myPagePatchList = {
+            ["page/TopPage"]: [
+                `userQuestAdventureList`,
+            ],
             ["page/MainQuest"]: [
                 `userChapterList`,
                 `userSectionList`,
@@ -241,6 +245,29 @@ class fakeMagirecoProdRespHook {
                 },
             ],
         };
+        this.staticModList = {
+            ["/magica/template/collection/StoryCollection.html"]: {
+                matchPattern: /^<div id="StoryCollection">/,
+                replacePattern: /(<li class="TE btn se_tabs current" data-wrap="main"><span>主线【第1部】<\/span><\/li>)/,
+                replacement: "$1 <li class=\"TE btn se_tabs\" data-wrap=\"mainSecond\"><span>主线【第2部】</span></li>",
+            },
+            ["/magica/template/chara/CharaTop.html"]: {
+                matchPattern: /^<div id="CharaTop">/,
+                replacePattern: /(<li class="TE customize"><span class="linkBtn se_decide" data-href="#\/CharaListCustomize"><\/span><\/li>)/,
+                replacement: "$1 <li class=\"TE enhance\"><span class=\"enhanceLink se_decide\"></span></li>",
+            },
+        };
+        this.checkForMissing = (existingArray, missingArray, key) => {
+            if (existingArray == null || missingArray == null)
+                return;
+            if (!Array.isArray(existingArray) || !Array.isArray(missingArray))
+                return;
+            missingArray.forEach((missing) => {
+                if (existingArray.find((existing) => existing != null && missing != null && missing[key] === existing[key]) == null) {
+                    existingArray.push(missing);
+                }
+            });
+        };
         this.params = params;
         this.crawler = crawler;
         this.userdataDmp = dmp;
@@ -252,6 +279,7 @@ class fakeMagirecoProdRespHook {
         this.bsgameSdkCipherRegEx = /^(http|https):\/\/line\d+-sdk-center-login-sh\.biligame\.net\/api\/external\/issue\/cipher\/v3((|\?.*)$)/;
         this.bsgameSdkOtpSendRegEx = /^(http|https):\/\/line\d+-sdk-center-login-sh\.biligame\.net\/api\/external\/otp\/send\/v3((|\?.*)$)/;
         this.bilibiliGameAgreementRegEx = /^(http|https):\/\/game\.bilibili\.com\/agreement\/(userterms|privacy)\/.+$/;
+        this.part2Section3RegEx = /^\/magica\/resource\/download\/asset\/master\/resource\/2207081501\/asset_section_10230(1|2|3)\.json$/;
         this.arenaSimulateMap = new Map();
     }
     get stringifiedOverrideDB() {
@@ -402,6 +430,7 @@ class fakeMagirecoProdRespHook {
                 case "quest/native/get":
                 case "quest/native/result/send":
                 case "page/ArenaResult":
+                case "page/CharaEnhancementTree":
                     {
                         return {
                             nextAction: "passOnRequest",
@@ -500,6 +529,9 @@ class fakeMagirecoProdRespHook {
                         if (lastDump != null) {
                             let respBodyObj = userdataDump.getUnBrBody(lastDump.httpResp.get, this.pageKeys[apiName]);
                             if (respBodyObj != null) {
+                                if (apiName === "page/MainQuest") {
+                                    respBodyObj = this.patchMainQuest(apiName, respBodyObj);
+                                }
                                 body = Buffer.from(JSON.stringify(respBodyObj), 'utf-8');
                             }
                         }
@@ -537,10 +569,25 @@ class fakeMagirecoProdRespHook {
             let body;
             try {
                 body = this.crawler.readFile(url.pathname);
+                if (body == null) {
+                    if (url.pathname.match(this.part2Section3RegEx) != null) {
+                        // not a workaround: response from offical server was like this
+                        body = Buffer.from(JSON.stringify([]), 'utf-8');
+                    }
+                }
             }
             catch (e) {
                 console.error(`error serving[${url.pathname}]`, e);
                 body = undefined;
+            }
+            if (body != null) {
+                if (url.pathname in this.staticModList) {
+                    const bodyStr = body.toString("utf-8");
+                    const mod = this.staticModList[url.pathname];
+                    if (bodyStr.match(mod.matchPattern)) {
+                        body = Buffer.from(bodyStr.replace(mod.replacePattern, mod.replacement), 'utf-8');
+                    }
+                }
             }
             if (body == null && url.pathname.endsWith(".gz")) {
                 try {
@@ -634,10 +681,12 @@ class fakeMagirecoProdRespHook {
                         respBody = this.modifyGameChara(apiName, reqBody);
                         break;
                     }
+                case "page/CharaEnhancementTree":
                 case "page/PresentHistory":
                 case "page/GachaHistory":
                     {
-                        respBody = this.fakePagedResult(apiName, reqBody);
+                        let type = apiName === "page/CharaEnhancementTree" ? "charaId" : "page";
+                        respBody = this.fakePagedResult(apiName, reqBody, type);
                         break;
                     }
                 case "arena/start":
@@ -802,7 +851,7 @@ class fakeMagirecoProdRespHook {
         return `${year}/${monthDate.join("/")} ${time.join(":")}`;
     }
     fakeMyPage(apiName) {
-        var _a;
+        var _a, _b;
         if (apiName !== "page/MyPage") {
             console.error(`fakeMyPage invalid apiName=[${apiName}]`);
             return;
@@ -839,15 +888,24 @@ class fakeMagirecoProdRespHook {
                 }
             });
         }
+        const replicaGameUser = replica === null || replica === void 0 ? void 0 : replica.gameUser;
+        const userId = replicaGameUser === null || replicaGameUser === void 0 ? void 0 : replicaGameUser.userId;
+        if (typeof userId === 'string') {
+            if (((_a = this.missingData) === null || _a === void 0 ? void 0 : _a.userId) !== userId)
+                this.missingData = new missing_data_1.missingData(userId);
+            this.checkForMissing(replica.userChapterList, this.missingData.userChapterList, "chapterId");
+            this.checkForMissing(replica.userSectionList, this.missingData.userSectionList, "sectionId");
+            this.checkForMissing(replica.userQuestBattleList, this.missingData.userQuestBattleList, "questBattleId");
+            this.checkForMissing(replica.userQuestAdventureList, this.missingData.userQuestAdventureList, "adventureId");
+        }
         // overrides
         const userItemList = replica.userItemList;
-        const replicaGameUser = replica.gameUser;
         if (userItemList != null && Array.isArray(userItemList)
             && replicaGameUser != null) {
             // setBackground
             const newBgItemId = this.bgItemId;
             if (newBgItemId != null && typeof newBgItemId === "string") {
-                const foundBgItem = (_a = userItemList.find((itemInfo) => (itemInfo === null || itemInfo === void 0 ? void 0 : itemInfo.itemId) === newBgItemId)) === null || _a === void 0 ? void 0 : _a.item;
+                const foundBgItem = (_b = userItemList.find((itemInfo) => (itemInfo === null || itemInfo === void 0 ? void 0 : itemInfo.itemId) === newBgItemId)) === null || _b === void 0 ? void 0 : _b.item;
                 if (foundBgItem != null) {
                     replicaGameUser.bgItemId = newBgItemId;
                     if (replicaGameUser.bgItem == null)
@@ -1045,8 +1103,7 @@ class fakeMagirecoProdRespHook {
             }), 'utf-8');
         }
     }
-    parsePageNum(reqBody) {
-        var _a;
+    parsePageNum(reqBody, type) {
         if (reqBody != null && typeof reqBody !== 'string')
             return;
         if (reqBody == null || reqBody === "") {
@@ -1054,7 +1111,8 @@ class fakeMagirecoProdRespHook {
         }
         else {
             try {
-                const parsedPageNum = (_a = JSON.parse(reqBody)) === null || _a === void 0 ? void 0 : _a.page;
+                const parsed = JSON.parse(reqBody);
+                const parsedPageNum = parsed != null ? parsed[type] : undefined;
                 if ((typeof parsedPageNum !== 'number' && typeof parsedPageNum !== 'string')
                     || isNaN(Number(parsedPageNum))) {
                     console.error(`parsePageNum invalid pageNum`);
@@ -1066,7 +1124,7 @@ class fakeMagirecoProdRespHook {
             }
         }
     }
-    fakePagedResult(apiName, reqBody) {
+    fakePagedResult(apiName, reqBody, type) {
         var _a, _b;
         const lastDump = this.userdataDmp.lastDump;
         if (lastDump == null)
@@ -1074,13 +1132,14 @@ class fakeMagirecoProdRespHook {
         const urlBases = {
             ["page/PresentHistory"]: `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/PresentHistory`,
             ["page/GachaHistory"]: `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/GachaHistory`,
+            ["page/CharaEnhancementTree"]: `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/CharaEnhancementTree`,
         };
         if (!(apiName in urlBases)) {
             console.error(`fakePagedResult invalid apiName=[${apiName}]`);
             return;
         }
         const urlBase = urlBases[apiName];
-        const pageNum = this.parsePageNum(reqBody);
+        const pageNum = this.parsePageNum(reqBody, type);
         if (pageNum == null)
             return;
         if (pageNum == 1) {
@@ -1090,9 +1149,9 @@ class fakeMagirecoProdRespHook {
             return Buffer.from(JSON.stringify(respBodyObj), 'utf-8');
         }
         else {
-            const respBodyObj = userdataDump.unBrBase64((_b = (_a = lastDump.httpResp.post.get(urlBase)) === null || _a === void 0 ? void 0 : _a.get(JSON.stringify({ page: `${pageNum}` }))) === null || _b === void 0 ? void 0 : _b.brBody);
+            const respBodyObj = userdataDump.unBrBase64((_b = (_a = lastDump.httpResp.post.get(urlBase)) === null || _a === void 0 ? void 0 : _a.get(JSON.stringify({ [type]: `${pageNum}` }))) === null || _b === void 0 ? void 0 : _b.brBody);
             if (respBodyObj == null)
-                return Buffer.from(this.fakeErrorResp("错误", "找不到指定页面"), 'utf-8');
+                return Buffer.from(this.fakeErrorResp("错误", `找不到指定${type}`), 'utf-8');
             return Buffer.from(JSON.stringify(respBodyObj), 'utf-8');
         }
     }
@@ -1470,6 +1529,24 @@ class fakeMagirecoProdRespHook {
         else if (!forceGoto)
             delete obj.forceGoto;
         return JSON.stringify(obj);
+    }
+    patchMainQuest(apiName, respBodyObj) {
+        var _a, _b;
+        if (apiName !== "page/MainQuest")
+            return respBodyObj;
+        const lastDump = this.userdataDmp.lastDump;
+        if (lastDump == null)
+            return respBodyObj;
+        const myPage = userdataDump.getUnBrBody(lastDump.httpResp.get, this.pageKeys["page/MyPage"]);
+        const userId = (_a = myPage === null || myPage === void 0 ? void 0 : myPage.gameUser) === null || _a === void 0 ? void 0 : _a.userId;
+        if (typeof userId === 'string') {
+            if (((_b = this.missingData) === null || _b === void 0 ? void 0 : _b.userId) !== userId)
+                this.missingData = new missing_data_1.missingData(userId);
+            this.checkForMissing(respBodyObj.userChapterList, this.missingData.userChapterList, "chapterId");
+            this.checkForMissing(respBodyObj.userSectionList, this.missingData.userSectionList, "sectionId");
+            this.checkForMissing(respBodyObj.userQuestBattleList, this.missingData.userQuestBattleList, "questBattleId");
+        }
+        return respBodyObj;
     }
     getRandomHex(charCount) {
         return crypto.randomBytes(Math.trunc((charCount + 1) / 2)).toString('hex').substring(0, charCount);
