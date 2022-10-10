@@ -6,6 +6,7 @@ import * as parameters from "../parameters";
 import * as staticResCrawler from "../static_res_crawler";
 import * as userdataDump from "../userdata_dump";
 import { bsgamesdkPwdAuth } from "../bsgamesdk-pwd-authenticate";
+import { missingData } from "./etc/missing_data";
 
 export class fakeMagirecoProdRespHook implements hook {
     private readonly params: parameters.params;
@@ -23,11 +24,15 @@ export class fakeMagirecoProdRespHook implements hook {
 
     private readonly bilibiliGameAgreementRegEx: RegExp;
 
+    private readonly part2Section3RegEx: RegExp;
+
     private readonly arenaSimulateMap: Map<string, string>;
 
     get stringifiedOverrideDB(): string {
         return JSON.stringify(this.params.overridesDB, parameters.replacer);
     }
+
+    private missingData?: missingData;
 
     private get overrides(): parameters.overrides | undefined {
         const lastDump = this.userdataDmp.lastDump;
@@ -84,6 +89,8 @@ export class fakeMagirecoProdRespHook implements hook {
         this.bsgameSdkOtpSendRegEx = /^(http|https):\/\/line\d+-sdk-center-login-sh\.biligame\.net\/api\/external\/otp\/send\/v3((|\?.*)$)/;
 
         this.bilibiliGameAgreementRegEx = /^(http|https):\/\/game\.bilibili\.com\/agreement\/(userterms|privacy)\/.+$/;
+
+        this.part2Section3RegEx = /^\/magica\/resource\/download\/asset\/master\/resource\/2207081501\/asset_section_10230(1|2|3)\.json$/;
 
         this.arenaSimulateMap = new Map<string, string>();
     }
@@ -290,6 +297,9 @@ export class fakeMagirecoProdRespHook implements hook {
                         if (lastDump != null) {
                             let respBodyObj = userdataDump.getUnBrBody(lastDump.httpResp.get, this.pageKeys[apiName]);
                             if (respBodyObj != null) {
+                                if (apiName === "page/MainQuest") {
+                                    respBodyObj = this.patchMainQuest(apiName, respBodyObj);
+                                }
                                 body = Buffer.from(JSON.stringify(respBodyObj), 'utf-8');
                             }
                         }
@@ -327,6 +337,12 @@ export class fakeMagirecoProdRespHook implements hook {
             let body: Buffer | undefined;
             try {
                 body = this.crawler.readFile(url.pathname);
+                if (body == null) {
+                    if (url.pathname.match(this.part2Section3RegEx) != null) {
+                        // not a workaround: response from offical server was like this
+                        body = Buffer.from(JSON.stringify([]), 'utf-8');
+                    }
+                }
             } catch (e) {
                 console.error(`error serving[${url.pathname}]`, e);
                 body = undefined;
@@ -656,9 +672,17 @@ export class fakeMagirecoProdRespHook implements hook {
                 }
             });
         }
+        const replicaGameUser = replica?.gameUser;
+        const userId = replicaGameUser?.userId;
+        if (typeof userId === 'string') {
+            if (this.missingData?.userId !== userId) this.missingData = new missingData(userId);
+            this.checkForMissing(replica.userChapterList, this.missingData.userChapterList, "chapterId");
+            this.checkForMissing(replica.userSectionList, this.missingData.userSectionList, "sectionId");
+            this.checkForMissing(replica.userQuestBattleList, this.missingData.userQuestBattleList, "questBattleId");
+            this.checkForMissing(replica.userQuestAdventureList, this.missingData.userQuestAdventureList, "adventureId");
+        }
         // overrides
         const userItemList = replica.userItemList;
-        const replicaGameUser = replica.gameUser;
         if (
             userItemList != null && Array.isArray(userItemList)
             && replicaGameUser != null
@@ -1450,6 +1474,9 @@ export class fakeMagirecoProdRespHook implements hook {
     }
 
     private readonly myPagePatchList: Record<string, Array<string>> = {
+        ["page/TopPage"]: [
+            `userQuestAdventureList`,
+        ],
         ["page/MainQuest"]: [
             `userChapterList`,
             `userSectionList`,
@@ -1537,12 +1564,46 @@ export class fakeMagirecoProdRespHook implements hook {
         replacePattern: string | RegExp,
         replacement: string,
     }> = {
+            ["/magica/template/collection/StoryCollection.html"]: {
+                matchPattern: /^<div id="StoryCollection">/,
+                replacePattern: /(<li class="TE btn se_tabs current" data-wrap="main"><span>主线【第1部】<\/span><\/li>)/,
+                replacement: "$1 <li class=\"TE btn se_tabs\" data-wrap=\"mainSecond\"><span>主线【第2部】</span></li>",
+            },
             ["/magica/template/chara/CharaTop.html"]: {
                 matchPattern: /^<div id="CharaTop">/,
                 replacePattern: /(<li class="TE customize"><span class="linkBtn se_decide" data-href="#\/CharaListCustomize"><\/span><\/li>)/,
                 replacement: "$1 <li class=\"TE enhance\"><span class=\"enhanceLink se_decide\"></span></li>",
             },
         }
+
+    private checkForMissing = (existingArray: Array<any>, missingArray: Array<any>, key: string) => {
+        if (existingArray == null || missingArray == null) return;
+        if (!Array.isArray(existingArray) || !Array.isArray(missingArray)) return;
+        missingArray.forEach((missing) => {
+            if (
+                existingArray.find(
+                    (existing: any) => existing != null && missing != null && missing[key] === existing[key]
+                ) == null
+            ) {
+                existingArray.push(missing);
+            }
+        });
+    }
+
+    private patchMainQuest(apiName: string, respBodyObj: any): any {
+        if (apiName !== "page/MainQuest") return respBodyObj;
+        const lastDump = this.userdataDmp.lastDump;
+        if (lastDump == null) return respBodyObj;
+        const myPage = userdataDump.getUnBrBody(lastDump.httpResp.get, this.pageKeys["page/MyPage"]);
+        const userId = myPage?.gameUser?.userId;
+        if (typeof userId === 'string') {
+            if (this.missingData?.userId !== userId) this.missingData = new missingData(userId);
+            this.checkForMissing(respBodyObj.userChapterList, this.missingData.userChapterList, "chapterId");
+            this.checkForMissing(respBodyObj.userSectionList, this.missingData.userSectionList, "sectionId");
+            this.checkForMissing(respBodyObj.userQuestBattleList, this.missingData.userQuestBattleList, "questBattleId");
+        }
+        return respBodyObj;
+    }
 
     private getRandomHex(charCount: number): string {
         return crypto.randomBytes(Math.trunc((charCount + 1) / 2)).toString('hex').substring(0, charCount);
