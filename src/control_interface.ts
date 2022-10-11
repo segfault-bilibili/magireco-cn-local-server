@@ -486,12 +486,13 @@ export class controlInterface {
             const yamlRegEx = /^\/magirecolocal\d*\.yaml$/;
             if (req.url.match(yamlRegEx)) {
                 console.log(`servering ${req.url}`);
+                const clashYaml = Buffer.from(this.params.clashYaml);
                 res.writeHead(200, {
-                    //["Content-Type"]: "application/x-yaml",
-                    ["Content-Type"]: "text/plain",
+                    ["Content-Type"]: "application/x-yaml",
+                    ["Content-Length"]: clashYaml.byteLength,
                     ["Content-Disposition"]: `attachment; filename=\"${req.url.replace(/^\//, "")}\"`,
                 });
-                res.end(this.params.clashYaml);
+                res.end(clashYaml);
                 return;
             }
 
