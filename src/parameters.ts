@@ -8,7 +8,7 @@ import * as userdataDump from "./userdata_dump";
 import * as path from "path";
 import * as fs from "fs";
 import * as fsPromises from "fs/promises";
-import * as crypto from "crypto";
+import * as http from "http";
 import { getRandomHex } from "./get_random_bytes";
 
 export type listenAddr = {
@@ -92,6 +92,9 @@ export type overrides = {
 
 export class params {
     static VERBOSE = false;
+
+    static readonly isAliveReqMarker = "2f53b99c5bc307e9e4005ea1087eeca0";
+    static readonly isAliveRespMarker = "614cb4bf76a743055e924a0a3073f850";
 
     static readonly defaultPath = path.join(".", "params.json");
     private path: string;
@@ -385,10 +388,41 @@ export class params {
                 if (portInUse.get(port) == null) break;
                 else do { port++; } while (portInUse.get(port) != null);
             }
+            if (name === "controlInterface" && port != list[name].port) {
+                if ((await this.checkIsAliveMarker(host, list[name].port))) {
+                    console.error(`已有本地服务器在运行`)
+                    throw new Error(`another instance is running`);
+                }
+            }
             list[name] = { port: port, host: host };
             portInUse.set(port, name);
         }
         return list;
+    }
+    private static checkIsAliveMarker(host: string, port: number): Promise<boolean> {
+        return new Promise((resolve, reject) => {
+            http.request({
+                host: host,
+                port: port,
+                path: `/api/is_alive_${params.isAliveReqMarker}`,
+                headers: {
+                    ["Referer"]: new URL(`http://${host}:${port}/`).href,
+                }
+            }, (resp) => {
+                resp.on('error', (err) => reject(err));
+                let buffers: Array<Buffer> = [];
+                resp.on('data', (chunk) => {
+                    if (buffers.reduce((prev, curr) => prev + curr.byteLength, 0) > 128) {
+                        resp.destroy();
+                        resolve(false);
+                    } else buffers.push(chunk);
+                });
+                resp.on('end', () => {
+                    let respBody = Buffer.concat(buffers).toString('utf-8');
+                    resolve(respBody === this.isAliveRespMarker);
+                });
+            }).on('error', (err) => reject(err)).end();
+        });
     }
 }
 

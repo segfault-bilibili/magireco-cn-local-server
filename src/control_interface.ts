@@ -120,6 +120,10 @@ export class controlInterface {
                 const apiName = req.url.replace(/(^\/api\/)|(\?.*$)/g, "");
                 if (apiName !== "get_status") console.log(`controlInterface received api request [${apiName}]`);
                 switch (apiName) {
+                    case `is_alive_${parameters.params.isAliveReqMarker}`:
+                        res.writeHead(200, "OK", {["Content-Type"]: "text/plain"});
+                        res.end(`${parameters.params.isAliveRespMarker}`);
+                        break;
                     case "get_status":
                         try {
                             let gameUid = this.getGameUid(this.params.openIdTicket);
