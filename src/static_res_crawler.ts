@@ -773,11 +773,32 @@ export class crawler {
     }
     private async fetchAssetConfig(): Promise<assetConfigObj> {
         console.log(this._crawlingStatus = `crawling maintenance config ...`);
+        /*
         const maintenanceConfigStr = await this.fetchSinglePage(
             crawler.prodHost,
             `/maintenance/magica/config?type=1&platform=2&version=30011&gameid=1&time=${this.timeStampSec}`,
             crawler.jsonRegEx
         );
+        */
+        const maintenanceConfigStr = JSON.stringify({
+            leastversion: "30011",
+            assetver: "2207081501",
+            forcelocation: "https://pkg.biligame.com/games/mfjlmfsnxywc_v2.2.1_b_20220819_105944_2e49d.apk",
+            servicelocation: "https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/wh/index.html",
+            status: 0,
+            domain: [
+                "https://l3-prod-all-gs-mfsn2.bilibiligame.net",
+                "https://l2-prod-all-gs-mfsn2.bilibiligame.net",
+                "https://l1-prod-all-gs-mfsn2.bilibiligame.net"
+            ],
+            resourceLocation: [
+                "https://line3-prod-patch-mfsn2.bilibiligame.net",
+                "https://line2-prod-patch-mfsn2.bilibiligame.net",
+                "https://line1-prod-patch-mfsn2.bilibiligame.net"
+            ],
+            ipAddr: "180.97.245.90",
+            resDir: null
+        });
         const assetver = this.readAssetVer(maintenanceConfigStr);
 
         console.log(this._crawlingStatus = `crawling asset_config.json ...`);
