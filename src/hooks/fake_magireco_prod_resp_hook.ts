@@ -7,6 +7,7 @@ import * as staticResCrawler from "../static_res_crawler";
 import * as userdataDump from "../userdata_dump";
 import { bsgamesdkPwdAuth } from "../bsgamesdk-pwd-authenticate";
 import { missingData } from "./etc/missing_data";
+import { getRandomHex } from "../get_random_bytes";
 
 export class fakeMagirecoProdRespHook implements hook {
     private readonly params: parameters.params;
@@ -520,10 +521,10 @@ export class fakeMagirecoProdRespHook implements hook {
 
     private fakeBsgamesdkCipherResp(): Buffer {
         const obj = {
-            requestId: `${this.getRandomHex(32)}`,
+            requestId: `${getRandomHex(32)}`,
             timestamp: `${new Date().getTime()}`,
             code: 0,
-            hash: `${this.getRandomHex(16)}`, // fake one
+            hash: `${getRandomHex(16)}`, // fake one
             cipher_key: "-----BEGIN PUBLIC KEY-----\nMIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDjb4V7EidX/ym28t2ybo0U6t0n\n6p4ej8VjqKHg100va6jkNbNTrLQqMCQCAYtXMXXp2Fwkk6WR+12N9zknLjf+C9sx\n/+l48mjUU8RqahiFD1XT/u2e0m2EN029OhCgkHx3Fc/KlFSIbak93EH/XlYis0w+\nXl69GV6klzgxW6d2xQIDAQAB\n-----END PUBLIC KEY-----",
             server_message: "",
         }
@@ -531,10 +532,10 @@ export class fakeMagirecoProdRespHook implements hook {
     }
     private fakeBsgamesdkOtpSendResp(): Buffer {
         const obj = {
-            requestId: `${this.getRandomHex(32)}`,
+            requestId: `${getRandomHex(32)}`,
             timestamp: `${new Date().getTime()}`,
             code: 0,
-            captcha_key: `${this.getRandomHex(32)}`,
+            captcha_key: `${getRandomHex(32)}`,
             verify_tkt: null,
             verify_tkt_type: null,
             server_message: "",
@@ -555,7 +556,7 @@ export class fakeMagirecoProdRespHook implements hook {
         if (user == null) return;
         const loginName = user["loginName"];
 
-        const requestId = this.getRandomHex(32);
+        const requestId = getRandomHex(32);
         const tsStr = `${new Date().getTime()}`;
         const expires = Number(tsStr) + 30 * 24 * 60 * 60 * 1000;
         const h5_paid_download = 1;
@@ -570,7 +571,7 @@ export class fakeMagirecoProdRespHook implements hook {
             h5_paid_download: h5_paid_download,
             h5_paid_download_sign: `${h5_paid_download_sign}`,
             code: 0,
-            access_key: `${this.getRandomHex(32)}_sh`,
+            access_key: `${getRandomHex(32)}_sh`,
             expires: expires,
             uid: uid,
             face: "http://static.hdslb.com/images/member/noface.gif",
@@ -1623,10 +1624,6 @@ export class fakeMagirecoProdRespHook implements hook {
             }
         }
         return respBodyObj;
-    }
-
-    private getRandomHex(charCount: number): string {
-        return crypto.randomBytes(Math.trunc((charCount + 1) / 2)).toString('hex').substring(0, charCount);
     }
 
     private getRandomGuid(): string {

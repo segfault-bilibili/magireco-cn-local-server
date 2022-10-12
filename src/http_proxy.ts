@@ -5,158 +5,39 @@ import * as localServer from "./local_server";
 
 export class httpProxy {
     private readonly params: parameters.params;
-    private readonly httpServer: http.Server;
+    private httpServer: http.Server;
 
     constructor(params: parameters.params) {
+        this.httpServer = this.createHttpServer(params);
+        this.params = params;
+    }
+    private createHttpServer(params: parameters.params): http.Server {
         const httpServer = http.createServer((req, res) => {
-            let matchedHostPort: RegExpMatchArray | null;
-            if (
-                req.method == null || req.url == null
-                || (
-                    (matchedHostPort = req.url.match(/^http:\/\/[^\/]+\//)) == null
-                    && !req.url.startsWith("/")
-                )
-            ) {
-                res.writeHead(403, { 'Content-Type': 'text/plain' });
-                res.end("403 Forbidden");
-                return;
-            }
-
-            let host: string, port: number, path: string;
-
-            let isControlInterface = false;
-            if (matchedHostPort == null) {
-                //invisible mode
-                let svrHost: string, svrPort: number;
-                if (req.headers.host == null) {
-                    console.error("cannot find hostname");
-                    res.writeHead(403, { 'Content-Type': 'text/plain' });
-                    res.end("403 Forbidden");
-                    return;
-                }
-                let matchedPort = req.headers.host.match(/:\d{1,5}$/);
-                if (matchedPort == null) {
-                    svrHost = req.headers.host;
-                    svrPort = 80;
-                } else {
-                    svrHost = req.headers.host.substring(0, req.headers.host.length - matchedPort[0].length);
-                    svrPort = parseInt(matchedPort[0].replace(/:/g, ""));
-                    if (isNaN(svrPort)) {
-                        console.error("cannot parse port");
-                        res.writeHead(403, { 'Content-Type': 'text/plain' });
-                        res.end("403 Forbidden");
-                        return;
-                    }
-                }
-
-                let selfHost = this.params.listenList.httpProxy.host;
-                let selfPort = this.params.listenList.httpProxy.port;
-                if ((svrHost === selfHost || svrHost === "localhost") && svrPort == selfPort) {
-                    console.error("should not self-connect");//FIXME
-                    res.writeHead(403, { 'Content-Type': 'text/plain' });
-                    res.end("403 Forbidden");
-                    return;
-                }
-
-                if (svrHost.match(/^(|www\.)magireco\.local$/)) {
-                    isControlInterface = true;
-                    host = params.listenList.controlInterface.host;
-                    req.headers.host = `${svrHost}:${svrPort}`;
-                    port = params.listenList.controlInterface.port;
-                    path = req.url;//not a proxy-style path because we are in invisible mode
-                } else if (params.upstreamProxyEnabled) {
-                    host = params.upstreamProxy.host;
-                    port = params.upstreamProxy.port;
-                    path = `http://${svrHost}:${svrPort}${req.url}`;//convert to proxy-style
-                } else {
-                    host = svrHost;
-                    port = svrPort;
-                    path = req.url;//not a proxy-style path because we are in invisible mode
-                }
-            } else {
-                //ordinary HTTP proxy mode
-                if (matchedHostPort[0].match(/^http:\/\/(|www\.)magireco\.local(|:\d{1,5})\/$/)) {
-                    isControlInterface = true;
-                    host = this.params.listenList.controlInterface.host;
-                    req.headers.host = matchedHostPort[0].replace(/(^http:\/\/)|\/$/g, "");
-                    port = this.params.listenList.controlInterface.port;
-                    path = req.url.replace(matchedHostPort[0], "/");
-                } else if (params.upstreamProxyEnabled) {
-                    host = params.upstreamProxy.host;
-                    port = params.upstreamProxy.port;
-                    path = req.url;//url is already proxy-style
-                } else {
-                    let matchedPort = matchedHostPort[0].match(/(:\d{1,5}|)\/$/);
-                    if (matchedPort == null) {
-                        console.log("cannot match port");
-                        res.writeHead(403, { 'Content-Type': 'text/plain' });
-                        res.end("403 Forbidden");
-                        return;
-                    }
-                    host = req.url.substring("http://".length, matchedHostPort[0].length - matchedPort[0].length);
-                    port = parseInt(matchedPort[0].replace(/:|\//g, ""));
-                    if (isNaN(port)) port = 80;
-                    path = req.url.substring(matchedHostPort[0].length - 1, req.url.length);//extract path from proxy-style url
-                }
-            }
-
-            for (let key in req.headers) {
-                if (key.match(/^proxy/i)) delete req.headers[key];
-            }
-
-            let logMsg: string;
-            if (params.upstreamProxyEnabled && !isControlInterface)
-                logMsg = `proxified ${req.socket.remoteAddress}:${req.socket.remotePort} => ${host}:${port} => ${path}`;
-            else
-                logMsg = `direct ${req.socket.remoteAddress}:${req.socket.remotePort} => http://${host}:${port}${path}`;
-            if (parameters.params.VERBOSE) console.log(logMsg);
-
-            let proxyReq = http.request({
-                host: host,
-                port: port,
-                path: path,
-                method: req.method,
-                headers: req.headers,
-            }, (svrRes) => {
-                if (svrRes.statusCode == null) {
-                    res.writeHead(502, { "Content-Type": "text/plain" });
-                    res.end("502 Bad Gateway");
-                } else {
-                    if (svrRes.statusMessage == null) res.writeHead(svrRes.statusCode, svrRes.headers);
-                    else res.writeHead(svrRes.statusCode, svrRes.statusMessage, svrRes.headers);
-                    svrRes.pipe(res);
-                }
-            }).on('end', () => {
-                res.end();
-            }).on('error', (error) => {
-                console.error(error);
-                res.writeHead(502, "Bad Gateway", { "Content-Type": "text/plain" });
-                res.end("502 Bad Gateway");
-            });
-
-            req.on("data", (chunk) => {
-                proxyReq.write(chunk);
-            }).on("error", (error) => {
-                console.error(error);
-                res.writeHead(502, "Bad Gateway", { "Content-Type": "text/plain" });
-                res.end("502 Bad Gateway");
-                proxyReq.end();
-            }).on("end", () => {
-                proxyReq.end();
-            });
+            req.destroy(); res.destroy();
         });
 
         httpServer.on('connect', async (req, socket: net.Socket, head) => {
+            if (socket.localAddress !== "127.0.0.1") {
+                const authorization = req.headers["proxy-authorization"]?.replace(/^Basic\s+/i, "");
+                const realmStr = `${this.params.httpProxyUsername}:${this.params.httpProxyPassword}`;
+                const correctAuthStr = `${Buffer.from(realmStr, 'utf-8').toString('base64')}`
+                if (authorization !== correctAuthStr) {
+                    console.error(`rejected invalid authorization from ${socket.remoteAddress}:${socket.remotePort}`);
+                    req.destroy(); socket.destroy();
+                    return;
+                }
+            }
+
             if (req.url == null) {
                 console.error(`Empty URL in proxy request from ${socket.remoteAddress}:${socket.remotePort}`);
-                socket.end();
+                req.destroy(); socket.destroy();
                 return;
             }
 
             socket.on('error', (e) => {
                 let logMsg = `${socket.remoteAddress}:${socket.remotePort} => ${req.url}`;
                 console.error(`Error: ${logMsg}`, e);
-                socket.end();
+                req.destroy(); socket.destroy();
             });
 
             let logMsg = `HTTP CONNECT ${socket.remoteAddress}:${socket.remotePort} => ${req.url}`;
@@ -226,20 +107,7 @@ export class httpProxy {
             }
 
             //port number is not 443
-            //pass to myself, in so-called "invisible proxy" mode
-            //`host` and `port` parsed from CONNECT is ignored
-            const selfPort = this.params.listenList.httpProxy.port;
-            const selfHost = this.params.listenList.httpProxy.host;
-            let conn = net.connect(selfPort, selfHost, () => {
-                socket.write("HTTP/1.1 200 Connection Established\r\n\r\n", () => {
-                    conn.pipe(socket);
-                    socket.pipe(conn);
-                });
-            });
-            conn.on('error', (e) => {
-                console.error(`Error: ${logMsg}`, e);
-                socket.end();
-            });
+            socket.destroy();
         });
 
         let listenAddr = params.listenList.httpProxy;
@@ -252,9 +120,7 @@ export class httpProxy {
         } else {
             console.log(`httpProxy upstream proxy disabled`);
         }
-
-        this.params = params;
-        this.httpServer = httpServer;
+        return httpServer;
     }
     async close(): Promise<void> {
         await new Promise<void>((resolve) => {
@@ -262,5 +128,9 @@ export class httpProxy {
             this.httpServer.close();
             this.httpServer.closeAllConnections();
         });
+    }
+    async restart(): Promise<void> {
+        await this.close();
+        this.httpServer = this.createHttpServer(this.params);
     }
 }

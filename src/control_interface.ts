@@ -4,6 +4,7 @@ import * as net from "net";
 import * as http from "http";
 import * as process from "process";
 import * as ChildProcess from "child_process";
+import * as os from "os";
 import * as parameters from "./parameters";
 import { httpProxy } from "./http_proxy";
 import { localServer } from "./local_server";
@@ -20,6 +21,8 @@ import { saveOpenIdTicketHook } from "./hooks/save_open_id_ticket_hook";
 type parsedMultiPart = Array<{ filename?: string, name?: string, type?: string, data: Buffer }>;
 export class controlInterface {
     private closing = false;
+    private isTogglingLoopbackListen = false;
+
     private readonly params: parameters.params;
     private readonly httpServerSelf: http.Server;
     private readonly serverList: Array<httpProxy | localServer>;
@@ -80,6 +83,7 @@ export class controlInterface {
     }
 
     constructor(params: parameters.params, serverList: Array<localServer | httpProxy>) {
+        const httpPxy = serverList.find((s) => s instanceof httpProxy) as httpProxy;
         const localsvr = serverList.find((s) => s instanceof localServer) as localServer;
         const bsgamesdkPwdAuth = new bsgamesdkPwdAuthenticate.bsgamesdkPwdAuth(params, localsvr);
         const userdataDmp = new userdataDump.userdataDmp(params, localsvr);
@@ -160,6 +164,34 @@ export class controlInterface {
                         this.restart();
                         return;
                     */
+                    case "toggle_loopback_listen":
+                        try {
+                            await this.getParsedPostData(req);
+                            let listenList: parameters.listenList = JSON.parse(JSON.stringify(this.params.listenList));
+                            let curr: parameters.listenAddr = {
+                                port: listenList.httpProxy.port,
+                                host: listenList.httpProxy.host,
+                            }
+                            let last: parameters.listenAddr = {
+                                port: this.params.lastHttpProxy.port,
+                                host: this.params.lastHttpProxy.host,
+                            }
+                            listenList.httpProxy = last;
+                            if (this.isTogglingLoopbackListen) {
+                                this.sendResultAsync(res, 429, "last http proxy listen address toggling is still not finished");
+                            } else {
+                                this.isTogglingLoopbackListen = true;
+                                this.sendResultAsync(res, 200, "toggling http proxy listen address");
+                                this.params.save([
+                                    { key: "lastHttpProxy", val: curr },
+                                    { key: "listenList", val: listenList },
+                                ]).then(() => httpPxy.restart().then(() => this.isTogglingLoopbackListen = false));
+                            }
+                        } catch (e) {
+                            console.error(`${apiName} error`, e);
+                            this.sendResultAsync(res, 500, e instanceof Error ? e.message : `${apiName} error`);
+                        }
+                        return;
                     case "upload_params":
                         try {
                             let postData = await this.getPostData(req);
@@ -483,10 +515,11 @@ export class controlInterface {
                     return;
             }
 
-            const yamlRegEx = /^\/magirecolocal\d*\.yaml$/;
-            if (req.url.match(yamlRegEx)) {
+            const yamlRegEx = /^\/magirecolocal_(\d{1,3}\.){3}\d{1,3}_\d{1,5}\.yaml$/;
+            const parsedHost = req.url.match(/(\d{1,3}\.){3}\d{1,3}/);
+            if (req.url.match(yamlRegEx) && parsedHost != null && net.isIPv4(parsedHost[0])) {
                 console.log(`servering ${req.url}`);
-                const clashYaml = Buffer.from(this.params.clashYaml);
+                const clashYaml = Buffer.from(this.params.getClashYaml(parsedHost[0]));
                 res.writeHead(200, {
                     ["Content-Type"]: "application/x-yaml",
                     ["Content-Length"]: clashYaml.byteLength,
@@ -687,7 +720,8 @@ export class controlInterface {
         const mumuXURL = new URL("https://mumu.163.com/update/");
         const patchedApkURL = new URL("https://share.weiyun.com/HhJbXRP7");
 
-        const aHref = (text: string, url: string, newTab = true) => `<a target=\"${newTab ? "_blank" : "_self"}\" href=${url}>${text}</a>`
+        const aHref = (text: string, url: string, newTab = true, id?: string) =>
+            `<a target=\"${newTab ? "_blank" : "_self"}\" href=${url}${id != null ? ` id=\"${id}\"` : ""}>${text}</a>`
 
         const isOnlineMode = this.params.mode === parameters.mode.ONLINE;
         const isLocalOfflineMode = this.params.mode === parameters.mode.LOCAL_OFFLINE;
@@ -700,6 +734,7 @@ export class controlInterface {
             httpProxyAddr = proxy.host;
             httpProxyPort = String(proxy.port);
         }
+        const httpProxyUsername = this.params.httpProxyUsername, httpProxyPassword = this.params.httpProxyPassword;
         const upstreamProxy = this.params.upstreamProxy;
         const upstreamProxyHost = upstreamProxy.host;
         const upstreamProxyPort = upstreamProxy.port;
@@ -868,6 +903,12 @@ export class controlInterface {
             + `\n    function unlock_prepare_download_btn() {`
             + `\n      if (!isOffline()) document.getElementById(\"prepare_download_btn\").removeAttribute(\"disabled\");`
             + `\n    }`
+            + `\n    function localIPv4Select(selected) {`
+            + `\n      let host = selected.id.replace(/^local_ipv4_addr_/, \"\").replace(/_/g, \".\");`
+            + `\n      let el = document.getElementById(\"clash_yaml_link\");`
+            + `\n      el.textContent = \`magirecolocal_\${host}_${httpProxyPort}.yaml\`;`
+            + `\n      el.setAttribute(\"href\", \"/\" + el.textContent); el.setAttribute("target", "_blank");`
+            + `\n    }`
             + `\n  </script>`
             + `\n  <style>`
             + `\n    code {`
@@ -883,16 +924,36 @@ export class controlInterface {
             + `\n  <h1>魔法纪录国服本地服务器${pkgVersionStr}</h1>`
             + `\n  <fieldset>`
             + `\n  <legend>HTTP代理</legend>`
+            + `\n  <fieldset><legend>HTTP代理信息</legend>`
+            + `\n    <div>`
+            + `\n      <label for=\"httpproxyaddr\">HTTP代理监听地址</label>`
+            + `\n      <input readonly id=\"httpproxyaddr\" value=\"${httpProxyAddr}\">`
+            + `\n    </div>`
+            + `\n    <div>`
+            + `\n      <label for=\"httpproxyport\">HTTP代理监听端口</label>`
+            + `\n      <input readonly id=\"httpproxyport\" value=\"${httpProxyPort}\">`
+            + `\n    </div>`
+            + `\n    <div>`
+            + `\n      <label for=\"httpproxyusername\">HTTP代理用户名</label>`
+            + `\n      <input readonly id=\"httpproxyusername\" value=\"${httpProxyUsername}\">`
+            + `\n    </div>`
+            + `\n    <div>`
+            + `\n      <label for=\"httpproxypassword\">HTTP代理密码</label>`
+            + `\n      <input readonly id=\"httpproxypassword\" value=\"${httpProxyPassword}\">`
+            + `\n    </div>`
+            + `\n  </fieldset>`
             + `\n  <div>`
-            + `\n    <label for=\"httpproxyaddr\">HTTP代理监听地址</label>`
-            + `\n    <input readonly id=\"httpproxyaddr\" value=\"${httpProxyAddr}\">`
-            + `\n  </div>`
-            + `\n  <div>`
-            + `\n    <label for=\"httpproxyport\">HTTP代理监听端口</label>`
-            + `\n    <input readonly id=\"httpproxyport\" value=\"${httpProxyPort}\">`
-            + `\n  </div>`
-            + `\n  <div>`
+            + `\n  <fieldset><legend>切换HTTP代理监听地址</legend>`
+            + `\n    <form action=\"/api/toggle_loopback_listen\" method=\"post\">`
+            + `\n      <div>`
+            + `\n        <input type=\"submit\" value="切换HTTP代理监听地址" id="toggle_loopback_listen_btn">`
+            + `\n      </div>`
+            + `\n    </form>`
+            + `\n  </fieldset>`
             + `\n  <ul>`
+            + `\n  <li>`
+            + `\n    本机（<code>127.0.0.1</code>）<b>之外</b>的地址连接HTTP代理时，<b>将会启用用户名密码验证</b>。`
+            + `\n  </li>`
             + `\n  <li>`
             + `\n    若要${aHref("从官服下载个人账号数据", "#dumpuserdata", false)}，可以使用下面的${aHref("Bilibili登录", "#bilibilipwdauth", false)}界面，也可以使用Clash让游戏客户端通过上述HTTP代理联网；`
             + `\n  </li>`
@@ -910,10 +971,13 @@ export class controlInterface {
             + `\n    <br><i>（${aHref("离线补丁版", "#verbosedesc", false)}游戏客户端则不需要安装CA证书）</i>`
             + `\n  </div>`
             + `\n  </fieldset>`
-            + `\n  <fieldset>`
+            + `\n  <fieldset id="clash_config_download">`
             + `\n  <legend>下载Clash配置文件</legend>`
             + `\n  <div>`
-            + `\n    ${aHref(`magirecolocal${httpProxyPort}.yaml`, `/magirecolocal${httpProxyPort}.yaml`)}`
+            + `\n  ${httpProxyAddr === "127.0.0.1" ? "" : `${this.addrSelectHtml}`}`
+            + `\n    ${httpProxyAddr === "127.0.0.1"
+                ? aHref(`magirecolocal_${httpProxyAddr}_${httpProxyPort}.yaml`, `/magirecolocal_${httpProxyAddr}_${httpProxyPort}.yaml`)
+                : aHref("（请先选择一个本机IP地址）", "#local_ipv4_addr_list", false, "clash_yaml_link")}`
             + `\n    <br><i>文件名中含有HTTP代理端口号，请注意核对端口号是否与上面显示的一致。</i>`
             + `\n  </div>`
             + `\n  </fieldset>`
@@ -1378,6 +1442,33 @@ export class controlInterface {
             importStatus: importStatus,
             importStatusStyle: importStatusStyle,
         }
+    }
+
+    private get addrSelectHtml(): string {
+        let addrList: Array<string> = [];
+        try {
+            const interfaces = os.networkInterfaces();
+            Object.values(interfaces).forEach((array) => array?.filter((info) => info.family === "IPv4")
+                .forEach((addr) => addrList.push(addr.address)));
+        } catch (e) {
+            console.error(e);
+        }
+        const max = 10;
+        if (addrList.length > max) {
+            console.error(`addrList.length=[${addrList.length}] > ${max}`);
+            let list = addrList;
+            addrList = [];
+            for (let i = 0; i < max; i++) addrList.push(list[i]);
+        }
+        return `<fieldset id=\"local_ipv4_addr_list\"><legend>本机IP地址列表</legend>\n`
+            + `${addrList.map(
+                (addr) =>
+                    `<div><input type=\"radio\" name=\"local_ipv4_addr\" id=\"local_ipv4_addr_${addr.replace(/\./g, "_")}\"`
+                    + ` onclick=\"localIPv4Select(this);\">`
+                    + `<label for=\"local_ipv4_addr_${addr.replace(/\./g, "_")}\">${addr}</label>`
+                    + `</div>`
+            ).join("\n")}\n`
+            + `</fieldset>`
     }
 
     private async sendResultAsync(res: http.ServerResponse<http.IncomingMessage> & { req: http.IncomingMessage },

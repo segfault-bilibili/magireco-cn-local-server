@@ -8,6 +8,8 @@ import * as userdataDump from "./userdata_dump";
 import * as path from "path";
 import * as fs from "fs";
 import * as fsPromises from "fs/promises";
+import * as crypto from "crypto";
+import { getRandomHex } from "./get_random_bytes";
 
 export type listenAddr = {
     port: number,
@@ -30,6 +32,9 @@ const persistParams: {
     mode: mode,
     autoOpenWeb: boolean,
     listenList: listenList,
+    lastHttpProxy: listenAddr,
+    httpProxyUsername: string,
+    httpProxyPassword?: string,
     upstreamProxy: listenAddr,
     upstreamProxyEnabled: boolean,
     upstreamProxyCACert?: string,
@@ -54,6 +59,9 @@ const persistParams: {
         localServer: { port: 10002, host: "127.0.0.1" },
         localHttp1Server: { port: 10003, host: "127.0.0.1" },
     },
+    lastHttpProxy: { port: 10001, host: "0.0.0.0" },
+    httpProxyUsername: "mgrc",
+    httpProxyPassword: undefined,
     upstreamProxy: {
         //HTTP
         host: "127.0.0.1",
@@ -202,9 +210,14 @@ export class params {
     get mode(): mode { return this.mapData.get("mode"); }
     get autoOpenWeb(): boolean { return this.mapData.get("autoOpenWeb"); }
     get listenList(): listenList { return this.mapData.get("listenList"); }
-    get clashYaml(): string {
-        const host = this.listenList.httpProxy.host;
+    get lastHttpProxy(): listenAddr { return this.mapData.get("lastHttpProxy"); }
+    get httpProxyUsername(): string { return this.mapData.get("httpProxyUsername"); }
+    get httpProxyPassword(): string { return this.mapData.get("httpProxyPassword"); }
+    getClashYaml(host?: string): string {
+        if (host == null) host = this.listenList.httpProxy.host;
         const port = this.listenList.httpProxy.port;
+        const username = this.httpProxyUsername;
+        const password = this.httpProxyPassword;
         return `mode: global`
             + `\n`
             + `\nproxies:`
@@ -212,6 +225,8 @@ export class params {
             + `\n   type: http`
             + `\n   server: ${host}`
             + `\n   port: ${port}`
+            + `\n   username: "${username}"`
+            + `\n   password: "${password}"`
     }
     get upstreamProxy(): listenAddr { return this.mapData.get("upstreamProxy"); }
     get upstreamProxyEnabled(): boolean { return this.mapData.get("upstreamProxyEnabled"); }
@@ -289,6 +304,12 @@ export class params {
             switch (key) {
                 case "listenList":
                     if (!isSaving) val = await params.avoidUsedPorts(val);
+                    break;
+                case "httpProxyUsername":
+                    val = "mgrc";
+                    break;
+                case "httpProxyPassword":
+                    if (val == null) val = getRandomHex(32);
                     break;
                 case "CACertAndKey":
                     if (val == null || val.cert == null || val.key == null)
