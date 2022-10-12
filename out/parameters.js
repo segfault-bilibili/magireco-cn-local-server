@@ -11,6 +11,7 @@ const userdataDump = require("./userdata_dump");
 const path = require("path");
 const fs = require("fs");
 const fsPromises = require("fs/promises");
+const http = require("http");
 const get_random_bytes_1 = require("./get_random_bytes");
 var mode;
 (function (mode) {
@@ -24,7 +25,6 @@ const persistParams = {
         controlInterface: { port: 10000, host: "127.0.0.1" },
         httpProxy: { port: 10001, host: "127.0.0.1" },
         localServer: { port: 10002, host: "127.0.0.1" },
-        localHttp1Server: { port: 10003, host: "127.0.0.1" },
     },
     lastHttpProxy: { port: 10001, host: "0.0.0.0" },
     httpProxyUsername: "mgrc",
@@ -367,14 +367,49 @@ class params {
                         port++;
                     } while (portInUse.get(port) != null);
             }
+            if (name === "controlInterface" && port != list[name].port) {
+                if ((await this.checkIsAliveMarker(host, list[name].port))) {
+                    console.error(`已有本地服务器在运行`);
+                    throw new Error(`another instance is running`);
+                }
+            }
             list[name] = { port: port, host: host };
             portInUse.set(port, name);
         }
         return list;
     }
+    static checkIsAliveMarker(host, port) {
+        return new Promise((resolve, reject) => {
+            http.request({
+                host: host,
+                port: port,
+                path: `/api/is_alive_${params.isAliveReqMarker}`,
+                headers: {
+                    ["Referer"]: new URL(`http://${host}:${port}/`).href,
+                }
+            }, (resp) => {
+                resp.on('error', (err) => reject(err));
+                let buffers = [];
+                resp.on('data', (chunk) => {
+                    if (buffers.reduce((prev, curr) => prev + curr.byteLength, 0) > 128) {
+                        resp.destroy();
+                        resolve(false);
+                    }
+                    else
+                        buffers.push(chunk);
+                });
+                resp.on('end', () => {
+                    let respBody = Buffer.concat(buffers).toString('utf-8');
+                    resolve(respBody === this.isAliveRespMarker);
+                });
+            }).on('error', (err) => reject(err)).end();
+        });
+    }
 }
 exports.params = params;
 params.VERBOSE = false;
+params.isAliveReqMarker = "2f53b99c5bc307e9e4005ea1087eeca0";
+params.isAliveRespMarker = "614cb4bf76a743055e924a0a3073f850";
 params.defaultPath = path.join(".", "params.json");
 params.overridesDBPath = path.join(".", "overrides.json");
 // Author: Stefnotch

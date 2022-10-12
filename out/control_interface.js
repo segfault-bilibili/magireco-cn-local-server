@@ -59,6 +59,10 @@ class controlInterface {
                 if (apiName !== "get_status")
                     console.log(`controlInterface received api request [${apiName}]`);
                 switch (apiName) {
+                    case `is_alive_${parameters.params.isAliveReqMarker}`:
+                        res.writeHead(200, "OK", { ["Content-Type"]: "text/plain" });
+                        res.end(`${parameters.params.isAliveRespMarker}`);
+                        break;
                     case "get_status":
                         try {
                             let gameUid = this.getGameUid(this.params.openIdTicket);
@@ -110,12 +114,13 @@ class controlInterface {
                         try {
                             await this.getParsedPostData(req);
                             let listenList = JSON.parse(JSON.stringify(this.params.listenList));
+                            let port = listenList.httpProxy.port;
                             let curr = {
-                                port: listenList.httpProxy.port,
+                                port: port,
                                 host: listenList.httpProxy.host,
                             };
                             let last = {
-                                port: this.params.lastHttpProxy.port,
+                                port: port,
                                 host: this.params.lastHttpProxy.host,
                             };
                             listenList.httpProxy = last;
@@ -969,7 +974,7 @@ class controlInterface {
             + `\n  <fieldset><legend>切换HTTP代理监听地址</legend>`
             + `\n    <form action=\"/api/toggle_loopback_listen\" method=\"post\">`
             + `\n      <div>`
-            + `\n        <input type=\"submit\" value="切换HTTP代理监听地址" id="toggle_loopback_listen_btn">`
+            + `\n        <input type=\"submit\" value="${this.isTogglingLoopbackListen ? "正在" : ""}切换HTTP代理监听地址" id="toggle_loopback_listen_btn" ${this.isTogglingLoopbackListen ? "disabled" : ""}>`
             + `\n      </div>`
             + `\n    </form>`
             + `\n  </fieldset>`

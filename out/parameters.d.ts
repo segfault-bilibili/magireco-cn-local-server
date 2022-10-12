@@ -9,7 +9,6 @@ export declare type listenList = Record<string, listenAddr> & {
     controlInterface: listenAddr;
     httpProxy: listenAddr;
     localServer: listenAddr;
-    localHttp1Server: listenAddr;
 };
 export declare enum mode {
     ONLINE = 1,
@@ -23,6 +22,8 @@ export declare type overrides = {
 };
 export declare class params {
     static VERBOSE: boolean;
+    static readonly isAliveReqMarker = "2f53b99c5bc307e9e4005ea1087eeca0";
+    static readonly isAliveRespMarker = "614cb4bf76a743055e924a0a3073f850";
     static readonly defaultPath: string;
     private path;
     private mapData;
@@ -78,6 +79,7 @@ export declare class params {
     getSupportH2(url: URL): boolean | undefined;
     setSupportH2(url: URL, supportH2: boolean | null): void;
     private static avoidUsedPorts;
+    private static checkIsAliveMarker;
 }
 export declare function replacer(key: any, value: any): any;
 export declare function reviver(key: any, value: any): any;

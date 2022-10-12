@@ -44,7 +44,6 @@ export interface hook {
 export declare class localServer {
     private readonly params;
     private readonly http2SecureServer;
-    private readonly http1TlsServer;
     private readonly certGen;
     private readonly openSess;
     private readonly pendingSess;

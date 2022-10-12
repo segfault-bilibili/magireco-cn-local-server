@@ -4,11 +4,16 @@ exports.httpProxy = void 0;
 const net = require("net");
 const http = require("http");
 const parameters = require("./parameters");
-const localServer = require("./local_server");
 class httpProxy {
     constructor(params) {
         this.httpServer = this.createHttpServer(params);
         this.params = params;
+        this.socketSet = new Set();
+        this.blockedList = [
+            /^line\d-log\.biligame\.net$/,
+            /^p\.biligame\.com$/,
+            /^api\.biligame\.net$/,
+        ];
     }
     createHttpServer(params) {
         const httpServer = http.createServer((req, res) => {
@@ -28,6 +33,8 @@ class httpProxy {
                     return;
                 }
             }
+            this.socketSet.add(socket);
+            socket.on('close', () => this.socketSet.delete(socket));
             if (req.url == null) {
                 console.error(`Empty URL in proxy request from ${socket.remoteAddress}:${socket.remotePort}`);
                 req.destroy();
@@ -51,53 +58,16 @@ class httpProxy {
             }
             let port = parseInt(matched[0].match(/\d+$/)[0]);
             let host = req.url.substring(0, req.url.length - matched[0].length);
-            const localH2Host = this.params.listenList.localServer.host;
-            const localH2Port = this.params.listenList.localServer.port;
-            const localH1Host = this.params.listenList.localHttp1Server.host;
-            const localH1Port = this.params.listenList.localHttp1Server.port;
-            let isLocalH2 = port == localH2Port && host == localH2Host;
-            let isLocalH1 = port == localH1Port && host == localH1Host;
+            if (this.blockedList.find((pattern) => host.match(pattern))) {
+                socket.destroy();
+                return;
+            }
             let isControlInterface = host.match(/^(|www\.)magireco\.local$/) ? true : false;
-            if (port == 443 || isLocalH2 || isLocalH1) {
-                //probe supportH2 (if unprobed) first
-                const authorityURL = new URL(`https://${host}:${port}`);
-                let supportH2;
-                if (isLocalH2)
-                    supportH2 = true; //skip probing because getTlsSocketAsync disallows conneting to local
-                else if (isLocalH1)
-                    supportH2 = false; //same as above, skip probing
-                else if (isControlInterface)
-                    supportH2 = false;
-                else {
-                    supportH2 = this.params.getSupportH2(authorityURL);
-                    if (supportH2 == null)
-                        try {
-                            if (parameters.params.VERBOSE)
-                                console.log(`probe supportH2: [${authorityURL}] ...`);
-                            const alpn = "h2";
-                            let probeTlsSocket = await localServer.localServer.getTlsSocketAsync(this.params, false, authorityURL, alpn, host);
-                            probeTlsSocket.on('error', (e) => {
-                                console.error(`probeTlsSocket error ${logMsg}`, e);
-                            });
-                            supportH2 = probeTlsSocket.alpnProtocol === alpn;
-                            if (parameters.params.VERBOSE)
-                                console.log(`probe result: [${authorityURL}] supportH2=${supportH2}`);
-                            this.params.setSupportH2(authorityURL, supportH2);
-                            probeTlsSocket.destroy();
-                        }
-                        catch (e) {
-                            console.error(e);
-                            supportH2 = undefined;
-                        }
-                }
-                //probe finished
-                if (supportH2 == null) {
-                    console.error(`cannot probe supportH2: [${authorityURL}]`);
-                    supportH2 = true;
-                }
+            if (port == 443 || isControlInterface) {
                 //pass to local server, which will then pass to upstream HTTP CONNECT proxy if possible
-                let localPort = supportH2 ? localH2Port : localH1Port;
-                let localHost = supportH2 ? localH2Host : localH1Host;
+                let key = isControlInterface ? "controlInterface" : "localServer";
+                let localPort = this.params.listenList[key].port;
+                let localHost = this.params.listenList[key].host;
                 let conn = net.connect(localPort, localHost, () => {
                     socket.write("HTTP/1.1 200 Connection Established\r\n\r\n", () => {
                         conn.pipe(socket);
@@ -129,8 +99,13 @@ class httpProxy {
     async close() {
         await new Promise((resolve) => {
             this.httpServer.on('close', () => resolve());
-            this.httpServer.close();
             this.httpServer.closeAllConnections();
+            this.socketSet.forEach((val) => { try {
+                val.destroy();
+            }
+            catch (e) { } });
+            this.socketSet.clear();
+            this.httpServer.close();
         });
     }
     async restart() {
