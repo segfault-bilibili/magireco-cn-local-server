@@ -67,7 +67,6 @@ export interface hook {
 export class localServer {
     private readonly params: parameters.params;
     private readonly http2SecureServer: http2.Http2SecureServer;
-    private readonly http1TlsServer: tls.Server;
     private readonly certGen: certGenerator.certGen;
     private readonly openSess: Map<string, http2.ClientHttp2Session>;
     private readonly pendingSess: Map<string, Promise<http2.ClientHttp2Session>>;
@@ -616,42 +615,9 @@ export class localServer {
             console.log(`localServer upstream proxy disabled`);
         }
 
-        const http1TlsServerOptions: tls.TlsOptions = certGen.getCertAndKey(params.listenList.localHttp1Server.host);
-        http1TlsServerOptions.SNICallback = SNICallback;
-        http1TlsServerOptions.ALPNProtocols = ["http/1.1"];
-        const http1TlsServer = tls.createServer(http1TlsServerOptions);
-
-        http1TlsServer.on('secureConnection', (tlsSocket) => {
-            let servername: string | undefined = (tlsSocket as any).servername;
-            let alpn = tlsSocket.alpnProtocol;
-            tlsSocket.on('error', (err) => {
-                console.error(`http1TlsServer tlsSocket error sni=[${servername}] alpn=[${alpn}]`, err);
-            });
-            let options: tls.ConnectionOptions = {
-                ca: this.params.CACerts,
-                host: http2ListenAddr.host,
-                port: http2ListenAddr.port,
-                ALPNProtocols: [],
-            }
-            if (typeof servername === 'string') options.servername = servername;
-            if (typeof alpn === 'string') (options.ALPNProtocols as Array<string>).push(alpn);
-            let h1CompatH2TlsSocket = tls.connect(options, () => {
-                if (parameters.params.VERBOSE) console.log(`sni=[${servername}] alpn=[${alpn}] piped to h1-compatible h2 local server`);
-                tlsSocket.pipe(h1CompatH2TlsSocket);
-                h1CompatH2TlsSocket.pipe(tlsSocket);
-            }).on('error', (err) => {
-                console.error(`http1TlsServer h1CompatH2TlsSocket error sni=[${servername}] alpn=[${alpn}]`, err);
-            })
-        });
-
-        const http1ListenAddr = params.listenList.localHttp1Server;
-        http1TlsServer.listen(http1ListenAddr.port, http1ListenAddr.host);
-        console.log(`localHttp1Server listening on [${http1ListenAddr.host}:${http1ListenAddr.port}]`);
-
         this.params = params;
         this.certGen = certGen;
         this.http2SecureServer = http2SecureServer;
-        this.http1TlsServer = http1TlsServer;
         this.openSess = new Map<string, http2.ClientHttp2Session>();
         this.pendingSess = new Map<string, Promise<http2.ClientHttp2Session>>();
         this.hooks = [];
@@ -659,7 +625,7 @@ export class localServer {
     async close(): Promise<void> {
         this.openSess.forEach((val, key) => val.destroyed || val.destroy());
         this.openSess.clear();
-        await Promise.allSettled([this.http2SecureServer, this.http1TlsServer].map((server) => {
+        await Promise.allSettled([this.http2SecureServer].map((server) => {
             return new Promise<void>((resolve) => {
                 server.on('close', () => resolve());
                 server.close();

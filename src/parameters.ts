@@ -20,7 +20,6 @@ export type listenList = Record<string, listenAddr> & {
     controlInterface: listenAddr,
     httpProxy: listenAddr,
     localServer: listenAddr,
-    localHttp1Server: listenAddr,
 }
 
 export enum mode {
@@ -57,7 +56,6 @@ const persistParams: {
         controlInterface: { port: 10000, host: "127.0.0.1" },
         httpProxy: { port: 10001, host: "127.0.0.1" },
         localServer: { port: 10002, host: "127.0.0.1" },
-        localHttp1Server: { port: 10003, host: "127.0.0.1" },
     },
     lastHttpProxy: { port: 10001, host: "0.0.0.0" },
     httpProxyUsername: "mgrc",
