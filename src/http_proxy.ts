@@ -6,10 +6,12 @@ import * as localServer from "./local_server";
 export class httpProxy {
     private readonly params: parameters.params;
     private httpServer: http.Server;
+    private readonly socketSet: Set<net.Socket>;
 
     constructor(params: parameters.params) {
         this.httpServer = this.createHttpServer(params);
         this.params = params;
+        this.socketSet = new Set<net.Socket>();
     }
     private createHttpServer(params: parameters.params): http.Server {
         const httpServer = http.createServer((req, res) => {
@@ -27,6 +29,9 @@ export class httpProxy {
                     return;
                 }
             }
+
+            this.socketSet.add(socket);
+            socket.on('close', () => this.socketSet.delete(socket));
 
             if (req.url == null) {
                 console.error(`Empty URL in proxy request from ${socket.remoteAddress}:${socket.remotePort}`);
@@ -125,8 +130,10 @@ export class httpProxy {
     async close(): Promise<void> {
         await new Promise<void>((resolve) => {
             this.httpServer.on('close', () => resolve());
-            this.httpServer.close();
             this.httpServer.closeAllConnections();
+            this.socketSet.forEach((val) => { try { val.destroy(); } catch (e) { } });
+            this.socketSet.clear();
+            this.httpServer.close();
         });
     }
     async restart(): Promise<void> {

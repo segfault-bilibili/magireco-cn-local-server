@@ -946,7 +946,7 @@ export class controlInterface {
             + `\n  <fieldset><legend>切换HTTP代理监听地址</legend>`
             + `\n    <form action=\"/api/toggle_loopback_listen\" method=\"post\">`
             + `\n      <div>`
-            + `\n        <input type=\"submit\" value="切换HTTP代理监听地址" id="toggle_loopback_listen_btn">`
+            + `\n        <input type=\"submit\" value="${this.isTogglingLoopbackListen ? "正在" : ""}切换HTTP代理监听地址" id="toggle_loopback_listen_btn" ${this.isTogglingLoopbackListen ? "disabled" : ""}>`
             + `\n      </div>`
             + `\n    </form>`
             + `\n  </fieldset>`
