@@ -58,6 +58,5 @@ export declare class fakeMagirecoProdRespHook implements hook {
     private checkForMissing;
     private patchMainQuest;
     private patchCharaListTop;
-    private getRandomHex;
     private getRandomGuid;
 }

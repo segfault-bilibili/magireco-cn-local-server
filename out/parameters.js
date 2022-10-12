@@ -11,6 +11,7 @@ const userdataDump = require("./userdata_dump");
 const path = require("path");
 const fs = require("fs");
 const fsPromises = require("fs/promises");
+const get_random_bytes_1 = require("./get_random_bytes");
 var mode;
 (function (mode) {
     mode[mode["ONLINE"] = 1] = "ONLINE";
@@ -25,6 +26,9 @@ const persistParams = {
         localServer: { port: 10002, host: "127.0.0.1" },
         localHttp1Server: { port: 10003, host: "127.0.0.1" },
     },
+    lastHttpProxy: { port: 10001, host: "0.0.0.0" },
+    httpProxyUsername: "mgrc",
+    httpProxyPassword: undefined,
     upstreamProxy: {
         //HTTP
         host: "127.0.0.1",
@@ -208,16 +212,24 @@ class params {
     get mode() { return this.mapData.get("mode"); }
     get autoOpenWeb() { return this.mapData.get("autoOpenWeb"); }
     get listenList() { return this.mapData.get("listenList"); }
-    get clashYaml() {
-        const host = this.listenList.httpProxy.host;
+    get lastHttpProxy() { return this.mapData.get("lastHttpProxy"); }
+    get httpProxyUsername() { return this.mapData.get("httpProxyUsername"); }
+    get httpProxyPassword() { return this.mapData.get("httpProxyPassword"); }
+    getClashYaml(host) {
+        if (host == null)
+            host = this.listenList.httpProxy.host;
         const port = this.listenList.httpProxy.port;
+        const username = this.httpProxyUsername;
+        const password = this.httpProxyPassword;
         return `mode: global`
             + `\n`
             + `\nproxies:`
             + `\n - name: "magirecolocal${port}"`
             + `\n   type: http`
             + `\n   server: ${host}`
-            + `\n   port: ${port}`;
+            + `\n   port: ${port}`
+            + `\n   username: "${username}"`
+            + `\n   password: "${password}"`;
     }
     get upstreamProxy() { return this.mapData.get("upstreamProxy"); }
     get upstreamProxyEnabled() { return this.mapData.get("upstreamProxyEnabled"); }
@@ -260,6 +272,13 @@ class params {
                 case "listenList":
                     if (!isSaving)
                         val = await params.avoidUsedPorts(val);
+                    break;
+                case "httpProxyUsername":
+                    val = "mgrc";
+                    break;
+                case "httpProxyPassword":
+                    if (val == null)
+                        val = (0, get_random_bytes_1.getRandomHex)(32);
                     break;
                 case "CACertAndKey":
                     if (val == null || val.cert == null || val.key == null)

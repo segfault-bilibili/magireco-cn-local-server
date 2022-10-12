@@ -45,7 +45,10 @@ export declare class params {
     get mode(): mode;
     get autoOpenWeb(): boolean;
     get listenList(): listenList;
-    get clashYaml(): string;
+    get lastHttpProxy(): listenAddr;
+    get httpProxyUsername(): string;
+    get httpProxyPassword(): string;
+    getClashYaml(host?: string): string;
     get upstreamProxy(): listenAddr;
     get upstreamProxyEnabled(): boolean;
     get upstreamProxyCACert(): string | undefined | null;

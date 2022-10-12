@@ -341,6 +341,7 @@ class userdataDmp {
         let convertedStr = JSON.stringify(converted, parameters.replacer);
         fs.writeFileSync(filePath, convertedStr);
         this._lastDump = converted;
+        this.params.lastDownloadedFileName = this.userdataDumpFileName;
         console.log(`imported dump uid=[${this._lastDump.uid}] timestamp=[${(_a = this.lastDump) === null || _a === void 0 ? void 0 : _a.timestamp}]`);
         this._isImporting = false;
     }

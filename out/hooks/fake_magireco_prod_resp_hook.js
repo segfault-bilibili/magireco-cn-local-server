@@ -8,6 +8,7 @@ const parameters = require("../parameters");
 const userdataDump = require("../userdata_dump");
 const bsgamesdk_pwd_authenticate_1 = require("../bsgamesdk-pwd-authenticate");
 const missing_data_1 = require("./etc/missing_data");
+const get_random_bytes_1 = require("../get_random_bytes");
 class fakeMagirecoProdRespHook {
     constructor(params, crawler, dmp) {
         this.pageKeys = {
@@ -738,10 +739,10 @@ class fakeMagirecoProdRespHook {
     }
     fakeBsgamesdkCipherResp() {
         const obj = {
-            requestId: `${this.getRandomHex(32)}`,
+            requestId: `${(0, get_random_bytes_1.getRandomHex)(32)}`,
             timestamp: `${new Date().getTime()}`,
             code: 0,
-            hash: `${this.getRandomHex(16)}`,
+            hash: `${(0, get_random_bytes_1.getRandomHex)(16)}`,
             cipher_key: "-----BEGIN PUBLIC KEY-----\nMIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDjb4V7EidX/ym28t2ybo0U6t0n\n6p4ej8VjqKHg100va6jkNbNTrLQqMCQCAYtXMXXp2Fwkk6WR+12N9zknLjf+C9sx\n/+l48mjUU8RqahiFD1XT/u2e0m2EN029OhCgkHx3Fc/KlFSIbak93EH/XlYis0w+\nXl69GV6klzgxW6d2xQIDAQAB\n-----END PUBLIC KEY-----",
             server_message: "",
         };
@@ -749,10 +750,10 @@ class fakeMagirecoProdRespHook {
     }
     fakeBsgamesdkOtpSendResp() {
         const obj = {
-            requestId: `${this.getRandomHex(32)}`,
+            requestId: `${(0, get_random_bytes_1.getRandomHex)(32)}`,
             timestamp: `${new Date().getTime()}`,
             code: 0,
-            captcha_key: `${this.getRandomHex(32)}`,
+            captcha_key: `${(0, get_random_bytes_1.getRandomHex)(32)}`,
             verify_tkt: null,
             verify_tkt_type: null,
             server_message: "",
@@ -773,7 +774,7 @@ class fakeMagirecoProdRespHook {
         if (user == null)
             return;
         const loginName = user["loginName"];
-        const requestId = this.getRandomHex(32);
+        const requestId = (0, get_random_bytes_1.getRandomHex)(32);
         const tsStr = `${new Date().getTime()}`;
         const expires = Number(tsStr) + 30 * 24 * 60 * 60 * 1000;
         const h5_paid_download = 1;
@@ -788,7 +789,7 @@ class fakeMagirecoProdRespHook {
             h5_paid_download: h5_paid_download,
             h5_paid_download_sign: `${h5_paid_download_sign}`,
             code: 0,
-            access_key: `${this.getRandomHex(32)}_sh`,
+            access_key: `${(0, get_random_bytes_1.getRandomHex)(32)}_sh`,
             expires: expires,
             uid: uid,
             face: "http://static.hdslb.com/images/member/noface.gif",
@@ -1570,9 +1571,6 @@ class fakeMagirecoProdRespHook {
             }
         }
         return respBodyObj;
-    }
-    getRandomHex(charCount) {
-        return crypto.randomBytes(Math.trunc((charCount + 1) / 2)).toString('hex').substring(0, charCount);
     }
     getRandomGuid() {
         return [8, 4, 4, 4, 12].map((len) => crypto.randomBytes(Math.trunc((len + 1) / 2))
