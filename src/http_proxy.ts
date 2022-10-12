@@ -8,10 +8,17 @@ export class httpProxy {
     private httpServer: http.Server;
     private readonly socketSet: Set<net.Socket>;
 
+    private readonly blockedList: Array<RegExp | string>;
+
     constructor(params: parameters.params) {
         this.httpServer = this.createHttpServer(params);
         this.params = params;
         this.socketSet = new Set<net.Socket>();
+        this.blockedList = [
+            /^line\d-log\.biligame\.net$/,
+            /^p\.biligame\.com$/,
+            /^api\.biligame\.net$/,
+        ];
     }
     private createHttpServer(params: parameters.params): http.Server {
         const httpServer = http.createServer((req, res) => {
@@ -56,6 +63,12 @@ export class httpProxy {
             }
             let port = parseInt((matched[0].match(/\d+$/) as RegExpMatchArray)[0]);
             let host = req.url.substring(0, req.url.length - matched[0].length);
+
+
+            if (this.blockedList.find((pattern) => host.match(pattern))) {
+                socket.destroy();
+                return;
+            }
 
             let isControlInterface = host.match(/^(|www\.)magireco\.local$/) ? true : false;
             if (port == 443 || isControlInterface) {
