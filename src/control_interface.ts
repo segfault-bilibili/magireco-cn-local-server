@@ -121,7 +121,7 @@ export class controlInterface {
                 if (apiName !== "get_status") console.log(`controlInterface received api request [${apiName}]`);
                 switch (apiName) {
                     case `is_alive_${parameters.params.isAliveReqMarker}`:
-                        res.writeHead(200, "OK", {["Content-Type"]: "text/plain"});
+                        res.writeHead(200, "OK", { ["Content-Type"]: "text/plain" });
                         res.end(`${parameters.params.isAliveRespMarker}`);
                         break;
                     case "get_status":
@@ -172,12 +172,13 @@ export class controlInterface {
                         try {
                             await this.getParsedPostData(req);
                             let listenList: parameters.listenList = JSON.parse(JSON.stringify(this.params.listenList));
+                            let port = listenList.httpProxy.port;
                             let curr: parameters.listenAddr = {
-                                port: listenList.httpProxy.port,
+                                port: port,
                                 host: listenList.httpProxy.host,
                             }
                             let last: parameters.listenAddr = {
-                                port: this.params.lastHttpProxy.port,
+                                port: port,
                                 host: this.params.lastHttpProxy.host,
                             }
                             listenList.httpProxy = last;
