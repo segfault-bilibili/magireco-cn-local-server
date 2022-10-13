@@ -56,6 +56,7 @@ export class fakeMagirecoProdRespHook implements hook {
         }, this.overrides as any);
     }
     setOverrideValue(key: string, val: string | number | Map<number, Map<string, string | number>> | undefined): void {
+        console.log(`setOverrideValue ... key=[${key}] val`, val);
         const keysPop = key.split(".");
         const lastKey = keysPop.pop();
         if (lastKey == null) return;
@@ -67,7 +68,7 @@ export class fakeMagirecoProdRespHook implements hook {
         if (obj == null) return;
         if (val == null) delete obj[lastKey];
         else obj[lastKey] = val;
-        console.log(`setOverrideValue key=[${key}] val`, val);
+        console.log(`setOverrideValue done key=[${key}] val`, val);
         this.params.saveOverrideDB();
     }
     get bgItemId(): string | undefined { return this.getOverrideValue("gameUser.bgItemId"); }
