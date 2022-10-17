@@ -319,6 +319,7 @@ export class fakeMagirecoProdRespHook implements hook {
                                 if (apiName === "page/CharaListTop") {
                                     respBodyObj = this.patchCharaListTop(apiName, respBodyObj);
                                 }
+                                this.fixCurrentTime(respBodyObj);
                                 body = Buffer.from(JSON.stringify(respBodyObj), 'utf-8');
                             }
                         }
@@ -654,6 +655,10 @@ export class fakeMagirecoProdRespHook implements hook {
         return `${year}/${monthDate.join("/")} ${time.join(":")}`;
     }
 
+    private fixCurrentTime(respBodyObj: any): void {
+        if (typeof respBodyObj?.currentTime === 'string') respBodyObj.currentTime = this.getDateTimeString();
+    }
+
     private fakeMyPage(apiName: string): Buffer | undefined {
         if (apiName !== "page/MyPage") {
             console.error(`fakeMyPage invalid apiName=[${apiName}]`);
@@ -694,6 +699,23 @@ export class fakeMagirecoProdRespHook implements hook {
             this.checkForMissing(replica.userSectionList, this.missingData.userSectionList, "sectionId");
             this.checkForMissing(replica.userQuestBattleList, this.missingData.userQuestBattleList, "questBattleId");
             this.checkForMissing(replica.userQuestAdventureList, this.missingData.userQuestAdventureList, "adventureId");
+        }
+        // fix currentTime
+        const currentTime = replica.currentTime = this.getDateTimeString();
+        // keep AP and BP below max
+        const userStatusList = replica?.userStatusList;
+        if (Array.isArray(userStatusList)) {
+            const filteredUserStatusList = userStatusList.filter((status) => status?.userId === userId);
+            const statusIds = ["ACP", "BTP"];
+            statusIds.forEach((statusId) => {
+                const max = filteredUserStatusList.find((status) => status.statusId === `MAX_${statusId}`)?.point;
+                if (typeof max !== 'number' || isNaN(max)) return;
+                const status = filteredUserStatusList.find((status) => status.statusId === statusId);
+                if (status != null) {
+                    if (typeof status.point === 'number') status.point = Math.trunc(max * 0.8);
+                    if (typeof status.checkedAt === 'string') status.checkedAt = currentTime;
+                }
+            });
         }
         // overrides
         const userItemList = replica.userItemList;
@@ -952,11 +974,13 @@ export class fakeMagirecoProdRespHook implements hook {
         if (pageNum == 1) {
             const respBodyObj = userdataDump.getUnBrBody(lastDump.httpResp.get, this.pageKeys[apiName]);
             if (respBodyObj == null) return;
+            this.fixCurrentTime(respBodyObj);
             return Buffer.from(JSON.stringify(respBodyObj), 'utf-8');
         } else {
             const respBodyObj = userdataDump.unBrBase64(
                 lastDump.httpResp.post.get(urlBase)?.get(JSON.stringify({ [type]: `${pageNum}` }))?.brBody);
             if (respBodyObj == null) return Buffer.from(this.fakeErrorResp("错误", `找不到指定${type}`), 'utf-8');
+            this.fixCurrentTime(respBodyObj);
             return Buffer.from(JSON.stringify(respBodyObj), 'utf-8');
         }
     }
@@ -987,6 +1011,9 @@ export class fakeMagirecoProdRespHook implements hook {
             console.error(`fakeGuidResult userId=[${userId}] not found`);
             return Buffer.from(this.fakeErrorResp("错误", "找不到此项数据"), 'utf-8');
         }
+
+        if (respBodyObj.currentTime != null) console.warn(`fakeGuidResult apiName=[${apiName}] typeof respBodyObj.currentTime`,
+            respBodyObj.currentTime);
 
         return Buffer.from(JSON.stringify(respBodyObj), 'utf-8');
     }
