@@ -634,16 +634,16 @@ export class fakeMagirecoProdRespHook implements hook {
         return Buffer.from(JSON.stringify(obj));
     }
     private getDateTimeString(): string {
-        const d = new Date();
-        let year = String(d.getFullYear());
+        const d = new Date(Date.now() + 8 * 60 * 60 * 1000);
+        let year = String(d.getUTCFullYear());
         let monthDate = [
-            String(d.getMonth() + 1),
-            String(d.getDate()),
+            String(d.getUTCMonth() + 1),
+            String(d.getUTCDate()),
         ];
         let time = [
-            String(d.getHours()),
-            String(d.getMinutes()),
-            String(d.getSeconds()),
+            String(d.getUTCHours()),
+            String(d.getUTCMinutes()),
+            String(d.getUTCSeconds()),
         ];
         [monthDate, time].forEach((array) => {
             array.forEach((str, index) => {
