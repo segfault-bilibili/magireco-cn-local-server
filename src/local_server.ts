@@ -83,7 +83,8 @@ export class localServer {
 
         const http2ServerOptions: http2.SecureServerOptions = certGen.getCertAndKey(params.listenList.localServer.host);
         http2ServerOptions.SNICallback = SNICallback;
-        http2ServerOptions.allowHTTP1 = true;
+        http2ServerOptions.allowHTTP1 = false;
+        http2ServerOptions.ALPNProtocols = ["h2"];
         const http2SecureServer = http2.createSecureServer(http2ServerOptions, async (cliReq, cliRes) => {
             if (cliReq.httpVersionMajor !== 1) return;//handled in stream event
 
