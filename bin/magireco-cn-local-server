@@ -7,4 +7,8 @@ if (process.env.npm_package_version == null) {
     } catch (e) {}
 }
 
+for (const signal of ["SIGINT", "SIGTERM", "SIGQUIT"]) {
+    process.on(signal, () => process.exit());
+}
+
 require("../out/proxy_main.js");
