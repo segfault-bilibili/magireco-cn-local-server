@@ -25,11 +25,8 @@ export declare class fakeMagirecoProdRespHook implements hook {
     private missingData?;
     private get overrides();
     getOverrideValue(key: string): any;
-    setOverrideValue(key: string, val: string | number | Map<number, Map<string, string | number>> | undefined): void;
-    get bgItemId(): string | undefined;
-    set bgItemId(val: string | undefined);
-    get leaderId(): string | undefined;
-    set leaderId(val: string | undefined);
+    isOverriden(key: string): boolean;
+    setOverrideValue(key: string, val: string | number | Map<number, Map<string, string | number>> | undefined, reset?: boolean): void;
     constructor(params: parameters.params, crawler: staticResCrawler.crawler, dmp: userdataDump.userdataDmp);
     matchRequest(method?: string, url?: URL, httpVersion?: string, headers?: http.IncomingHttpHeaders | http2.IncomingHttpHeaders): fakeResponse | passOnRequest;
     onMatchedRequest(method?: string, url?: URL, httpVersion?: string, headers?: http.IncomingHttpHeaders | http2.IncomingHttpHeaders, reqBody?: string | Buffer): fakeResponse | passOnRequestBody;
@@ -40,6 +37,7 @@ export declare class fakeMagirecoProdRespHook implements hook {
     private fakeSystemLogin;
     private fakeEmptyResp;
     private getDateTimeString;
+    private fixCurrentTime;
     private fakeMyPage;
     private modifyGameUser;
     private getModifiedGameChara;

@@ -308,31 +308,44 @@ class fakeMagirecoProdRespHook {
             return prev[curr];
         }, this.overrides);
     }
-    setOverrideValue(key, val) {
-        const keysPop = key.split(".");
-        const lastKey = keysPop.pop();
+    isOverriden(key) {
+        const keysPopped = key.split(".");
+        const lastKey = keysPopped.pop();
+        const obj = keysPopped.reduce((prev, curr) => {
+            if (prev == null)
+                return;
+            if (!(curr in prev))
+                return;
+            return prev[curr];
+        }, this.overrides);
+        if (obj == null)
+            return false; // avoid crash
+        if (lastKey == null) {
+            console.error(`isOverriden key=[${key}] lastKey == null`);
+            throw new Error(`lastKey == null`);
+        }
+        return lastKey in obj;
+    }
+    setOverrideValue(key, val, reset = false) {
+        console.log(`setOverrideValue ... key=[${key}] val`, val);
+        const keysPopped = key.split(".");
+        const lastKey = keysPopped.pop();
         if (lastKey == null)
             return;
-        const obj = keysPop.reduce((prev, curr) => {
+        const obj = keysPopped.reduce((prev, curr) => {
             if (prev == null)
                 return;
             if (prev[curr] == null)
                 prev[curr] = {};
             return prev[curr];
         }, this.overrides);
-        if (obj == null)
-            return;
-        if (val == null)
+        if (val == null && reset)
             delete obj[lastKey];
         else
             obj[lastKey] = val;
-        console.log(`setOverrideValue key=[${key}] val`, val);
+        console.log(`setOverrideValue done key=[${key}] val`, val);
         this.params.saveOverrideDB();
     }
-    get bgItemId() { return this.getOverrideValue("gameUser.bgItemId"); }
-    set bgItemId(val) { this.setOverrideValue("gameUser.bgItemId", val); }
-    get leaderId() { return this.getOverrideValue("gameUser.leaderId"); }
-    set leaderId(val) { this.setOverrideValue("gameUser.leaderId", val); }
     // if matched, keep a copy of request/response data in memory
     matchRequest(method, url, httpVersion, headers) {
         const mode = this.params.mode;
@@ -535,6 +548,7 @@ class fakeMagirecoProdRespHook {
                                 if (apiName === "page/CharaListTop") {
                                     respBodyObj = this.patchCharaListTop(apiName, respBodyObj);
                                 }
+                                this.fixCurrentTime(respBodyObj);
                                 body = Buffer.from(JSON.stringify(respBodyObj), 'utf-8');
                             }
                         }
@@ -833,16 +847,16 @@ class fakeMagirecoProdRespHook {
         return Buffer.from(JSON.stringify(obj));
     }
     getDateTimeString() {
-        const d = new Date();
-        let year = String(d.getFullYear());
+        const d = new Date(Date.now() + 8 * 60 * 60 * 1000);
+        let year = String(d.getUTCFullYear());
         let monthDate = [
-            String(d.getMonth() + 1),
-            String(d.getDate()),
+            String(d.getUTCMonth() + 1),
+            String(d.getUTCDate()),
         ];
         let time = [
-            String(d.getHours()),
-            String(d.getMinutes()),
-            String(d.getSeconds()),
+            String(d.getUTCHours()),
+            String(d.getUTCMinutes()),
+            String(d.getUTCSeconds()),
         ];
         [monthDate, time].forEach((array) => {
             array.forEach((str, index) => {
@@ -852,6 +866,10 @@ class fakeMagirecoProdRespHook {
             });
         });
         return `${year}/${monthDate.join("/")} ${time.join(":")}`;
+    }
+    fixCurrentTime(respBodyObj) {
+        if (typeof (respBodyObj === null || respBodyObj === void 0 ? void 0 : respBodyObj.currentTime) === 'string')
+            respBodyObj.currentTime = this.getDateTimeString();
     }
     fakeMyPage(apiName) {
         var _a, _b;
@@ -896,13 +914,35 @@ class fakeMagirecoProdRespHook {
             this.checkForMissing(replica.userQuestBattleList, this.missingData.userQuestBattleList, "questBattleId");
             this.checkForMissing(replica.userQuestAdventureList, this.missingData.userQuestAdventureList, "adventureId");
         }
+        // fix currentTime
+        const currentTime = replica.currentTime = this.getDateTimeString();
+        // keep AP and BP below max
+        const userStatusList = replica === null || replica === void 0 ? void 0 : replica.userStatusList;
+        if (Array.isArray(userStatusList)) {
+            const filteredUserStatusList = userStatusList.filter((status) => (status === null || status === void 0 ? void 0 : status.userId) === userId);
+            const statusIds = ["ACP", "BTP"];
+            statusIds.forEach((statusId) => {
+                var _a;
+                const max = (_a = filteredUserStatusList.find((status) => status.statusId === `MAX_${statusId}`)) === null || _a === void 0 ? void 0 : _a.point;
+                if (typeof max !== 'number' || isNaN(max))
+                    return;
+                const status = filteredUserStatusList.find((status) => status.statusId === statusId);
+                if (status != null) {
+                    if (typeof status.point === 'number')
+                        status.point = Math.trunc(max * 0.8);
+                    if (typeof status.checkedAt === 'string')
+                        status.checkedAt = currentTime;
+                }
+            });
+        }
         // overrides
         const userItemList = replica.userItemList;
         if (userItemList != null && Array.isArray(userItemList)
             && replicaGameUser != null) {
             // setBackground
-            const newBgItemId = this.bgItemId;
-            if (newBgItemId != null && typeof newBgItemId === "string") {
+            const bgItemIdKey = "gameUser.bgItemId";
+            const newBgItemId = this.getOverrideValue(bgItemIdKey);
+            if (typeof newBgItemId === "string") {
                 const foundBgItem = (_b = userItemList.find((itemInfo) => (itemInfo === null || itemInfo === void 0 ? void 0 : itemInfo.itemId) === newBgItemId)) === null || _b === void 0 ? void 0 : _b.item;
                 if (foundBgItem != null) {
                     replicaGameUser.bgItemId = newBgItemId;
@@ -911,11 +951,20 @@ class fakeMagirecoProdRespHook {
                     Object.keys(foundBgItem).forEach((key) => replicaGameUser.bgItem[key] = foundBgItem[key]);
                 }
             }
+            else if (newBgItemId == null && this.isOverriden(bgItemIdKey)) {
+                delete replicaGameUser.bgItemId;
+                delete replicaGameUser.bgItem;
+            }
+            else
+                console.warn(`typeof newBgItemId [${typeof newBgItemId}]`);
             // changeLeader
-            const newLeaderId = this.leaderId;
-            if (newLeaderId != null && typeof newLeaderId === "string") {
+            const leaderIdKey = "gameUser.leaderId";
+            const newLeaderId = this.getOverrideValue(leaderIdKey);
+            if (typeof newLeaderId === "string") {
                 replicaGameUser.leaderId = newLeaderId;
             }
+            else if (this.isOverriden(leaderIdKey))
+                console.warn(`typeof newLeaderId [${typeof newLeaderId}]`); // unexpected
             // userChara/visualize, userLive2d/set
             const userCharaList = replica["userCharaList"];
             const userCardList = replica["userCardList"];
@@ -953,7 +1002,7 @@ class fakeMagirecoProdRespHook {
         try {
             const parsed = JSON.parse(reqBody);
             const setToVal = parsed[reqKey];
-            if (typeof setToVal === 'string' && setToVal !== "") {
+            if (setToVal == null || (typeof setToVal === 'string' && setToVal !== "")) {
                 this.setOverrideValue(`gameUser.${gameUserKey}`, setToVal);
             }
             const myPage = userdataDump.getUnBrBody(lastDump.httpResp.get, this.pageKeys["page/MyPage"]);
@@ -1144,12 +1193,14 @@ class fakeMagirecoProdRespHook {
             const respBodyObj = userdataDump.getUnBrBody(lastDump.httpResp.get, this.pageKeys[apiName]);
             if (respBodyObj == null)
                 return;
+            this.fixCurrentTime(respBodyObj);
             return Buffer.from(JSON.stringify(respBodyObj), 'utf-8');
         }
         else {
             const respBodyObj = userdataDump.unBrBase64((_b = (_a = lastDump.httpResp.post.get(urlBase)) === null || _a === void 0 ? void 0 : _a.get(JSON.stringify({ [type]: `${pageNum}` }))) === null || _b === void 0 ? void 0 : _b.brBody);
             if (respBodyObj == null)
                 return Buffer.from(this.fakeErrorResp("错误", `找不到指定${type}`), 'utf-8');
+            this.fixCurrentTime(respBodyObj);
             return Buffer.from(JSON.stringify(respBodyObj), 'utf-8');
         }
     }
@@ -1176,6 +1227,8 @@ class fakeMagirecoProdRespHook {
             console.error(`fakeGuidResult userId=[${userId}] not found`);
             return Buffer.from(this.fakeErrorResp("错误", "找不到此项数据"), 'utf-8');
         }
+        if (respBodyObj.currentTime != null)
+            console.warn(`fakeGuidResult apiName=[${apiName}] typeof respBodyObj.currentTime`, respBodyObj.currentTime);
         return Buffer.from(JSON.stringify(respBodyObj), 'utf-8');
     }
     fakeArenaResp(apiName, reqBody) {

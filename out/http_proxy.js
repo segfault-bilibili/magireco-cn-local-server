@@ -13,6 +13,10 @@ class httpProxy {
             /^line\d-log\.biligame\.net$/,
             /^p\.biligame\.com$/,
             /^api\.biligame\.net$/,
+            /^line\d\-realtime-api\.biligame\.net$/,
+            /^line\d-sdk-app-api\.biligame\.net$/,
+            /^gameinfoc\.biligame\.net$/,
+            /^line\d-sdkcenter-login\.bilibiligame\.net$/, /* not sdk-center */
         ];
     }
     createHttpServer(params) {
