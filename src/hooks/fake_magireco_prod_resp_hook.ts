@@ -55,26 +55,40 @@ export class fakeMagirecoProdRespHook implements hook {
             return prev[curr];
         }, this.overrides as any);
     }
-    setOverrideValue(key: string, val: string | number | Map<number, Map<string, string | number>> | undefined): void {
+    isOverriden(key: string): boolean {
+        const keysPopped = key.split(".");
+        const lastKey = keysPopped.pop();
+        const obj = keysPopped.reduce((prev, curr) => {
+            if (prev == null) return;
+            if (!(curr in prev)) return;
+            return prev[curr];
+        }, this.overrides as any);
+        if (obj == null) return false; // avoid crash
+        if (lastKey == null) {
+            console.error(`isOverriden key=[${key}] lastKey == null`);
+            throw new Error(`lastKey == null`);
+        }
+        return lastKey in obj;
+    }
+    setOverrideValue(
+        key: string,
+        val: string | number | Map<number, Map<string, string | number>> | undefined,
+        reset = false,
+    ): void {
         console.log(`setOverrideValue ... key=[${key}] val`, val);
-        const keysPop = key.split(".");
-        const lastKey = keysPop.pop();
+        const keysPopped = key.split(".");
+        const lastKey = keysPopped.pop();
         if (lastKey == null) return;
-        const obj = keysPop.reduce((prev, curr) => {
+        const obj = keysPopped.reduce((prev, curr) => {
             if (prev == null) return;
             if (prev[curr] == null) prev[curr] = {};
             return prev[curr];
         }, this.overrides as any);
-        if (obj == null) return;
-        if (val == null) delete obj[lastKey];
+        if (val == null && reset) delete obj[lastKey];
         else obj[lastKey] = val;
         console.log(`setOverrideValue done key=[${key}] val`, val);
         this.params.saveOverrideDB();
     }
-    get bgItemId(): string | undefined { return this.getOverrideValue("gameUser.bgItemId"); }
-    set bgItemId(val: string | undefined) { this.setOverrideValue("gameUser.bgItemId", val); }
-    get leaderId(): string | undefined { return this.getOverrideValue("gameUser.leaderId"); }
-    set leaderId(val: string | undefined) { this.setOverrideValue("gameUser.leaderId", val); }
 
     constructor(params: parameters.params, crawler: staticResCrawler.crawler, dmp: userdataDump.userdataDmp) {
         this.params = params;
@@ -688,20 +702,25 @@ export class fakeMagirecoProdRespHook implements hook {
             && replicaGameUser != null
         ) {
             // setBackground
-            const newBgItemId = this.bgItemId;
-            if (newBgItemId != null && typeof newBgItemId === "string") {
+            const bgItemIdKey = "gameUser.bgItemId";
+            const newBgItemId = this.getOverrideValue(bgItemIdKey);
+            if (typeof newBgItemId === "string") {
                 const foundBgItem = userItemList.find((itemInfo) => itemInfo?.itemId === newBgItemId)?.item;
                 if (foundBgItem != null) {
                     replicaGameUser.bgItemId = newBgItemId;
                     if (replicaGameUser.bgItem == null) replicaGameUser.bgItem = {};
                     Object.keys(foundBgItem).forEach((key) => replicaGameUser.bgItem[key] = foundBgItem[key]);
                 }
-            }
+            } else if (newBgItemId == null && this.isOverriden(bgItemIdKey)) {
+                delete replicaGameUser.bgItemId;
+                delete replicaGameUser.bgItem;
+            } else console.warn(`typeof newBgItemId [${typeof newBgItemId}]`);
             // changeLeader
-            const newLeaderId = this.leaderId;
-            if (newLeaderId != null && typeof newLeaderId === "string") {
+            const leaderIdKey = "gameUser.leaderId";
+            const newLeaderId = this.getOverrideValue(leaderIdKey);
+            if (typeof newLeaderId === "string") {
                 replicaGameUser.leaderId = newLeaderId;
-            }
+            } else if (this.isOverriden(leaderIdKey)) console.warn(`typeof newLeaderId [${typeof newLeaderId}]`); // unexpected
             // userChara/visualize, userLive2d/set
             const userCharaList = replica["userCharaList"];
             const userCardList = replica["userCardList"];
@@ -743,7 +762,7 @@ export class fakeMagirecoProdRespHook implements hook {
         try {
             const parsed = JSON.parse(reqBody);
             const setToVal = parsed[reqKey];
-            if (typeof setToVal === 'string' && setToVal !== "") {
+            if (setToVal == null || (typeof setToVal === 'string' && setToVal !== "")) {
                 this.setOverrideValue(`gameUser.${gameUserKey}`, setToVal);
             }
             const myPage = userdataDump.getUnBrBody(lastDump.httpResp.get, this.pageKeys["page/MyPage"]);
