@@ -7,6 +7,10 @@ if (process.env.npm_package_version == null) {
     } catch (e) {}
 }
 
+// handle exit
+// references:
+// https://github.com/nodejs/node/issues/4182
+// https://github.com/nodejs/docker-node/issues/848
 for (const signal of ["SIGINT", "SIGTERM", "SIGQUIT"]) {
     process.on(signal, () => process.exit());
 }
