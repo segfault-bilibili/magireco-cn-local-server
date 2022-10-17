@@ -18,6 +18,6 @@ RUN ln -s /app/bin/magireco-cn-local-server /usr/local/bin/magireco-cn-local-ser
 
 WORKDIR /data
 VOLUME /data
-EXPOSE 10000 10001 10002 10003
+EXPOSE 10000 10001 10002
 
 ENTRYPOINT [ "magireco-cn-local-server" ]
