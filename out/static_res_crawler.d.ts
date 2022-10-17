@@ -33,6 +33,7 @@ export declare class crawler {
     private get httpsProdMagicaNoSlash();
     private static readonly patchHost;
     private get httpsPatchMagicaNoSlash();
+    static readonly maintenanceConfigStr: string;
     stopCrawling: boolean;
     get isCrawling(): boolean;
     private _isCrawling;

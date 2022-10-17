@@ -12,6 +12,7 @@ export declare class fakeMagirecoProdRespHook implements hook {
     private readonly crawler;
     private readonly userdataDmp;
     private readonly magirecoProdUrlRegEx;
+    private readonly magicaMaintenanceConfigRegEx;
     private readonly magirecoPatchUrlRegEx;
     private readonly apiPathNameRegEx;
     private readonly slashGuidEndRegEx;

@@ -351,7 +351,9 @@ class crawler {
                 new Promise((resolve) => {
                     let okay = false;
                     try {
-                        if (this.checkAlreadyExist(pathInUrl, fileMetaArray[0].md5))
+                        if (pathInUrl === `/maintenance/magica/config`)
+                            okay = true;
+                        else if (this.checkAlreadyExist(pathInUrl, fileMetaArray[0].md5))
                             okay = true;
                     }
                     catch (e) {
@@ -378,7 +380,7 @@ class crawler {
         return this.staticFile404Set.has(pathInUrl);
     }
     checkStaticCompleted() {
-        var _b, _c;
+        var _b;
         const unsortedFileExtSet = new Set();
         let isWebResCompleted;
         try {
@@ -410,7 +412,7 @@ class crawler {
         let isAssetsCompleted;
         try {
             let completed;
-            const maintenanceConfigStr = (_c = this.readFile(`/maintenance/magica/config`)) === null || _c === void 0 ? void 0 : _c.toString('utf-8');
+            const maintenanceConfigStr = crawler.maintenanceConfigStr;
             if (maintenanceConfigStr != null) {
                 const assetver = this.readAssetVer(maintenanceConfigStr);
                 const mergedAssetList = [];
@@ -694,26 +696,7 @@ class crawler {
             crawler.jsonRegEx
         );
         */
-        const maintenanceConfigStr = JSON.stringify({
-            leastversion: "30011",
-            assetver: "2207081501",
-            forcelocation: "https://pkg.biligame.com/games/mfjlmfsnxywc_v2.2.1_b_20220819_105944_2e49d.apk",
-            servicelocation: "https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/wh/index.html",
-            status: 0,
-            domain: [
-                "https://l3-prod-all-gs-mfsn2.bilibiligame.net",
-                "https://l2-prod-all-gs-mfsn2.bilibiligame.net",
-                "https://l1-prod-all-gs-mfsn2.bilibiligame.net"
-            ],
-            resourceLocation: [
-                "https://line3-prod-patch-mfsn2.bilibiligame.net",
-                "https://line2-prod-patch-mfsn2.bilibiligame.net",
-                "https://line1-prod-patch-mfsn2.bilibiligame.net"
-            ],
-            ipAddr: "180.97.245.90",
-            resDir: null
-        });
-        const assetver = this.readAssetVer(maintenanceConfigStr);
+        const assetver = this.readAssetVer(crawler.maintenanceConfigStr);
         console.log(this._crawlingStatus = `crawling asset_config.json ...`);
         const assetConfigStr = await this.fetchSinglePage(crawler.patchHost, `/magica/resource/download/asset/master/resource/${assetver}/asset_config.json?${this.timeStampSec}`, crawler.jsonRegEx);
         const assetConfig = JSON.parse(assetConfigStr);
@@ -837,6 +820,25 @@ crawler.staticFile404SetPathUncomp = _a.staticFile404SetPath.replace(/\.br$/, ""
 crawler.brotliQuality = 0;
 crawler.prodHost = "l3-prod-all-gs-mfsn2.bilibiligame.net";
 crawler.patchHost = "line3-prod-patch-mfsn2.bilibiligame.net";
+crawler.maintenanceConfigStr = JSON.stringify({
+    leastversion: "30011",
+    assetver: "2207081501",
+    forcelocation: "https://pkg.biligame.com/games/mfjlmfsnxywc_v2.2.1_b_20220819_105944_2e49d.apk",
+    servicelocation: "https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/wh/index.html",
+    status: 0,
+    domain: [
+        "https://l3-prod-all-gs-mfsn2.bilibiligame.net",
+        "https://l2-prod-all-gs-mfsn2.bilibiligame.net",
+        "https://l1-prod-all-gs-mfsn2.bilibiligame.net"
+    ],
+    resourceLocation: [
+        "https://line3-prod-patch-mfsn2.bilibiligame.net",
+        "https://line2-prod-patch-mfsn2.bilibiligame.net",
+        "https://line1-prod-patch-mfsn2.bilibiligame.net"
+    ],
+    ipAddr: "180.97.245.90",
+    resDir: null
+});
 crawler.assetListFileNameList = [
     "asset_char_list.json",
     "asset_main.json",

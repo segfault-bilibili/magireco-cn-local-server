@@ -5,6 +5,7 @@ const http2 = require("http2");
 const crypto = require("crypto");
 const local_server_1 = require("../local_server");
 const parameters = require("../parameters");
+const staticResCrawler = require("../static_res_crawler");
 const userdataDump = require("../userdata_dump");
 const bsgamesdk_pwd_authenticate_1 = require("../bsgamesdk-pwd-authenticate");
 const missing_data_1 = require("./etc/missing_data");
@@ -272,6 +273,7 @@ class fakeMagirecoProdRespHook {
         this.crawler = crawler;
         this.userdataDmp = dmp;
         this.magirecoProdUrlRegEx = /^(http|https):\/\/l\d+-prod-[0-9a-z\-]+-mfsn\d*\.bilibiligame\.net\/(|maintenance\/)magica\/.+$/;
+        this.magicaMaintenanceConfigRegEx = /^(http|https):\/\/l\d+-prod-[0-9a-z\-]+-mfsn\d*\.bilibiligame\.net\/maintenance\/magica\/config((|\?.*)$)/;
         this.magirecoPatchUrlRegEx = /^(http|https):\/\/line\d+-prod-patch-mfsn\d*\.bilibiligame\.net\/magica\/.+$/;
         this.apiPathNameRegEx = /^\/magica\/api\/.+$/;
         this.slashGuidEndRegEx = /\/[\da-f]{8}(-[\da-f]{4}){3}-[\da-f]{12}$/;
@@ -587,7 +589,10 @@ class fakeMagirecoProdRespHook {
             try {
                 body = this.crawler.readFile(url.pathname);
                 if (body == null) {
-                    if (url.pathname.match(this.part2Section3RegEx) != null) {
+                    if (url.pathname.match(this.magicaMaintenanceConfigRegEx) != null) {
+                        body = Buffer.from(staticResCrawler.crawler.maintenanceConfigStr, 'utf-8');
+                    }
+                    else if (url.pathname.match(this.part2Section3RegEx) != null) {
                         // not a workaround: response from offical server was like this
                         body = Buffer.from(JSON.stringify([]), 'utf-8');
                     }
