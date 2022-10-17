@@ -15,6 +15,7 @@ export class fakeMagirecoProdRespHook implements hook {
     private readonly userdataDmp: userdataDump.userdataDmp;
 
     private readonly magirecoProdUrlRegEx: RegExp;
+    private readonly magicaMaintenanceConfigRegEx: RegExp;
     private readonly magirecoPatchUrlRegEx: RegExp;
     private readonly apiPathNameRegEx: RegExp;
     private readonly slashGuidEndRegEx: RegExp;
@@ -96,6 +97,7 @@ export class fakeMagirecoProdRespHook implements hook {
         this.userdataDmp = dmp;
 
         this.magirecoProdUrlRegEx = /^(http|https):\/\/l\d+-prod-[0-9a-z\-]+-mfsn\d*\.bilibiligame\.net\/(|maintenance\/)magica\/.+$/;
+        this.magicaMaintenanceConfigRegEx = /^(http|https):\/\/l\d+-prod-[0-9a-z\-]+-mfsn\d*\.bilibiligame\.net\/maintenance\/magica\/config((|\?.*)$)/;
         this.magirecoPatchUrlRegEx = /^(http|https):\/\/line\d+-prod-patch-mfsn\d*\.bilibiligame\.net\/magica\/.+$/;
         this.apiPathNameRegEx = /^\/magica\/api\/.+$/;
         this.slashGuidEndRegEx = /\/[\da-f]{8}(-[\da-f]{4}){3}-[\da-f]{12}$/;
@@ -358,7 +360,9 @@ export class fakeMagirecoProdRespHook implements hook {
             try {
                 body = this.crawler.readFile(url.pathname);
                 if (body == null) {
-                    if (url.pathname.match(this.part2Section3RegEx) != null) {
+                    if (url.pathname.match(this.magicaMaintenanceConfigRegEx) != null) {
+                        body = Buffer.from(staticResCrawler.crawler.maintenanceConfigStr, 'utf-8');
+                    } else if (url.pathname.match(this.part2Section3RegEx) != null) {
                         // not a workaround: response from offical server was like this
                         body = Buffer.from(JSON.stringify([]), 'utf-8');
                     }

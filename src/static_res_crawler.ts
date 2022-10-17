@@ -114,6 +114,26 @@ export class crawler {
     private static readonly patchHost = "line3-prod-patch-mfsn2.bilibiligame.net";
     private get httpsPatchMagicaNoSlash(): string { return `https://${crawler.patchHost}/magica`; }
 
+    static readonly maintenanceConfigStr = JSON.stringify({
+        leastversion: "30011",
+        assetver: "2207081501",
+        forcelocation: "https://pkg.biligame.com/games/mfjlmfsnxywc_v2.2.1_b_20220819_105944_2e49d.apk",
+        servicelocation: "https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/wh/index.html",
+        status: 0,
+        domain: [
+            "https://l3-prod-all-gs-mfsn2.bilibiligame.net",
+            "https://l2-prod-all-gs-mfsn2.bilibiligame.net",
+            "https://l1-prod-all-gs-mfsn2.bilibiligame.net"
+        ],
+        resourceLocation: [
+            "https://line3-prod-patch-mfsn2.bilibiligame.net",
+            "https://line2-prod-patch-mfsn2.bilibiligame.net",
+            "https://line1-prod-patch-mfsn2.bilibiligame.net"
+        ],
+        ipAddr: "180.97.245.90",
+        resDir: null
+    });
+
     stopCrawling = false;
     get isCrawling(): boolean {
         return this._isCrawling;
@@ -419,7 +439,8 @@ export class crawler {
                 new Promise<void>((resolve) => {
                     let okay = false;
                     try {
-                        if (this.checkAlreadyExist(pathInUrl, fileMetaArray[0].md5)) okay = true;
+                        if (pathInUrl === `/maintenance/magica/config`) okay = true;
+                        else if (this.checkAlreadyExist(pathInUrl, fileMetaArray[0].md5)) okay = true;
                     } catch (e) {
                         console.error(e);
                     }
@@ -477,7 +498,7 @@ export class crawler {
         let isAssetsCompleted: boolean | undefined;
         try {
             let completed: boolean;
-            const maintenanceConfigStr = this.readFile(`/maintenance/magica/config`)?.toString('utf-8');
+            const maintenanceConfigStr = crawler.maintenanceConfigStr;
             if (maintenanceConfigStr != null) {
                 const assetver = this.readAssetVer(maintenanceConfigStr);
                 const mergedAssetList: Array<assetListEntry> = [];
@@ -780,26 +801,7 @@ export class crawler {
             crawler.jsonRegEx
         );
         */
-        const maintenanceConfigStr = JSON.stringify({
-            leastversion: "30011",
-            assetver: "2207081501",
-            forcelocation: "https://pkg.biligame.com/games/mfjlmfsnxywc_v2.2.1_b_20220819_105944_2e49d.apk",
-            servicelocation: "https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/wh/index.html",
-            status: 0,
-            domain: [
-                "https://l3-prod-all-gs-mfsn2.bilibiligame.net",
-                "https://l2-prod-all-gs-mfsn2.bilibiligame.net",
-                "https://l1-prod-all-gs-mfsn2.bilibiligame.net"
-            ],
-            resourceLocation: [
-                "https://line3-prod-patch-mfsn2.bilibiligame.net",
-                "https://line2-prod-patch-mfsn2.bilibiligame.net",
-                "https://line1-prod-patch-mfsn2.bilibiligame.net"
-            ],
-            ipAddr: "180.97.245.90",
-            resDir: null
-        });
-        const assetver = this.readAssetVer(maintenanceConfigStr);
+        const assetver = this.readAssetVer(crawler.maintenanceConfigStr);
 
         console.log(this._crawlingStatus = `crawling asset_config.json ...`);
         const assetConfigStr = await this.fetchSinglePage(
