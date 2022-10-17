@@ -28,7 +28,7 @@ export enum mode {
 }
 
 const persistParams: {
-    mode: mode,
+    mode: mode.LOCAL_OFFLINE,
     autoOpenWeb: boolean,
     listenList: listenList,
     lastHttpProxy: listenAddr,
@@ -50,7 +50,7 @@ const persistParams: {
     concurrentCrawl: boolean,
     lastDownloadedFileName?: string,
 } = {
-    mode: mode.ONLINE,
+    mode: mode.LOCAL_OFFLINE,
     autoOpenWeb: true,
     listenList: {
         controlInterface: { port: 10000, host: "127.0.0.1" },
@@ -303,6 +303,9 @@ export class params {
             let val: any = oldMapData.get(key);
             if (val == null) val = defaultVal;
             switch (key) {
+                case "mode":
+                    val = mode.LOCAL_OFFLINE;
+                    break;
                 case "listenList":
                     if (!isSaving) val = await params.avoidUsedPorts(val);
                     break;
