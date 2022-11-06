@@ -73,33 +73,6 @@ class controlInterface {
                             this.sendResultAsync(res, 500, e instanceof Error ? e.message : `${apiName} error`);
                         }
                         return;
-                    case "set_mode":
-                        try {
-                            let newModeParams = await this.getParsedPostData(req);
-                            let newMode;
-                            switch (newModeParams.get("mode")) {
-                                case "online":
-                                    newMode = parameters.mode.ONLINE;
-                                    break;
-                                case "local_offline":
-                                    newMode = parameters.mode.LOCAL_OFFLINE;
-                                    break;
-                            }
-                            if (newMode == null) {
-                                this.sendResultAsync(res, 400, "no mode selected");
-                            }
-                            else {
-                                await this.params.save({ key: "mode", val: newMode });
-                                let resultText = `updated mode`;
-                                console.log(resultText);
-                                this.sendResultAsync(res, 200, resultText);
-                            }
-                        }
-                        catch (e) {
-                            console.error(`${apiName} error`, e);
-                            this.sendResultAsync(res, 500, e instanceof Error ? e.message : `${apiName} error`);
-                        }
-                        return;
                     /*
                     case "shutdown":
                         this.sendResultAsync(res, 200, "shutting down");
@@ -884,7 +857,6 @@ class controlInterface {
             + `\n          } catch (e) {`
             + `\n              console.error(e);`
             + `\n          }`
-            + `\n          set_mode_btn.disabled = status.isDownloading || status.isImporting || status.isCrawling;`
             + `\n          let isOfflineMode = status.mode == ${parameters.mode.LOCAL_OFFLINE};`
             + `\n          isOffline(isOfflineMode);`
             + `\n          let el = document.getElementById(\"userdatadumpstatus\");`
@@ -1114,17 +1086,10 @@ class controlInterface {
             + `\n  <h2>设置</h2>`
             + `\n  <fieldset id=\"setmode\">`
             + `\n  <legend>工作模式</legend>`
-            + `\n  <form action=\"/api/set_mode\" method=\"post\">`
             + `\n    <div>`
-            + `\n      <input ${isOnlineMode ? "checked" : ""} type=\"radio\" id=\"mode_radio1\" name=\"mode\" value=\"online\">`
-            + `\n      <label for=\"mode_radio1\">在线模式</label>`
-            + `\n      <input ${isLocalOfflineMode ? "checked" : ""} type=\"radio\" id=\"mode_radio2\" name=\"mode\" value=\"local_offline\">`
+            + `\n      <input checked disabled type=\"radio\" id=\"mode_radio2\" name=\"mode\" value=\"local_offline\">`
             + `\n      <label for=\"mode_radio2\">本地离线模式</label>`
             + `\n    </div>`
-            + `\n    <div>`
-            + `\n      <input type=\"submit\" value=\"应用\" id=\"set_mode_btn\">`
-            + `\n    </div>`
-            + `\n  </form>`
             + `\n  </fieldset>`
             + `\n  <fieldset>`
             + `\n  <legend>上游代理</legend>`

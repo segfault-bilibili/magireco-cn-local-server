@@ -19,7 +19,7 @@ var mode;
     mode[mode["LOCAL_OFFLINE"] = 2] = "LOCAL_OFFLINE";
 })(mode = exports.mode || (exports.mode = {}));
 const persistParams = {
-    mode: mode.ONLINE,
+    mode: mode.LOCAL_OFFLINE,
     autoOpenWeb: true,
     listenList: {
         controlInterface: { port: 10000, host: "127.0.0.1" },
@@ -269,6 +269,9 @@ class params {
             if (val == null)
                 val = defaultVal;
             switch (key) {
+                case "mode":
+                    val = mode.LOCAL_OFFLINE;
+                    break;
                 case "listenList":
                     if (!isSaving)
                         val = await params.avoidUsedPorts(val);
@@ -380,13 +383,15 @@ class params {
     }
     static checkIsAliveMarker(host, port) {
         return new Promise((resolve, reject) => {
-            http.request({
+            const timeout = 50;
+            const req = http.request({
                 host: host,
                 port: port,
                 path: `/api/is_alive_${params.isAliveReqMarker}`,
                 headers: {
                     ["Referer"]: new URL(`http://${host}:${port}/`).href,
-                }
+                },
+                timeout: timeout,
             }, (resp) => {
                 resp.on('error', (err) => reject(err));
                 let buffers = [];
@@ -402,7 +407,13 @@ class params {
                     let respBody = Buffer.concat(buffers).toString('utf-8');
                     resolve(respBody === this.isAliveRespMarker);
                 });
-            }).on('error', (err) => reject(err)).end();
+            }).on('error', (err) => {
+                console.error("error when checkIsAliveMarker", err);
+                resolve(false);
+            }).setTimeout(timeout, () => {
+                req.destroy();
+                resolve(false);
+            }).end();
         });
     }
 }
