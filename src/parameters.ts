@@ -402,13 +402,15 @@ export class params {
     }
     private static checkIsAliveMarker(host: string, port: number): Promise<boolean> {
         return new Promise((resolve, reject) => {
-            http.request({
+            const timeout = 50;
+            const req = http.request({
                 host: host,
                 port: port,
                 path: `/api/is_alive_${params.isAliveReqMarker}`,
                 headers: {
                     ["Referer"]: new URL(`http://${host}:${port}/`).href,
-                }
+                },
+                timeout: timeout,
             }, (resp) => {
                 resp.on('error', (err) => reject(err));
                 let buffers: Array<Buffer> = [];
@@ -422,7 +424,13 @@ export class params {
                     let respBody = Buffer.concat(buffers).toString('utf-8');
                     resolve(respBody === this.isAliveRespMarker);
                 });
-            }).on('error', (err) => reject(err)).end();
+            }).on('error', (err) => {
+                console.error("error when checkIsAliveMarker", err);
+                resolve(false);
+            }).setTimeout(timeout, () => {
+                req.destroy();
+                resolve(false);
+            }).end();
         });
     }
 }
