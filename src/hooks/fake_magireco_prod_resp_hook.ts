@@ -8,6 +8,7 @@ import * as userdataDump from "../userdata_dump";
 import { bsgamesdkPwdAuth } from "../bsgamesdk-pwd-authenticate";
 import { missingData } from "./etc/missing_data";
 import { getRandomHex } from "../get_random_bytes";
+import * as favicon from "../favicon";
 
 export class fakeMagirecoProdRespHook implements hook {
     private readonly params: parameters.params;
@@ -96,7 +97,7 @@ export class fakeMagirecoProdRespHook implements hook {
         this.crawler = crawler;
         this.userdataDmp = dmp;
 
-        this.magirecoProdUrlRegEx = /^(http|https):\/\/l\d+-prod-[0-9a-z\-]+-mfsn\d*\.bilibiligame\.net\/(|maintenance\/)magica\/.+$/;
+        this.magirecoProdUrlRegEx = /^(http|https):\/\/l\d+-prod-[0-9a-z\-]+-mfsn\d*\.bilibiligame\.net\/((|maintenance\/)magica\/.+|favicon\.ico)$/;
         this.magicaMaintenanceConfigRegEx = /^\/maintenance\/magica\/config((|\?.*)$)/;
         this.magirecoPatchUrlRegEx = /^(http|https):\/\/line\d+-prod-patch-mfsn\d*\.bilibiligame\.net\/magica\/.+$/;
         this.apiPathNameRegEx = /^\/magica\/api\/.+$/;
@@ -124,6 +125,20 @@ export class fakeMagirecoProdRespHook implements hook {
         if (mode !== parameters.mode.LOCAL_OFFLINE) return {
             nextAction: "passOnRequest",
             interceptResponse: false,
+        }
+        if (url?.pathname === "/favicon.ico") {
+            return {
+                nextAction: "fakeResponse",
+                fakeResponse: {
+                    statusCode: 200,
+                    statusMessage: "OK",
+                    headers: {
+                        [http2.constants.HTTP2_HEADER_CONTENT_TYPE]: favicon.mimeType,
+                    },
+                    body: favicon.ico,
+                },
+                interceptResponse: false,
+            }
         }
 
         const isMagiRecoProd = url?.href.match(this.magirecoProdUrlRegEx) != null;

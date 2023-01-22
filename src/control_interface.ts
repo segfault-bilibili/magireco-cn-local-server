@@ -17,6 +17,7 @@ import * as staticResCrawler from "./static_res_crawler";
 import { fakeMagirecoProdRespHook } from "./hooks/fake_magireco_prod_resp_hook";
 import { saveAccessKeyHook } from "./hooks/save_access_key_hook";
 import { saveOpenIdTicketHook } from "./hooks/save_open_id_ticket_hook";
+import * as favicon from "./favicon";
 
 type parsedMultiPart = Array<{ filename?: string, name?: string, type?: string, data: Buffer }>;
 export class controlInterface {
@@ -113,6 +114,12 @@ export class controlInterface {
                 console.error(`rejected disallowed referer`);
                 res.writeHead(403, { ["Content-Type"]: "text/plain" });
                 res.end("403 Forbidden");
+                return;
+            }
+
+            if (req.url === "/favicon.ico") {
+                res.writeHead(200, { ["Content-Type"]: favicon.mimeType });
+                res.end(favicon.ico);
                 return;
             }
 
