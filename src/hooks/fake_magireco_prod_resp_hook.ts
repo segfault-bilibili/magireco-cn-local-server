@@ -266,6 +266,12 @@ export class fakeMagirecoProdRespHook implements hook {
                         body = Buffer.from(JSON.stringify(this.fakeResp[apiName]), 'utf-8');
                         break;
                     }
+                case "gameUser/cacheClear":
+                    {
+                        // TODO
+                        body = Buffer.from(JSON.stringify({ result: "success" }));
+                        break;
+                    }
                 // special ones
                 case "system/game/login":
                     {
