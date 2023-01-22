@@ -2,7 +2,7 @@ import * as net from "net";
 import * as http from "http";
 import * as http2 from "http2";
 import * as tls from "tls";
-import * as zlib from "zlib";
+import { resolveToIP, decompress } from "./util";
 import * as parameters from "./parameters";
 import * as certGenerator from "./cert_generator";
 import { URL } from "url";
@@ -218,7 +218,7 @@ export class localServer {
                                     let respBodyBuf = Buffer.concat(respBodyBufArray), respBodyStr: string | undefined;
                                     try {
                                         const encoding = respHeaders["content-encoding"];
-                                        respBodyBuf = localServer.decompress(respBodyBuf, encoding);
+                                        respBodyBuf = decompress(respBodyBuf, encoding);
                                         const charset = parseCharset.get(respHeaders);
                                         respBodyStr = respBodyBuf.toString(charset);
                                     } catch (e) {
@@ -282,7 +282,7 @@ export class localServer {
                         let reqBodyBuf = Buffer.concat(reqBodyBufArray), reqBodyStr: string | undefined;
                         try {
                             const encoding = reqHeaders["content-encoding"];
-                            reqBodyBuf = localServer.decompress(reqBodyBuf, encoding);
+                            reqBodyBuf = decompress(reqBodyBuf, encoding);
                             const charset = parseCharset.get(reqHeaders);
                             reqBodyStr = reqBodyBuf.toString(charset);
                         } catch (e) {
@@ -470,7 +470,7 @@ export class localServer {
                         let respBodyBuf = Buffer.concat(respBodyBufArray), respBodyStr: string | undefined;
                         try {
                             const encoding = respHeaders["content-encoding"];
-                            respBodyBuf = localServer.decompress(respBodyBuf, encoding);
+                            respBodyBuf = decompress(respBodyBuf, encoding);
                             const charset = parseCharset.get(respHeaders);
                             respBodyStr = respBodyBuf.toString(charset);
                         } catch (e) {
@@ -520,7 +520,7 @@ export class localServer {
                         let reqBodyBuf = Buffer.concat(reqBodyBufArray), reqBodyStr: string | undefined;
                         try {
                             const encoding = reqHeaders["content-encoding"];
-                            reqBodyBuf = localServer.decompress(reqBodyBuf, encoding);
+                            reqBodyBuf = decompress(reqBodyBuf, encoding);
                             const charset = parseCharset.get(reqHeaders);
                             reqBodyStr = reqBodyBuf.toString(charset);
                         } catch (e) {
@@ -656,7 +656,7 @@ export class localServer {
     private static async isHostSelfAsync(host: string | net.Socket, listenList: parameters.listenList): Promise<boolean> {
         if (typeof host !== 'string') host = await this.socketRemoteIPAsync(host);
         if (!net.isIPv6(host)) host = host.replace(/:\d+$/, "");//strip port number
-        if (!net.isIP(host)) host = await parameters.resolveToIP(host);
+        if (!net.isIP(host)) host = await resolveToIP(host);
         if (["127.0.0.1", "::1",].find((ip) => ip === host)) return true;
         for (let key in listenList) {
             let listenAddr = listenList[key];
@@ -966,7 +966,7 @@ export class localServer {
             let respBodyBuf = Buffer.concat(respBodyBufArray), respBodyStr: string | undefined;
             try {
                 const encoding = respHeaders["content-encoding"];
-                respBodyBuf = localServer.decompress(respBodyBuf, encoding);
+                respBodyBuf = decompress(respBodyBuf, encoding);
                 if (cvtBufToStr) {
                     const charset = parseCharset.get(respHeaders);
                     respBodyStr = respBodyBuf.toString(charset);
@@ -978,79 +978,5 @@ export class localServer {
             const body = respBodyStr != null ? respBodyStr : respBodyBuf;
             resolve({ headers: respHeaders, respBody: body });
         });
-    }
-
-    static compress(data: Buffer, encoding?: string, quality = 8): Buffer {
-        if (encoding == null) return data = Buffer.concat([data]);
-        let compressed: Buffer;
-        switch (encoding) {
-            case 'gzip':
-                compressed = zlib.gzipSync(data);
-                break;
-            case 'deflate':
-                compressed = zlib.deflateSync(data);
-                break;
-            case 'br':
-                compressed = zlib.brotliCompressSync(data, {
-                    params: {
-                        [zlib.constants.BROTLI_PARAM_MODE]: zlib.constants.BROTLI_MODE_TEXT,
-                        [zlib.constants.BROTLI_PARAM_QUALITY]: quality,
-                        [zlib.constants.BROTLI_PARAM_SIZE_HINT]: data.byteLength,
-                    },
-                });
-                break;
-            default:
-                throw new Error(`unknown compress encoding=${encoding}`);
-        }
-        return compressed;
-    }
-    static decompress(data: Buffer, encoding?: string): Buffer {
-        if (encoding == null) return data = Buffer.concat([data]);
-
-        let decompressed = data;
-        let encodingArray = encoding.replace(/\s/g, "").split(",").filter((enc) => enc !== "");
-        try {
-            encodingArray.forEach((enc) => {
-                decompressed = this.decompressSingle(decompressed, enc);
-            });
-        } catch (e) {
-            console.error(`decompress failed, try reverse...`, e);
-            try {
-                decompressed = data;
-                encodingArray.reverse().forEach((enc) => {
-                    decompressed = this.decompressSingle(decompressed, enc);
-                });
-            } catch (e2) {
-                console.error(`decompressing in reversed order failed, try JSON.parse...`, e2);
-                try {
-                    JSON.parse(data.toString('utf-8'));
-                    console.warn(`data is uncompressed json`);
-                    return data = Buffer.concat([data]);
-                } catch (e3) {
-                    let msg = `JSON.parse after decompress decompressing in reversed order attempt failed`;
-                    console.error(msg, e3);
-                    throw new Error(msg);
-                }
-            }
-        }
-        return decompressed;
-    }
-    private static decompressSingle(data: Buffer, encoding?: string): Buffer {
-        if (encoding == null) return data = Buffer.concat([data]);
-        let decompressed: Buffer;
-        switch (encoding) {
-            case 'gzip':
-                decompressed = zlib.gunzipSync(data);
-                break;
-            case 'deflate':
-                decompressed = zlib.inflateSync(data);
-                break;
-            case 'br':
-                decompressed = zlib.brotliDecompressSync(data);
-                break;
-            default:
-                throw new Error(`unknown compress encoding=${encoding}`);
-        }
-        return decompressed;
     }
 }

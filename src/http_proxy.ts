@@ -1,7 +1,6 @@
 import * as net from "net";
 import * as http from "http";
 import * as parameters from "./parameters";
-import * as localServer from "./local_server";
 
 export class httpProxy {
     private readonly params: parameters.params;

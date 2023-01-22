@@ -1,13 +1,13 @@
 import * as http from "http";
 import * as http2 from "http2";
 import * as crypto from "crypto";
-import { fakeResponse, hook, localServer, passOnRequest, passOnRequestBody } from "../local_server";
+import { replacer, compress, getRandomHex, getRandomGuid } from "../util";
+import { fakeResponse, hook, passOnRequest, passOnRequestBody } from "../local_server";
 import * as parameters from "../parameters";
 import * as staticResCrawler from "../static_res_crawler";
 import * as userdataDump from "../userdata_dump";
 import { bsgamesdkPwdAuth } from "../bsgamesdk-pwd-authenticate";
 import { missingData } from "./etc/missing_data";
-import { getRandomHex } from "../get_random_bytes";
 import * as favicon from "../favicon";
 
 export class fakeMagirecoProdRespHook implements hook {
@@ -32,7 +32,7 @@ export class fakeMagirecoProdRespHook implements hook {
     private readonly arenaSimulateMap: Map<string, string>;
 
     get stringifiedOverrideDB(): string {
-        return JSON.stringify(this.params.overridesDB, parameters.replacer);
+        return JSON.stringify(this.params.overridesDB, replacer);
     }
 
     private missingData?: missingData;
@@ -400,7 +400,7 @@ export class fakeMagirecoProdRespHook implements hook {
                     let uncompressed = this.crawler.readFile(url.pathname.replace(/\.gz$/, ""));
                     if (uncompressed != null) {
                         contentType = this.crawler.getContentType(url.pathname);
-                        body = localServer.compress(uncompressed, "gzip");
+                        body = compress(uncompressed, "gzip");
                         contentEncoding = "gzip";
                     }
                 } catch (e) {
@@ -629,7 +629,7 @@ export class fakeMagirecoProdRespHook implements hook {
 
         const obj = {
             data: {
-                open_id: `${this.getRandomGuid()}`,
+                open_id: `${getRandomGuid()}`,
                 uname: `${loginName}`,
                 code: 0,
                 timestamp: new Date().getTime(),
@@ -1073,7 +1073,7 @@ export class fakeMagirecoProdRespHook implements hook {
                         return;
                     }
 
-                    const userQuestBattleResultId = this.getRandomGuid();
+                    const userQuestBattleResultId = getRandomGuid();
                     this.arenaSimulateMap.set(userQuestBattleResultId, opponentUserId);
 
                     const createdAt = this.getDateTimeString();
@@ -1707,10 +1707,4 @@ export class fakeMagirecoProdRespHook implements hook {
         }
         return respBodyObj;
     }
-
-    private getRandomGuid(): string {
-        return [8, 4, 4, 4, 12].map((len) => crypto.randomBytes(Math.trunc((len + 1) / 2))
-            .toString('hex').substring(0, len)).join("-");
-    }
-
 }

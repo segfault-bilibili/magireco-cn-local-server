@@ -1,3 +1,4 @@
+import { replacer, reviver, compress, decompress } from "./util";
 import { localServer } from "./local_server";
 import * as parameters from "./parameters";
 import * as http2 from "http2";
@@ -182,14 +183,14 @@ export class crawler {
             if (fs.existsSync(crawler.staticFileMapPathUncomp) && fs.statSync(crawler.staticFileMapPathUncomp).isFile()) {
                 let uncompressed = fs.readFileSync(crawler.staticFileMapPathUncomp);
                 json = uncompressed.toString('utf-8');
-                let compressed = localServer.compress(uncompressed, 'br', crawler.brotliQuality);
+                let compressed = compress(uncompressed, 'br', crawler.brotliQuality);
                 fs.writeFileSync(crawler.staticFileMapPath, compressed);
                 fs.rmSync(crawler.staticFileMapPathUncomp);
             } else {
                 let compressed = fs.readFileSync(crawler.staticFileMapPath);
-                json = localServer.decompress(compressed, "br").toString("utf-8");
+                json = decompress(compressed, "br").toString("utf-8");
             }
-            let map = JSON.parse(json, parameters.reviver);
+            let map = JSON.parse(json, reviver);
             if (!(map instanceof Map)) throw new Error(`not instance of map`);
             this.staticFileMap = map;
         } catch (e) {
@@ -204,14 +205,14 @@ export class crawler {
             if (fs.existsSync(crawler.staticFile404SetPathUncomp) && fs.statSync(crawler.staticFile404SetPathUncomp).isFile()) {
                 let uncompressed = fs.readFileSync(crawler.staticFile404SetPathUncomp);
                 json = uncompressed.toString('utf-8');
-                let compressed = localServer.compress(uncompressed, 'br', crawler.brotliQuality);
+                let compressed = compress(uncompressed, 'br', crawler.brotliQuality);
                 fs.writeFileSync(crawler.staticFile404SetPath, compressed);
                 fs.rmSync(crawler.staticFile404SetPathUncomp);
             } else {
                 let compressed = fs.readFileSync(crawler.staticFile404SetPath);
-                json = localServer.decompress(compressed, "br").toString("utf-8");
+                json = decompress(compressed, "br").toString("utf-8");
             }
-            let set = JSON.parse(json, parameters.reviver);
+            let set = JSON.parse(json, reviver);
             if (!(set instanceof Set)) throw new Error(`not instance of set`);
             this.staticFile404Set = set;
         } catch (e) {
@@ -385,13 +386,13 @@ export class crawler {
     }
     private saveFileMeta(): void {
         console.log(`saving stringifiedMap ...`);
-        let stringifiedMap = JSON.stringify(this.staticFileMap, parameters.replacer);
-        let compressedMap = localServer.compress(Buffer.from(stringifiedMap, 'utf-8'), 'br', crawler.brotliQuality);
+        let stringifiedMap = JSON.stringify(this.staticFileMap, replacer);
+        let compressedMap = compress(Buffer.from(stringifiedMap, 'utf-8'), 'br', crawler.brotliQuality);
         fs.writeFileSync(crawler.staticFileMapPath, compressedMap);
         console.log(`saved stringifiedMap`);
         console.log(`saving stringified404Set ...`);
-        let stringified404Set = JSON.stringify(this.staticFile404Set, parameters.replacer);
-        let compressed404Set = localServer.compress(Buffer.from(stringified404Set, 'utf-8'), 'br', crawler.brotliQuality);
+        let stringified404Set = JSON.stringify(this.staticFile404Set, replacer);
+        let compressed404Set = compress(Buffer.from(stringified404Set, 'utf-8'), 'br', crawler.brotliQuality);
         fs.writeFileSync(crawler.staticFile404SetPath, compressed404Set);
         console.log(`saved stringified404Set`);
     }
@@ -541,7 +542,7 @@ export class crawler {
             const writePath = path.join(".", "fileExtSet.json");
             const fileExtArray = Array.from(unsortedFileExtSet.keys()).sort();
             const fileExtSet = new Set<string>(fileExtArray);
-            const stringified = JSON.stringify(fileExtSet, parameters.replacer, 4);
+            const stringified = JSON.stringify(fileExtSet, replacer, 4);
             let noChange = false;
             if (fs.existsSync(writePath) && fs.statSync(writePath).isFile()) {
                 const content = fs.readFileSync(writePath, 'utf-8');

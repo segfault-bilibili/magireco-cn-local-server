@@ -1,7 +1,7 @@
+import { replacer, reviver, resolveToIP, getRandomHex } from "./util";
 import { portFinder } from "./port_finder";
 import * as certGenerator from "./cert_generator";
 import * as net from "net";
-import * as dns from "dns";
 import * as tls from "tls";
 import * as bsgamesdkPwdAuthenticate from "./bsgamesdk-pwd-authenticate";
 import * as userdataDump from "./userdata_dump";
@@ -9,7 +9,6 @@ import * as path from "path";
 import * as fs from "fs";
 import * as fsPromises from "fs/promises";
 import * as http from "http";
-import { getRandomHex } from "./get_random_bytes";
 
 export type listenAddr = {
     port: number,
@@ -433,59 +432,4 @@ export class params {
             }).end();
         });
     }
-}
-
-// Author: Stefnotch
-// https://stackoverflow.com/questions/29085197/how-do-you-json-stringify-an-es6-map/73155667#73155667
-export function replacer(key: any, value: any) {
-    if (typeof value === "object" && value !== null) {
-        if (value instanceof Map) {
-            return {
-                _meta: { type: "map" },
-                value: Array.from(value.entries()),
-            };
-        } else if (value instanceof Set) { // bonus feature!
-            return {
-                _meta: { type: "set" },
-                value: Array.from(value.values()),
-            };
-        } else if ("_meta" in value) {
-            // Escape "_meta" properties
-            return {
-                ...value,
-                _meta: {
-                    type: "escaped-meta",
-                    value: value["_meta"],
-                },
-            };
-        }
-    }
-    return value;
-}
-export function reviver(key: any, value: any) {
-    if (typeof value === "object" && value !== null) {
-        if ("_meta" in value) {
-            if (value._meta.type === "map") {
-                return new Map(value.value);
-            } else if (value._meta.type === "set") {
-                return new Set(value.value);
-            } else if (value._meta.type === "escaped-meta") {
-                // Un-escape the "_meta" property
-                return {
-                    ...value,
-                    _meta: value._meta.value,
-                };
-            } else {
-                console.warn("Unexpected meta", value._meta);
-            }
-        }
-    }
-    return value;
-}
-
-export async function resolveToIP(hostname: string): Promise<string> {
-    return new Promise((res, rej) => dns.lookup(hostname, (err, address, family) => {
-        if (err == null) res(address);
-        else rej(err);
-    }))
 }

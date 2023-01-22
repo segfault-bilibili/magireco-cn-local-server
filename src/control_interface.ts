@@ -5,6 +5,7 @@ import * as http from "http";
 import * as process from "process";
 import * as ChildProcess from "child_process";
 import * as os from "os";
+import { replacer } from "./util";
 import * as parameters from "./parameters";
 import { httpProxy } from "./http_proxy";
 import { localServer } from "./local_server";
@@ -498,7 +499,7 @@ export class controlInterface {
                         ["Content-Type"]: "application/json; charset=utf-8",
                         ["Content-Disposition"]: `attachment; filename=\"${req.url.replace(/^\//, "")}\"`,
                     });
-                    res.end(JSON.stringify(this.params.overridesDB, parameters.replacer));
+                    res.end(JSON.stringify(this.params.overridesDB, replacer));
                     return;
             }
 
@@ -536,7 +537,7 @@ export class controlInterface {
                     let pipelineList: Array<stream.Readable | stream.Writable>;
 
                     console.log(`stringifying object to [${userdataDumpFileName}] ...`);
-                    let stringified = JSON.stringify(dump, parameters.replacer);
+                    let stringified = JSON.stringify(dump, replacer);
                     console.log(`stringified object to [${userdataDumpFileName}]. creating buffer...`);
                     let stringifiedBuf = Buffer.from(stringified, 'utf-8');
                     console.log(`created buffer for [${userdataDumpFileName}], sending it`);

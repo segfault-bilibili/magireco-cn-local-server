@@ -2,6 +2,7 @@ import * as crypto from "crypto";
 import * as http2 from "http2";
 import * as fs from "fs";
 import * as path from "path";
+import { replacer, reviver, compress, decompress } from "./util";
 import * as parameters from "./parameters";
 import { localServer } from "./local_server";
 
@@ -37,17 +38,17 @@ export type dump = {
 }
 
 export const brBase64 = (data: any): string => {
-    const stringified = JSON.stringify(data, parameters.replacer);
+    const stringified = JSON.stringify(data, replacer);
     const buf = Buffer.from(stringified, 'utf-8');
-    const compressedBase64 = localServer.compress(buf, "br").toString('base64');
+    const compressedBase64 = compress(buf, "br").toString('base64');
     return compressedBase64;
 }
 
 export const unBrBase64 = (brBase64?: string): any => {
     if (brBase64 == null) return brBase64;
     const compressedBuf = Buffer.from(brBase64, 'base64');
-    const decompressedStr = localServer.decompress(compressedBuf, "br").toString("utf-8");
-    const parsed = JSON.parse(decompressedStr, parameters.reviver);
+    const decompressedStr = decompress(compressedBuf, "br").toString("utf-8");
+    const parsed = JSON.parse(decompressedStr, reviver);
     return parsed;
 }
 
@@ -56,8 +57,8 @@ export const getUnBrBody = (map: Map<string, dumpRespEntry>, key: string): any =
     if (val == null) return;
     if (val.brBody == null) throw new Error("val.brBody == null");
     const buf = Buffer.from(val.brBody, 'base64');
-    const decompressed = localServer.decompress(buf, "br").toString('utf-8');
-    const parsed = JSON.parse(decompressed, parameters.reviver);
+    const decompressed = decompress(buf, "br").toString('utf-8');
+    const parsed = JSON.parse(decompressed, reviver);
     return parsed;
 }
 
@@ -311,7 +312,7 @@ export class userdataDmp {
         };
 
         console.log(this._fetchStatus = "JSON.stringify()...");
-        let jsonBuf = Buffer.from(JSON.stringify(this._lastDump, parameters.replacer), 'utf-8');
+        let jsonBuf = Buffer.from(JSON.stringify(this._lastDump, replacer), 'utf-8');
         console.log(this._fetchStatus = `writting to [${this.internalUserdataDumpFileName}] ...`);
         fs.writeFileSync(path.join(".", this.internalUserdataDumpFileName), jsonBuf);
         console.log(this._fetchStatus = `written to [${this.internalUserdataDumpFileName}]`);
@@ -332,7 +333,7 @@ export class userdataDmp {
                 console.log(`converting [${legacyFilePath}] ...`);
                 let compressed = fs.readFileSync(legacyFilePath);
                 let converted = userdataDmp.convertDumpToBrBase64(compressed);
-                let convertedStr = JSON.stringify(converted, parameters.replacer);
+                let convertedStr = JSON.stringify(converted, replacer);
                 fs.writeFileSync(filePath, convertedStr);
                 fs.rmSync(legacyFilePath);
             }
@@ -340,7 +341,7 @@ export class userdataDmp {
             if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
                 console.log(`loading [${filePath}] ...`);
                 let lastDumpStr = fs.readFileSync(filePath, 'utf-8');
-                this._lastDump = JSON.parse(lastDumpStr, parameters.reviver);
+                this._lastDump = JSON.parse(lastDumpStr, reviver);
                 console.log(`loaded ${this.userdataDumpFileName}`);
             }
         } catch (e) {
@@ -368,7 +369,7 @@ export class userdataDmp {
 
         const filePath = path.join(".", this.internalUserdataDumpFileName);
         let converted = userdataDmp.convertDumpToBrBase64(src);
-        let convertedStr = JSON.stringify(converted, parameters.replacer);
+        let convertedStr = JSON.stringify(converted, replacer);
         fs.writeFileSync(filePath, convertedStr);
         this._lastDump = converted;
         this.params.lastDownloadedFileName = this.userdataDumpFileName;
@@ -387,23 +388,23 @@ export class userdataDmp {
                 decompressedStr = src.toString("utf-8");
                 break;
             case "1f8b":
-                decompressedStr = localServer.decompress(src, "gzip").toString("utf-8");
+                decompressedStr = decompress(src, "gzip").toString("utf-8");
                 break;
             case "7801":
             case "789c":
             case "78da":
-                decompressedStr = localServer.decompress(src, "deflate").toString("utf-8");
+                decompressedStr = decompress(src, "deflate").toString("utf-8");
                 break;
             default:
-                decompressedStr = localServer.decompress(src, "br").toString("utf-8");
+                decompressedStr = decompress(src, "br").toString("utf-8");
         }
         let parsed: dump;
         try {
-            parsed = JSON.parse(decompressedStr, parameters.reviver);
+            parsed = JSON.parse(decompressedStr, reviver);
         } catch (e) {
             console.log(`reattempt parse after brotliDecompress`);
-            decompressedStr = localServer.decompress(src, "br").toString("utf-8");
-            parsed = JSON.parse(decompressedStr, parameters.reviver);
+            decompressedStr = decompress(src, "br").toString("utf-8");
+            parsed = JSON.parse(decompressedStr, reviver);
         }
         if (typeof parsed?.timestamp !== 'number' || isNaN(parsed?.timestamp))
             throw new Error("timestamp is not number (make sure you are importing a userdata dump)");
@@ -417,8 +418,8 @@ export class userdataDmp {
             parsed.httpResp.post.forEach((val) => mapArray.push(val));
             mapArray.forEach((map) => {
                 map.forEach((val) => {
-                    let stringified = JSON.stringify(val.body, parameters.replacer);
-                    let compressedBase64 = localServer.compress(Buffer.from(stringified, 'utf-8'), "br")
+                    let stringified = JSON.stringify(val.body, replacer);
+                    let compressedBase64 = compress(Buffer.from(stringified, 'utf-8'), "br")
                         .toString('base64');
                     val.brBody = compressedBase64;
                     delete val.body;
