@@ -1633,10 +1633,26 @@ export class fakeMagirecoProdRespHook implements hook {
                 replacePattern: /(<li class="TE btn se_tabs current" data-wrap="main"><span>主线【第1部】<\/span><\/li>)/,
                 replacement: "$1 <li class=\"TE btn se_tabs\" data-wrap=\"mainSecond\"><span>主线【第2部】</span></li>",
             },
+            // unlock spirit enhancement
             ["/magica/template/chara/CharaTop.html"]: {
                 matchPattern: /^<div id="CharaTop">/,
                 replacePattern: /(<li class="TE customize"><span class="linkBtn se_decide" data-href="#\/CharaListCustomize"><\/span><\/li>)/,
                 replacement: "$1 <li class=\"TE enhance\"><span class=\"enhanceLink se_decide\"></span></li>",
+            },
+            ["/magica/template/card/CardSort.html"]: {
+                matchPattern: /^<div id="sortfilter" class="chara">/,
+                replacePattern: /(<div id="filterInitialList">)/,
+                replacement: "<div id=\"filterEnhanceList\"> <div class='filterBar'> <p>精神强化</p> <span class='filterEnhance se_tabs ALL' data-enhancefilter-id=\"ALL\"><span class='checkBox'></span>全部显示</span> </div> <div class=\"flexBox\"> <span class=\"filterEnhance enable se_tabs\" data-enhancefilter-id=\"enable\" ><span class='checkBox'></span>开放</span> <span class=\"filterEnhance disable se_tabs\" data-enhancefilter-id=\"disable\" ><span class='checkBox'></span>未开放</span> </div> </div> $1",
+            },
+            ["/magica/css/_common/common.css"]: {
+                matchPattern: /^@charset "UTF-8";#helpBtn\{width:100px;/,
+                replacePattern: /(#filterInitialList\{top):92(px\})/,
+                replacement: "$1:215$2",
+            },
+            ["/magica/css/util/FilterPopup.css"]: {
+                matchPattern: /^#sortfilter #filterAttList .DARK:after,/,
+                replacePattern: /(#filterInitialList\{top):92(px\})/,
+                replacement: "$1:215$2",
             },
         }
 
