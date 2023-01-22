@@ -344,14 +344,14 @@ export class fakeMagirecoProdRespHook implements hook {
                     }
                 default:
                     {
-                        body = Buffer.from(this.fakeErrorResp("错误", "API尚未实现", false), 'utf-8');
+                        body = this.fakeErrorResp("错误", "API尚未实现", false);
                         apiUnimplemented = true;
                     }
             }
 
             if (body == null || apiUnimplemented) {
                 console.error(`matchRequest responding with fakeErrorResp [${url.pathname}]`);
-                if (!apiUnimplemented) body = Buffer.from(this.fakeErrorResp(), 'utf-8');
+                if (!apiUnimplemented) body = this.fakeErrorResp();
             }
 
             const headers = {
@@ -511,7 +511,7 @@ export class fakeMagirecoProdRespHook implements hook {
                     }
                 default:
                     {
-                        respBody = Buffer.from(this.fakeErrorResp("错误", "API尚未实现", false), 'utf-8');
+                        respBody = this.fakeErrorResp("错误", "API尚未实现", false);
                         apiUnimplemented = true;
                     }
             }
@@ -521,7 +521,7 @@ export class fakeMagirecoProdRespHook implements hook {
                     console.error(`onMatchedRequest [${apiName}] error reqBody=[${reqBody}]`);
                 }
                 console.error(`onMatchedRequest responding with fakeErrorResp [${url.pathname}]`);
-                if (!apiUnimplemented) respBody = Buffer.from(this.fakeErrorResp(), 'utf-8');
+                if (!apiUnimplemented) respBody = this.fakeErrorResp();
             }
 
             const headers = {
@@ -685,9 +685,9 @@ export class fakeMagirecoProdRespHook implements hook {
         }
 
         const lastDump = this.userdataDmp.lastDump;
-        if (lastDump == null) return Buffer.from(this.fakeErrorResp("错误", "未加载个人账号数据"), 'utf-8');
+        if (lastDump == null) return this.fakeErrorResp("错误", "未加载个人账号数据");
         let respBodyObj = userdataDump.getUnBrBody(lastDump.httpResp.get, this.pageKeys[apiName]);
-        if (respBodyObj == null) return Buffer.from(this.fakeErrorResp("错误", "读取个人账号数据出错"), 'utf-8');
+        if (respBodyObj == null) return this.fakeErrorResp("错误", "读取个人账号数据出错");
 
         // make a replica to avoid changing original
         let replica = JSON.parse(JSON.stringify(respBodyObj));
@@ -798,7 +798,7 @@ export class fakeMagirecoProdRespHook implements hook {
         const gameUserKey = gameUserKeys[apiName][1];
 
         const lastDump = this.userdataDmp.lastDump;
-        if (lastDump == null) return Buffer.from(this.fakeErrorResp("错误", "未加载个人账号数据"), 'utf-8');
+        if (lastDump == null) return this.fakeErrorResp("错误", "未加载个人账号数据");
 
         try {
             const parsed = JSON.parse(reqBody);
@@ -867,7 +867,7 @@ export class fakeMagirecoProdRespHook implements hook {
             return;
         }
         const lastDump = this.userdataDmp.lastDump;
-        if (lastDump == null) return Buffer.from(this.fakeErrorResp("错误", "未加载个人账号数据"), 'utf-8');
+        if (lastDump == null) return this.fakeErrorResp("错误", "未加载个人账号数据");
 
         const myPage = userdataDump.getUnBrBody(lastDump.httpResp.get, this.pageKeys["page/MyPage"]);
         const userCharaList = myPage["userCharaList"];
@@ -876,7 +876,7 @@ export class fakeMagirecoProdRespHook implements hook {
             userCharaList == null || !Array.isArray(userCharaList)
             && userCardList == null || !Array.isArray(userCardList)
         ) {
-            return Buffer.from(this.fakeErrorResp("错误", "读取角色列表时出错"), 'utf-8');
+            return this.fakeErrorResp("错误", "读取角色列表时出错");
         }
 
         let charaModMap: Map<number, Map<string, string | number>> = this.getOverrideValue(`userCharaList`);
@@ -974,7 +974,7 @@ export class fakeMagirecoProdRespHook implements hook {
     }
     private fakePagedResult(apiName: string, reqBody: string | Buffer | undefined, type: "page" | "charaId"): Buffer | undefined {
         const lastDump = this.userdataDmp.lastDump;
-        if (lastDump == null) return Buffer.from(this.fakeErrorResp("错误", "未加载个人账号数据"), 'utf-8');
+        if (lastDump == null) return this.fakeErrorResp("错误", "未加载个人账号数据");
 
         const urlBases: Record<string, string> = {
             ["page/PresentHistory"]: `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/PresentHistory`,
@@ -998,7 +998,7 @@ export class fakeMagirecoProdRespHook implements hook {
         } else {
             const respBodyObj = userdataDump.unBrBase64(
                 lastDump.httpResp.post.get(urlBase)?.get(JSON.stringify({ [type]: `${pageNum}` }))?.brBody);
-            if (respBodyObj == null) return Buffer.from(this.fakeErrorResp("错误", `找不到指定${type}`), 'utf-8');
+            if (respBodyObj == null) return this.fakeErrorResp("错误", `找不到指定${type}`);
             this.fixCurrentTime(respBodyObj);
             return Buffer.from(JSON.stringify(respBodyObj), 'utf-8');
         }
@@ -1017,18 +1017,18 @@ export class fakeMagirecoProdRespHook implements hook {
         const matched = pathname.match(this.slashGuidEndRegEx);
         const userId = matched != null ? matched[0].replace(/^\//, "") : undefined;
         if (userId == null) {
-            return Buffer.from(this.fakeErrorResp("错误", "参数非法"), 'utf-8');
+            return this.fakeErrorResp("错误", "参数非法");
         }
 
         const lastDump = this.userdataDmp.lastDump;
-        if (lastDump == null) return Buffer.from(this.fakeErrorResp("错误", "未加载个人账号数据"), 'utf-8');
+        if (lastDump == null) return this.fakeErrorResp("错误", "未加载个人账号数据");
 
         let respBodyObj = userdataDump.getUnBrBody(lastDump.httpResp.get,
             `${urlBase}${userId}`
         );
         if (respBodyObj == null) {
             console.error(`fakeGuidResult userId=[${userId}] not found`);
-            return Buffer.from(this.fakeErrorResp("错误", "找不到此项数据"), 'utf-8');
+            return this.fakeErrorResp("错误", "找不到此项数据");
         }
 
         if (respBodyObj.currentTime != null) console.warn(`fakeGuidResult apiName=[${apiName}] typeof respBodyObj.currentTime`,
@@ -1041,11 +1041,11 @@ export class fakeMagirecoProdRespHook implements hook {
         if (typeof reqBody !== 'string') return;
 
         const lastDump = this.userdataDmp.lastDump;
-        if (lastDump == null) return Buffer.from(this.fakeErrorResp("错误", "未加载个人账号数据"), 'utf-8');
+        if (lastDump == null) return this.fakeErrorResp("错误", "未加载个人账号数据");
 
         const myUserId = userdataDump.getUnBrBody(lastDump.httpResp.get, this.pageKeys["page/TopPage"])?.gameUser?.userId;
         if (typeof myUserId !== 'string' || !myUserId.match(userdataDump.guidRegEx)) {
-            return Buffer.from(this.fakeErrorResp("错误", "无法读取用户ID"), 'utf-8');
+            return this.fakeErrorResp("错误", "无法读取用户ID");
         }
 
         switch (apiName) {
@@ -1056,7 +1056,7 @@ export class fakeMagirecoProdRespHook implements hook {
                     try {
                         const parsed = JSON.parse(reqBody);
                         if (parsed.arenaBattleType !== "SIMULATE") {
-                            return Buffer.from(this.fakeErrorResp("错误", "目前镜层只支持演习", false), 'utf-8');
+                            return this.fakeErrorResp("错误", "目前镜层只支持演习", false);
                         }
                         opponentUserId = parsed.opponentUserId;
                         if (typeof opponentUserId !== 'string' || !opponentUserId.match(userdataDump.guidRegEx)) {
@@ -1374,7 +1374,7 @@ export class fakeMagirecoProdRespHook implements hook {
             + `\n`;
     }
 
-    private fakeErrorResp(title?: string, errorTxt?: string, forceGoto: string | boolean = true): string {
+    private fakeErrorResp(title?: string, errorTxt?: string, forceGoto: string | boolean = true): Buffer {
         const obj: Record<string, string> = {
             forceGoto: "first",
             resultCode: "error",
@@ -1383,7 +1383,7 @@ export class fakeMagirecoProdRespHook implements hook {
         }
         if (typeof forceGoto === 'string') obj.forceGoto = forceGoto;
         else if (!forceGoto) delete obj.forceGoto;
-        return JSON.stringify(obj);
+        return Buffer.from(JSON.stringify(obj), 'utf-8');
     }
 
     private readonly pageKeys: Record<string, string> = {
