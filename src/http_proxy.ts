@@ -15,7 +15,6 @@ export class httpProxy {
         this.socketSet = new Set<net.Socket>();
         this.blockedList = [
             /^line\d-log\.biligame\.net$/,
-            /^p\.biligame\.com$/,
             /^api\.biligame\.net$/,
             /^line\d\-realtime-api\.biligame\.net$/,
             /^line\d-sdk-app-api\.biligame\.net$/,

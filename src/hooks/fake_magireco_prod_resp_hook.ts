@@ -26,6 +26,10 @@ export class fakeMagirecoProdRespHook implements hook {
     private readonly bsgameSdkOtpSendRegEx: RegExp;
 
     private readonly bilibiliGameAgreementRegEx: RegExp;
+    private readonly bilibiliGameRealnameAuthRegEx: RegExp;
+
+    private readonly touristLoginRegEx: RegExp;
+    private readonly touristBindTelPwdRegEx: RegExp;
 
     private readonly part2Section3RegEx: RegExp;
 
@@ -109,6 +113,11 @@ export class fakeMagirecoProdRespHook implements hook {
 
         this.bilibiliGameAgreementRegEx = /^(http|https):\/\/game\.bilibili\.com\/agreement\/(userterms|privacy)\/.+$/;
 
+        this.touristLoginRegEx = /^(http|https):\/\/p\.biligame\.com\/api\/external\/tourist\.login\/v3((|\?.*)$)/;
+        this.touristBindTelPwdRegEx = /^(http|https):\/\/line\d+-sdk-center-login-sh\.biligame\.net\/api\/external\/tourist\/bind\/tel\.pwd\/v3((|\?.*)$)/;
+
+        this.bilibiliGameRealnameAuthRegEx = /^(http|https):\/\/game\.bilibili\.com\/sdk\/authentication?.+$/;
+
         this.part2Section3RegEx = /^\/magica\/resource\/download\/asset\/master\/resource\/2207081501\/asset_section_10230(1|2|3)\.json$/;
 
         this.arenaSimulateMap = new Map<string, string>();
@@ -146,18 +155,22 @@ export class fakeMagirecoProdRespHook implements hook {
         const isBsgamesdkLogin = url?.href.match(this.bsgameSdkLoginRegEx) != null;
         const isBsgamesdkCipher = url?.href.match(this.bsgameSdkCipherRegEx) != null;
         const isBsgamesdkOtpSend = url?.href.match(this.bsgameSdkOtpSendRegEx) != null;
+        const isTouristLogin = url?.href.match(this.touristLoginRegEx) != null;
+        const isTouristBindTelPwd = url?.href.match(this.touristBindTelPwdRegEx) != null;
         const isBilibiliGameAgreement = url?.href.match(this.bilibiliGameAgreementRegEx) != null;
+        const isBilibiliGameRealnameAuth = url?.href.match(this.bilibiliGameRealnameAuthRegEx) != null;
 
         if (
             !isMagiRecoProd && !isMagiRecoPatch
             && !isBsgamesdkLogin && !isBsgamesdkCipher && !isBsgamesdkOtpSend
-            && !isBilibiliGameAgreement
+            && !isTouristLogin && !isTouristBindTelPwd
+            && !isBilibiliGameAgreement && !isBilibiliGameRealnameAuth
         ) return {
             nextAction: "passOnRequest",
             interceptResponse: false,
         }
 
-        if (isBsgamesdkCipher || isBsgamesdkOtpSend || isBsgamesdkLogin) {
+        if (isBsgamesdkCipher || isBsgamesdkOtpSend || isBsgamesdkLogin || isTouristLogin || isTouristBindTelPwd) {
             let contentType = 'application/json;charset=UTF-8';
             let respBody: Buffer | undefined;
             if (isBsgamesdkCipher) {
@@ -166,9 +179,12 @@ export class fakeMagirecoProdRespHook implements hook {
             } else if (isBsgamesdkOtpSend) {
                 console.log(`attempt to fake bsgamesdk otp response`);
                 respBody = this.fakeBsgamesdkOtpSendResp();
-            } else if (isBsgamesdkLogin) {
-                console.log(`attempt to fake bsgamesdk login response`);
+            } else if (isBsgamesdkLogin || isTouristLogin) {
+                console.log(`attempt to fake bsgamesdk login${isTouristLogin ? " (tourist)" : ""} response`);
                 respBody = this.fakeBsgamesdkLoginResp();
+            } else if (isTouristBindTelPwd) {
+                console.log(`attempt to fake bsgamesdk bind tel.pwd response`);
+                respBody = this.fakeBsgamesdkTouristBindTelPwdResp();
             }
             if (respBody == null) console.log(`failed to fake bsgamesdk login response`);
             const headers = {
@@ -188,15 +204,22 @@ export class fakeMagirecoProdRespHook implements hook {
             }
         }
 
-        if (isBilibiliGameAgreement) {
+        if (isBilibiliGameAgreement || isBilibiliGameRealnameAuth) {
             const headers = {
                 [http2.constants.HTTP2_HEADER_CONTENT_TYPE]: "text/html; charset=utf-8",
             };
-            const html = `<!doctype html><html><head><meta charset=\"UTF-8\"><script>`
-                + `document.addEventListener(\"WebViewJavascriptBridgeReady\",function(){`
+            const agreementSkipJs = `document.addEventListener(\"WebViewJavascriptBridgeReady\",function(){`
                 + `var obj={status:1,type:1,event:1};`
                 + `[obj,JSON.stringify(obj)].forEach(o=>{try{window.bridge.callHandler("finishWithJson",o,function(){});}catch(e){}});`
-                + `});`
+                + `});`;
+            const realnameAuthJs = `window.addEventListener(\"load\",function(){`
+                + `var body=JSON.stringify({type:0,message:""});`
+                + `try{window.BiliJsObject.finishWithResult(body);}catch(e){}`
+                + `try{window.webkit.messageHandlers.BiliJsObject.postMessage({method:"finishWithResult",body:body});}catch(e){}`
+                + `});`;
+            const html = `<!doctype html><html><head><meta charset=\"UTF-8\"><script>`
+                + (isBilibiliGameAgreement ? agreementSkipJs : "")
+                + (isBilibiliGameRealnameAuth ? realnameAuthJs : "")
                 + `</script></head></html>`;
             const respBody = Buffer.from(html, 'utf-8');
             return {
@@ -579,6 +602,15 @@ export class fakeMagirecoProdRespHook implements hook {
             captcha_key: `${getRandomHex(32)}`,
             verify_tkt: null,
             verify_tkt_type: null,
+            server_message: "",
+        }
+        return Buffer.from(JSON.stringify(obj), 'utf-8');
+    }
+    private fakeBsgamesdkTouristBindTelPwdResp(): Buffer {
+        const obj = {
+            requestId: `${getRandomHex(32)}`,
+            timestamp: `${new Date().getTime()}`,
+            code: 0,
             server_message: "",
         }
         return Buffer.from(JSON.stringify(obj), 'utf-8');
