@@ -25,6 +25,7 @@ export class fakeMagirecoProdRespHook implements hook {
     private readonly bsgameSdkCipherRegEx: RegExp;
     private readonly bsgameSdkOtpSendRegEx: RegExp;
 
+    private readonly bilibiliAgreementConfigRegEx: RegExp;
     private readonly bilibiliGameAgreementRegEx: RegExp;
     private readonly bilibiliGameRealnameAuthRegEx: RegExp;
 
@@ -111,7 +112,8 @@ export class fakeMagirecoProdRespHook implements hook {
         this.bsgameSdkCipherRegEx = /^(http|https):\/\/line\d+-sdk-center-login-sh\.biligame\.net\/api\/external\/issue\/cipher\/v3((|\?.*)$)/;
         this.bsgameSdkOtpSendRegEx = /^(http|https):\/\/line\d+-sdk-center-login-sh\.biligame\.net\/api\/external\/otp\/send\/v3((|\?.*)$)/;
 
-        this.bilibiliGameAgreementRegEx = /^(http|https):\/\/game\.bilibili\.com\/agreement\/(userterms|privacy)\/.+$/;
+        this.bilibiliAgreementConfigRegEx = /^(http|https):\/\/line\d-sdk-app-api\.biligame\.net\/api\/agreement\/config((|\?.*)$)/;
+        this.bilibiliGameAgreementRegEx = /^(http|https):\/\/game\.bilibili\.com\/agreement\/(updatetips|userterms|privacy)\/.+$/;
 
         this.touristLoginRegEx = /^(http|https):\/\/p\.biligame\.com\/api\/external\/tourist\.login\/v3((|\?.*)$)/;
         this.touristBindTelPwdRegEx = /^(http|https):\/\/line\d+-sdk-center-login-sh\.biligame\.net\/api\/external\/tourist\/bind\/tel\.pwd\/v3((|\?.*)$)/;
@@ -157,6 +159,7 @@ export class fakeMagirecoProdRespHook implements hook {
         const isBsgamesdkOtpSend = url?.href.match(this.bsgameSdkOtpSendRegEx) != null;
         const isTouristLogin = url?.href.match(this.touristLoginRegEx) != null;
         const isTouristBindTelPwd = url?.href.match(this.touristBindTelPwdRegEx) != null;
+        const isBilibiliAgreementConfig = url?.href.match(this.bilibiliAgreementConfigRegEx) != null;
         const isBilibiliGameAgreement = url?.href.match(this.bilibiliGameAgreementRegEx) != null;
         const isBilibiliGameRealnameAuth = url?.href.match(this.bilibiliGameRealnameAuthRegEx) != null;
 
@@ -164,7 +167,7 @@ export class fakeMagirecoProdRespHook implements hook {
             !isMagiRecoProd && !isMagiRecoPatch
             && !isBsgamesdkLogin && !isBsgamesdkCipher && !isBsgamesdkOtpSend
             && !isTouristLogin && !isTouristBindTelPwd
-            && !isBilibiliGameAgreement && !isBilibiliGameRealnameAuth
+            && !isBilibiliAgreementConfig && !isBilibiliGameAgreement && !isBilibiliGameRealnameAuth
         ) return {
             nextAction: "passOnRequest",
             interceptResponse: false,
@@ -204,6 +207,39 @@ export class fakeMagirecoProdRespHook implements hook {
             }
         }
 
+        if (isBilibiliAgreementConfig) {
+            const headers = {
+                [http2.constants.HTTP2_HEADER_CONTENT_TYPE]: "application/json;charset=UTF-8",
+            };
+            const agreementConfigJson = JSON.stringify({
+                request_id: `${getRandomGuid()}`,
+                timestamp: Date.now(),
+                code: 0,
+                message: "响应成功",
+                data: {
+                    cooperation_mode: 1,
+                    agreement_switch: "ON",
+                    agreement_version: "1.0.5",
+                    agreement_link: "https://game.bilibili.com/agreement/privacy/810/628e2b599835f300480e5279",
+                    update_tips_link: "https://game.bilibili.com/agreement/updatetips/810/628e2b7dcfccbc004be18aac",
+                    cp_user_terms_link: "https://game.bilibili.com/agreement/userterms/810/628e2b599835f300480e5278",
+                    cp_privacy_link: "https://game.bilibili.com/agreement/privacy/810/628e2b599835f300480e5279",
+                    update_tips_switch: "ON"
+                },
+                success: true
+            });
+            const respBody = Buffer.from(agreementConfigJson, 'utf-8');
+            return {
+                nextAction: "fakeResponse",
+                fakeResponse: {
+                    statusCode: 200,
+                    statusMessage: "OK",
+                    headers: headers,
+                    body: respBody,
+                },
+                interceptResponse: false,
+            }
+        }
         if (isBilibiliGameAgreement || isBilibiliGameRealnameAuth) {
             const headers = {
                 [http2.constants.HTTP2_HEADER_CONTENT_TYPE]: "text/html; charset=utf-8",
