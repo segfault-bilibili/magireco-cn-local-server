@@ -1272,6 +1272,7 @@ export class fakeMagirecoProdRespHook implements hook {
                         }
                         replica.webData.gameUser.userQuestBattleResultId = userQuestBattleResultId;
                         console.error(`fakeArenaNativeGet faked quest/native/get response`);
+                        if (this.params.injectMadokamiSE) this.injectUltimateMadokaSpiritEnhancement(replica);
                         return Buffer.from(JSON.stringify(replica), 'utf-8');
                     } catch (e) {
                         console.error(`fakeArenaNativeGet error parsing`, e);
@@ -1780,5 +1781,379 @@ export class fakeMagirecoProdRespHook implements hook {
             }
         }
         return respBodyObj;
+    }
+
+    private injectUltimateMadokaSpiritEnhancement(replica: any): void {
+        const ultimateMadokaEmotionMemoriaList = [
+            {
+                "memoriaId": 2101101,
+                "name": "MP增幅[Ⅱ]",
+                "icon": 1216,
+                "level": 0,
+                "cost": 0,
+                "description": "MP100以上时MP获得量提升[Ⅱ]",
+                "voice": 0,
+                "artList": [
+                    390218202
+                ],
+                "type": "ABILITY",
+                "displayType": "EMOTION"
+            },
+            {
+                "memoriaId": 2101102,
+                "name": "魔女化身强化[Ⅰ]",
+                "icon": 1220,
+                "level": 0,
+                "cost": 0,
+                "description": "魔女化身伤害提升[I]&Magia伤害提升[Ⅰ]",
+                "voice": 0,
+                "artList": [
+                    390218301,
+                    390201401
+                ],
+                "type": "ABILITY",
+                "displayType": "EMOTION"
+            },
+            {
+                "memoriaId": 2101103,
+                "name": "MP增幅[Ⅱ]",
+                "icon": 1216,
+                "level": 0,
+                "cost": 0,
+                "description": "MP100以上时MP获得量提升[Ⅱ]",
+                "voice": 0,
+                "artList": [
+                    390218202
+                ],
+                "type": "ABILITY",
+                "displayType": "EMOTION"
+            },
+            {
+                "memoriaId": 2101104,
+                "name": "加速专家[Ⅱ]",
+                "icon": 1090,
+                "level": 0,
+                "cost": 0,
+                "description": "Accele MP提升[Ⅱ]",
+                "voice": 0,
+                "artList": [
+                    390201602
+                ],
+                "type": "ABILITY",
+                "displayType": "EMOTION"
+            },
+            {
+                "memoriaId": 2101105,
+                "name": "魔女化身强化[Ⅰ]",
+                "icon": 1220,
+                "level": 0,
+                "cost": 0,
+                "description": "魔女化身伤害提升[I]&Magia伤害提升[Ⅰ]",
+                "voice": 0,
+                "artList": [
+                    390218301,
+                    390201401
+                ],
+                "type": "ABILITY",
+                "displayType": "EMOTION"
+            },
+            {
+                "memoriaId": 2101106,
+                "name": "Magia强化[Ⅱ]",
+                "icon": 1088,
+                "level": 0,
+                "cost": 0,
+                "description": "Magia伤害提升[Ⅱ]",
+                "voice": 0,
+                "artList": [
+                    390201402
+                ],
+                "type": "ABILITY",
+                "displayType": "EMOTION"
+            },
+            {
+                "memoriaId": 2101107,
+                "name": "暴击强化[Ⅱ]",
+                "icon": 1121,
+                "level": 0,
+                "cost": 0,
+                "description": "一定几率暴击[Ⅱ]",
+                "voice": 0,
+                "artList": [
+                    690206302
+                ],
+                "type": "ABILITY",
+                "displayType": "EMOTION"
+            },
+            {
+                "memoriaId": 2101108,
+                "name": "Blast强化[Ⅱ]",
+                "icon": 1092,
+                "level": 0,
+                "cost": 0,
+                "description": "Blast 伤害提升[Ⅱ]",
+                "voice": 0,
+                "artList": [
+                    390201842
+                ],
+                "type": "ABILITY",
+                "displayType": "EMOTION"
+            },
+            {
+                "memoriaId": 2101109,
+                "name": "Charge强化[Ⅱ]",
+                "icon": 1091,
+                "level": 0,
+                "cost": 0,
+                "description": "Charge后伤害提升[Ⅱ]",
+                "voice": 0,
+                "artList": [
+                    390201742
+                ],
+                "type": "ABILITY",
+                "displayType": "EMOTION"
+            },
+            {
+                "memoriaId": 2101110,
+                "name": "紧急强化[Ⅲ]",
+                "icon": 1213,
+                "level": 0,
+                "cost": 0,
+                "description": "对魔女伤害提升[Ⅲ]",
+                "voice": 0,
+                "artList": [
+                    690216803
+                ],
+                "type": "ABILITY",
+                "displayType": "EMOTION"
+            },
+            {
+                "memoriaId": 2101111,
+                "name": "(非官方翻译)energy shield·adept[Ⅲ]",
+                "icon": 1206,
+                "level": 0,
+                "cost": 0,
+                "description": "火·水·木属性伤害削减状态[Ⅲ]",
+                "voice": 0,
+                "artList": [
+                    690217403,
+                    690217503,
+                    690217603
+                ],
+                "type": "ABILITY",
+                "displayType": "EMOTION"
+            },
+            {
+                "memoriaId": 2101112,
+                "name": "(非官方翻译)nursing care[Ⅲ]",
+                "icon": 1129,
+                "level": 0,
+                "cost": 0,
+                "description": "HP自动回复[Ⅲ] \u0026 MP自动回复[Ⅲ]",
+                "voice": 0,
+                "artList": [
+                    690207703,
+                    690214803
+                ],
+                "type": "ABILITY",
+                "displayType": "EMOTION"
+            },
+            {
+                "memoriaId": 2101113,
+                "name": "(非官方翻译)all disk·circle[Ⅶ]",
+                "icon": 1092,
+                "level": 0,
+                "cost": 10,
+                "description": "全行动盘效果UP[Ⅶ](全体/3T)\u000a(若无标记,其余精强技能为官方翻译)",
+                "voice": 71,
+                "artList": [
+                    330301827,
+                    330301727,
+                    330301627
+                ],
+                "type": "SKILL",
+                "displayType": "EMOTION"
+            },
+        ];
+        const artList = [
+            {
+                "artId": 390201602,
+                "code": "BUFF",
+                "target": "SELF",
+                "sub": "ACCEL",
+                "effect": 125,
+                "rate": 1000,
+                "growPoint": 25
+            },
+            {
+                "artId": 690217403,
+                "code": "CONDITION_GOOD",
+                "target": "SELF",
+                "sub": "DAMAGE_DOWN_FIRE",
+                "effect": 150,
+                "rate": 1000,
+                "growPoint": 0
+            },
+            {
+                "artId": 390201401,
+                "code": "BUFF",
+                "target": "SELF",
+                "sub": "MAGIA",
+                "effect": 50,
+                "rate": 1000,
+                "growPoint": 25
+            },
+            {
+                "artId": 390218202,
+                "code": "BUFF",
+                "target": "SELF",
+                "sub": "MP_GAIN_OVER100",
+                "effect": 200,
+                "growPoint": 0
+            },
+            {
+                "artId": 390201402,
+                "code": "BUFF",
+                "target": "SELF",
+                "sub": "MAGIA",
+                "effect": 75,
+                "rate": 1000,
+                "growPoint": 25
+            },
+            {
+                "artId": 390218301,
+                "code": "BUFF",
+                "target": "SELF",
+                "sub": "DOPPEL",
+                "effect": 50,
+                "growPoint": 0
+            },
+            {
+                "artId": 390201842,
+                "code": "BUFF",
+                "target": "SELF",
+                "sub": "BLAST",
+                "effect": 165,
+                "rate": 1000,
+                "growPoint": 25
+            },
+            {
+                "artId": 690207703,
+                "code": "CONDITION_GOOD",
+                "target": "SELF",
+                "sub": "AUTO_HEAL",
+                "effect": 40,
+                "rate": 1000,
+                "growPoint": 10
+            },
+            {
+                "artId": 690217603,
+                "code": "CONDITION_GOOD",
+                "target": "SELF",
+                "sub": "DAMAGE_DOWN_TIMBER",
+                "effect": 150,
+                "rate": 1000,
+                "growPoint": 0
+            },
+            {
+                "artId": 330301727,
+                "code": "BUFF",
+                "target": "ALL",
+                "sub": "CHARGE",
+                "effect": 140,
+                "turn": 3,
+                "growPoint": 25
+            },
+            {
+                "artId": 690214803,
+                "code": "CONDITION_GOOD",
+                "target": "SELF",
+                "sub": "AUTO_HEAL",
+                "effect": 60,
+                "rate": 60,
+                "growPoint": 10,
+                "genericValue": "MP"
+            },
+            {
+                "artId": 330301827,
+                "code": "BUFF",
+                "target": "ALL",
+                "sub": "BLAST",
+                "effect": 155,
+                "turn": 3,
+                "growPoint": 25
+            },
+            {
+                "artId": 690217503,
+                "code": "CONDITION_GOOD",
+                "target": "SELF",
+                "sub": "DAMAGE_DOWN_WATER",
+                "effect": 150,
+                "rate": 1000,
+                "growPoint": 0
+            },
+            {
+                "artId": 690206302,
+                "code": "CONDITION_GOOD",
+                "target": "SELF",
+                "sub": "CRITICAL",
+                "effect": 2000,
+                "rate": 150,
+                "growPoint": 0
+            },
+            {
+                "artId": 690216803,
+                "code": "LIMITED_ENEMY_TYPE",
+                "target": "SELF",
+                "sub": "DAMAGE_UP",
+                "effect": 150,
+                "rate": 1000,
+                "growPoint": 15,
+                "genericValue": "WITCH"
+            },
+            {
+                "artId": 330301627,
+                "code": "BUFF",
+                "target": "ALL",
+                "sub": "ACCEL",
+                "effect": 150,
+                "turn": 3,
+                "growPoint": 25
+            },
+            {
+                "artId": 390201742,
+                "code": "BUFF",
+                "target": "SELF",
+                "sub": "CHARGE",
+                "effect": 100,
+                "rate": 1000,
+                "growPoint": 25
+            },
+        ];
+
+        const artMap = new Map<number, object>();
+        artList.forEach((art) => artMap.set(art.artId, art));
+
+        const existingArtSet = new Set<number>();
+        replica.artList.forEach((art: any) => existingArtSet.add(art.artId));
+
+        replica.playerList.forEach((player: any) => {
+            //if (player.diskId != 21015) return;
+            ultimateMadokaEmotionMemoriaList.forEach((memoria) => {
+                let playerMemoriaList = player?.memoriaList as Array<number>;
+                if (!playerMemoriaList.find((memoriaId) => memoriaId == memoria.memoriaId)) {
+                    playerMemoriaList.push(memoria.memoriaId);
+                }
+                let replicaMemoriaList = replica.memoriaList;
+                if (!replicaMemoriaList.find((existing: any) => existing.memoriaId == memoria.memoriaId)) {
+                    replicaMemoriaList.push(memoria);
+                    memoria.artList.forEach((artId) => {
+                        if (existingArtSet.has(artId)) return;
+                        replica.artList.push(artMap.get(artId));
+                        existingArtSet.add(artId);
+                    });
+                }
+            });
+        })
     }
 }

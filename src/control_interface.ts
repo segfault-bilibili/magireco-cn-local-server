@@ -292,6 +292,19 @@ export class controlInterface {
                             this.sendResultAsync(res, 500, e instanceof Error ? e.message : `${apiName} error`);
                         }
                         return;
+                    case "set_inject_madokami_se":
+                        try {
+                            let injectMadokamiSEParams = await this.getParsedPostData(req);
+                            let newInjectMadokamiSE = injectMadokamiSEParams.get("inject_madokami_se") != null;
+                            await this.params.save({ key: "injectMadokamiSE", val: newInjectMadokamiSE });
+                            let resultText = "sucessfully updated inject madokami se settings";
+                            console.log(resultText);
+                            this.sendResultAsync(res, 200, resultText);
+                        } catch (e) {
+                            console.error(`${apiName} error`, e);
+                            this.sendResultAsync(res, 500, e instanceof Error ? e.message : `${apiName} error`);
+                        }
+                        return;
                     case "pwdlogin":
                         try {
                             let pwdLoginParams = await this.getParsedPostData(req);
@@ -715,6 +728,7 @@ export class controlInterface {
         const isLocalOfflineMode = this.params.mode === parameters.mode.LOCAL_OFFLINE;
 
         const autoOpenWeb = this.params.autoOpenWeb;
+        const injectMadokamiSE = this.params.injectMadokamiSE;
         let httpProxyAddr = "", httpProxyPort = "";
         const listenList = this.params.listenList;
         if (listenList != null) {
@@ -1122,6 +1136,20 @@ export class controlInterface {
             + `\n    </div>`
             + `\n    <div>`
             + `\n      <input type=\"submit\" id=\"set_auto_open_web_btn\" value=\"应用\">`
+            + `\n    </div>`
+            + `\n  </form>`
+            + `\n  </fieldset>`
+            + `\n  <fieldset>`
+            + `\n  <legend>圆神附体</legend>`
+            + `\n  <form action=\"/api/set_inject_madokami_se\" method=\"post\">`
+            + `\n    <i>需要修改libmadomagi_native.so才能把精强主动技能按钮显示出来。</i>`
+            + `\n    <br><i>国服关服前并未提供圆神精强数据，数据实际上来自日服；技能名称翻译则参考了开启精强的其他角色。</i>`
+            + `\n    <div>`
+            + `\n      <input id=\"inject_madokami_se\" name=\"inject_madokami_se\" value=\"true\" type=\"checkbox\" ${injectMadokamiSE ? "checked" : ""}>`
+            + `\n      <label for=\"inject_madokami_se\">镜层演习我方全体角色获得圆神精强技能</label>`
+            + `\n    </div>`
+            + `\n    <div>`
+            + `\n      <input type=\"submit\" id=\"set_inject_madokami_se_btn\" value=\"应用\">`
             + `\n    </div>`
             + `\n  </form>`
             + `\n  </fieldset>`

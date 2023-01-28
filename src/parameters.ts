@@ -29,6 +29,7 @@ export enum mode {
 const persistParams: {
     mode: mode.LOCAL_OFFLINE,
     autoOpenWeb: boolean,
+    injectMadokamiSE: boolean,
     listenList: listenList,
     lastHttpProxy: listenAddr,
     httpProxyUsername: string,
@@ -51,6 +52,7 @@ const persistParams: {
 } = {
     mode: mode.LOCAL_OFFLINE,
     autoOpenWeb: true,
+    injectMadokamiSE: false,
     listenList: {
         controlInterface: { port: 10000, host: "127.0.0.1" },
         httpProxy: { port: 10001, host: "127.0.0.1" },
@@ -209,6 +211,7 @@ export class params {
 
     get mode(): mode { return this.mapData.get("mode"); }
     get autoOpenWeb(): boolean { return this.mapData.get("autoOpenWeb"); }
+    get injectMadokamiSE(): boolean { return this.mapData.get("injectMadokamiSE"); }
     get listenList(): listenList { return this.mapData.get("listenList"); }
     get lastHttpProxy(): listenAddr { return this.mapData.get("lastHttpProxy"); }
     get httpProxyUsername(): string { return this.mapData.get("httpProxyUsername"); }
