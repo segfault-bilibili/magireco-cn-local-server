@@ -1,10 +1,10 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.resolveToIP = exports.reviver = exports.replacer = exports.params = exports.mode = void 0;
+exports.params = exports.mode = void 0;
+const util_1 = require("./util");
 const port_finder_1 = require("./port_finder");
 const certGenerator = require("./cert_generator");
 const net = require("net");
-const dns = require("dns");
 const tls = require("tls");
 const bsgamesdkPwdAuthenticate = require("./bsgamesdk-pwd-authenticate");
 const userdataDump = require("./userdata_dump");
@@ -12,7 +12,6 @@ const path = require("path");
 const fs = require("fs");
 const fsPromises = require("fs/promises");
 const http = require("http");
-const get_random_bytes_1 = require("./get_random_bytes");
 var mode;
 (function (mode) {
     mode[mode["ONLINE"] = 1] = "ONLINE";
@@ -21,6 +20,7 @@ var mode;
 const persistParams = {
     mode: mode.LOCAL_OFFLINE,
     autoOpenWeb: true,
+    injectMadokamiSE: false,
     listenList: {
         controlInterface: { port: 10000, host: "127.0.0.1" },
         httpProxy: { port: 10001, host: "127.0.0.1" },
@@ -70,7 +70,7 @@ class params {
         if (fs.existsSync(params.overridesDBPath) && fs.statSync(params.overridesDBPath).isFile()) {
             try {
                 let content = fs.readFileSync(params.overridesDBPath, 'utf-8');
-                overridesDB = JSON.parse(content, reviver);
+                overridesDB = JSON.parse(content, util_1.reviver);
                 if (!(overridesDB instanceof Map))
                     throw new Error("not instance of map");
             }
@@ -112,7 +112,7 @@ class params {
         }
         else
             try {
-                let parsed = JSON.parse(fileContent, reviver);
+                let parsed = JSON.parse(fileContent, util_1.reviver);
                 if (parsed instanceof Map)
                     importedMapData = parsed;
                 else
@@ -126,13 +126,13 @@ class params {
         return new params(preparedMapData, fileContent, path);
     }
     stringify() {
-        return JSON.stringify(this.mapData, replacer);
+        return JSON.stringify(this.mapData, util_1.replacer);
     }
     save(param, path) {
         let lastPromise = this.unfinishedSave.shift();
         let promise = new Promise((resolve, reject) => {
             let doSave = () => {
-                let unmodifiedMap = JSON.parse(this.stringify(), reviver);
+                let unmodifiedMap = JSON.parse(this.stringify(), util_1.reviver);
                 let modified = false;
                 if (param != null) {
                     if (Array.isArray(param)) {
@@ -147,7 +147,7 @@ class params {
                     }
                     else
                         try {
-                            let parsed = JSON.parse(param, reviver);
+                            let parsed = JSON.parse(param, util_1.reviver);
                             if (!(parsed instanceof Map))
                                 throw new Error("not a Map");
                             unmodifiedMap.clear();
@@ -161,7 +161,7 @@ class params {
                 // may be modified, but still not taking effect now
                 params.prepare(unmodifiedMap, true).then((preparedMapData) => {
                     try {
-                        let fileContent = JSON.stringify(preparedMapData, replacer);
+                        let fileContent = JSON.stringify(preparedMapData, util_1.replacer);
                         if (path == null)
                             path = this.path;
                         fs.writeFileSync(path, fileContent, { encoding: "utf-8" });
@@ -191,7 +191,7 @@ class params {
     saveOverrideDB(fileContent) {
         if (fileContent != null) {
             try {
-                let parsed = JSON.parse(fileContent, reviver);
+                let parsed = JSON.parse(fileContent, util_1.reviver);
                 if (!(parsed instanceof Map))
                     throw new Error(`parsed fileContent is not map`);
                 this.overridesDB.clear();
@@ -203,7 +203,7 @@ class params {
             }
         }
         try {
-            fs.writeFileSync(params.overridesDBPath, JSON.stringify(this.overridesDB, replacer), 'utf-8');
+            fs.writeFileSync(params.overridesDBPath, JSON.stringify(this.overridesDB, util_1.replacer), 'utf-8');
         }
         catch (e) {
             console.error(`error writting to ${params.overridesDBPath}`, e);
@@ -211,6 +211,7 @@ class params {
     }
     get mode() { return this.mapData.get("mode"); }
     get autoOpenWeb() { return this.mapData.get("autoOpenWeb"); }
+    get injectMadokamiSE() { return this.mapData.get("injectMadokamiSE"); }
     get listenList() { return this.mapData.get("listenList"); }
     get lastHttpProxy() { return this.mapData.get("lastHttpProxy"); }
     get httpProxyUsername() { return this.mapData.get("httpProxyUsername"); }
@@ -281,7 +282,7 @@ class params {
                     break;
                 case "httpProxyPassword":
                     if (val == null)
-                        val = (0, get_random_bytes_1.getRandomHex)(32);
+                        val = (0, util_1.getRandomHex)(32);
                     break;
                 case "CACertAndKey":
                     if (val == null || val.cert == null || val.key == null)
@@ -352,7 +353,7 @@ class params {
             let host = list[name].host;
             if (!net.isIP(host))
                 try {
-                    let ip = await resolveToIP(host);
+                    let ip = await (0, util_1.resolveToIP)(host);
                     console.log(`lookup hostname=[${host}] result ip=${ip}`);
                     host = ip;
                 }
@@ -423,60 +424,3 @@ params.isAliveReqMarker = "2f53b99c5bc307e9e4005ea1087eeca0";
 params.isAliveRespMarker = "614cb4bf76a743055e924a0a3073f850";
 params.defaultPath = path.join(".", "params.json");
 params.overridesDBPath = path.join(".", "overrides.json");
-// Author: Stefnotch
-// https://stackoverflow.com/questions/29085197/how-do-you-json-stringify-an-es6-map/73155667#73155667
-function replacer(key, value) {
-    if (typeof value === "object" && value !== null) {
-        if (value instanceof Map) {
-            return {
-                _meta: { type: "map" },
-                value: Array.from(value.entries()),
-            };
-        }
-        else if (value instanceof Set) { // bonus feature!
-            return {
-                _meta: { type: "set" },
-                value: Array.from(value.values()),
-            };
-        }
-        else if ("_meta" in value) {
-            // Escape "_meta" properties
-            return Object.assign(Object.assign({}, value), { _meta: {
-                    type: "escaped-meta",
-                    value: value["_meta"],
-                } });
-        }
-    }
-    return value;
-}
-exports.replacer = replacer;
-function reviver(key, value) {
-    if (typeof value === "object" && value !== null) {
-        if ("_meta" in value) {
-            if (value._meta.type === "map") {
-                return new Map(value.value);
-            }
-            else if (value._meta.type === "set") {
-                return new Set(value.value);
-            }
-            else if (value._meta.type === "escaped-meta") {
-                // Un-escape the "_meta" property
-                return Object.assign(Object.assign({}, value), { _meta: value._meta.value });
-            }
-            else {
-                console.warn("Unexpected meta", value._meta);
-            }
-        }
-    }
-    return value;
-}
-exports.reviver = reviver;
-async function resolveToIP(hostname) {
-    return new Promise((res, rej) => dns.lookup(hostname, (err, address, family) => {
-        if (err == null)
-            res(address);
-        else
-            rej(err);
-    }));
-}
-exports.resolveToIP = resolveToIP;

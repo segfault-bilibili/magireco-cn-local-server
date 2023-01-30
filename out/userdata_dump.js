@@ -5,12 +5,12 @@ const crypto = require("crypto");
 const http2 = require("http2");
 const fs = require("fs");
 const path = require("path");
+const util_1 = require("./util");
 const parameters = require("./parameters");
-const local_server_1 = require("./local_server");
 const brBase64 = (data) => {
-    const stringified = JSON.stringify(data, parameters.replacer);
+    const stringified = JSON.stringify(data, util_1.replacer);
     const buf = Buffer.from(stringified, 'utf-8');
-    const compressedBase64 = local_server_1.localServer.compress(buf, "br").toString('base64');
+    const compressedBase64 = (0, util_1.compress)(buf, "br").toString('base64');
     return compressedBase64;
 };
 exports.brBase64 = brBase64;
@@ -18,8 +18,8 @@ const unBrBase64 = (brBase64) => {
     if (brBase64 == null)
         return brBase64;
     const compressedBuf = Buffer.from(brBase64, 'base64');
-    const decompressedStr = local_server_1.localServer.decompress(compressedBuf, "br").toString("utf-8");
-    const parsed = JSON.parse(decompressedStr, parameters.reviver);
+    const decompressedStr = (0, util_1.decompress)(compressedBuf, "br").toString("utf-8");
+    const parsed = JSON.parse(decompressedStr, util_1.reviver);
     return parsed;
 };
 exports.unBrBase64 = unBrBase64;
@@ -30,8 +30,8 @@ const getUnBrBody = (map, key) => {
     if (val.brBody == null)
         throw new Error("val.brBody == null");
     const buf = Buffer.from(val.brBody, 'base64');
-    const decompressed = local_server_1.localServer.decompress(buf, "br").toString('utf-8');
-    const parsed = JSON.parse(decompressed, parameters.reviver);
+    const decompressed = (0, util_1.decompress)(buf, "br").toString('utf-8');
+    const parsed = JSON.parse(decompressed, util_1.reviver);
     return parsed;
 };
 exports.getUnBrBody = getUnBrBody;
@@ -283,7 +283,7 @@ class userdataDmp {
             },
         };
         console.log(this._fetchStatus = "JSON.stringify()...");
-        let jsonBuf = Buffer.from(JSON.stringify(this._lastDump, parameters.replacer), 'utf-8');
+        let jsonBuf = Buffer.from(JSON.stringify(this._lastDump, util_1.replacer), 'utf-8');
         console.log(this._fetchStatus = `writting to [${this.internalUserdataDumpFileName}] ...`);
         fs.writeFileSync(path.join(".", this.internalUserdataDumpFileName), jsonBuf);
         console.log(this._fetchStatus = `written to [${this.internalUserdataDumpFileName}]`);
@@ -302,14 +302,14 @@ class userdataDmp {
                 console.log(`converting [${legacyFilePath}] ...`);
                 let compressed = fs.readFileSync(legacyFilePath);
                 let converted = userdataDmp.convertDumpToBrBase64(compressed);
-                let convertedStr = JSON.stringify(converted, parameters.replacer);
+                let convertedStr = JSON.stringify(converted, util_1.replacer);
                 fs.writeFileSync(filePath, convertedStr);
                 fs.rmSync(legacyFilePath);
             }
             if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
                 console.log(`loading [${filePath}] ...`);
                 let lastDumpStr = fs.readFileSync(filePath, 'utf-8');
-                this._lastDump = JSON.parse(lastDumpStr, parameters.reviver);
+                this._lastDump = JSON.parse(lastDumpStr, util_1.reviver);
                 console.log(`loaded ${this.userdataDumpFileName}`);
             }
         }
@@ -338,7 +338,7 @@ class userdataDmp {
         this._lastImportError = undefined;
         const filePath = path.join(".", this.internalUserdataDumpFileName);
         let converted = userdataDmp.convertDumpToBrBase64(src);
-        let convertedStr = JSON.stringify(converted, parameters.replacer);
+        let convertedStr = JSON.stringify(converted, util_1.replacer);
         fs.writeFileSync(filePath, convertedStr);
         this._lastDump = converted;
         this.params.lastDownloadedFileName = this.userdataDumpFileName;
@@ -357,24 +357,24 @@ class userdataDmp {
                 decompressedStr = src.toString("utf-8");
                 break;
             case "1f8b":
-                decompressedStr = local_server_1.localServer.decompress(src, "gzip").toString("utf-8");
+                decompressedStr = (0, util_1.decompress)(src, "gzip").toString("utf-8");
                 break;
             case "7801":
             case "789c":
             case "78da":
-                decompressedStr = local_server_1.localServer.decompress(src, "deflate").toString("utf-8");
+                decompressedStr = (0, util_1.decompress)(src, "deflate").toString("utf-8");
                 break;
             default:
-                decompressedStr = local_server_1.localServer.decompress(src, "br").toString("utf-8");
+                decompressedStr = (0, util_1.decompress)(src, "br").toString("utf-8");
         }
         let parsed;
         try {
-            parsed = JSON.parse(decompressedStr, parameters.reviver);
+            parsed = JSON.parse(decompressedStr, util_1.reviver);
         }
         catch (e) {
             console.log(`reattempt parse after brotliDecompress`);
-            decompressedStr = local_server_1.localServer.decompress(src, "br").toString("utf-8");
-            parsed = JSON.parse(decompressedStr, parameters.reviver);
+            decompressedStr = (0, util_1.decompress)(src, "br").toString("utf-8");
+            parsed = JSON.parse(decompressedStr, util_1.reviver);
         }
         if (typeof (parsed === null || parsed === void 0 ? void 0 : parsed.timestamp) !== 'number' || isNaN(parsed === null || parsed === void 0 ? void 0 : parsed.timestamp))
             throw new Error("timestamp is not number (make sure you are importing a userdata dump)");
@@ -388,8 +388,8 @@ class userdataDmp {
             parsed.httpResp.post.forEach((val) => mapArray.push(val));
             mapArray.forEach((map) => {
                 map.forEach((val) => {
-                    let stringified = JSON.stringify(val.body, parameters.replacer);
-                    let compressedBase64 = local_server_1.localServer.compress(Buffer.from(stringified, 'utf-8'), "br")
+                    let stringified = JSON.stringify(val.body, util_1.replacer);
+                    let compressedBase64 = (0, util_1.compress)(Buffer.from(stringified, 'utf-8'), "br")
                         .toString('base64');
                     val.brBody = compressedBase64;
                     delete val.body;

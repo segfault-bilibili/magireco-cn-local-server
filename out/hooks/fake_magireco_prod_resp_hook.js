@@ -3,13 +3,13 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.fakeMagirecoProdRespHook = void 0;
 const http2 = require("http2");
 const crypto = require("crypto");
-const local_server_1 = require("../local_server");
+const util_1 = require("../util");
 const parameters = require("../parameters");
 const staticResCrawler = require("../static_res_crawler");
 const userdataDump = require("../userdata_dump");
 const bsgamesdk_pwd_authenticate_1 = require("../bsgamesdk-pwd-authenticate");
 const missing_data_1 = require("./etc/missing_data");
-const get_random_bytes_1 = require("../get_random_bytes");
+const favicon = require("../favicon");
 class fakeMagirecoProdRespHook {
     constructor(params, crawler, dmp) {
         this.pageKeys = {
@@ -252,10 +252,26 @@ class fakeMagirecoProdRespHook {
                 replacePattern: /(<li class="TE btn se_tabs current" data-wrap="main"><span>主线【第1部】<\/span><\/li>)/,
                 replacement: "$1 <li class=\"TE btn se_tabs\" data-wrap=\"mainSecond\"><span>主线【第2部】</span></li>",
             },
+            // unlock spirit enhancement
             ["/magica/template/chara/CharaTop.html"]: {
                 matchPattern: /^<div id="CharaTop">/,
                 replacePattern: /(<li class="TE customize"><span class="linkBtn se_decide" data-href="#\/CharaListCustomize"><\/span><\/li>)/,
                 replacement: "$1 <li class=\"TE enhance\"><span class=\"enhanceLink se_decide\"></span></li>",
+            },
+            ["/magica/template/card/CardSort.html"]: {
+                matchPattern: /^<div id="sortfilter" class="chara">/,
+                replacePattern: /(<div id="filterInitialList">)/,
+                replacement: "<div id=\"filterEnhanceList\"> <div class='filterBar'> <p>精神强化</p> <span class='filterEnhance se_tabs ALL' data-enhancefilter-id=\"ALL\"><span class='checkBox'></span>全部显示</span> </div> <div class=\"flexBox\"> <span class=\"filterEnhance enable se_tabs\" data-enhancefilter-id=\"enable\" ><span class='checkBox'></span>开放</span> <span class=\"filterEnhance disable se_tabs\" data-enhancefilter-id=\"disable\" ><span class='checkBox'></span>未开放</span> </div> </div> $1",
+            },
+            ["/magica/css/_common/common.css"]: {
+                matchPattern: /^@charset "UTF-8";#helpBtn\{width:100px;/,
+                replacePattern: /(#filterInitialList\{top):92(px\})/,
+                replacement: "$1:215$2",
+            },
+            ["/magica/css/util/FilterPopup.css"]: {
+                matchPattern: /^#sortfilter #filterAttList .DARK:after,/,
+                replacePattern: /(#filterInitialList\{top):92(px\})/,
+                replacement: "$1:215$2",
             },
         };
         this.checkForMissing = (existingArray, missingArray, key) => {
@@ -272,7 +288,7 @@ class fakeMagirecoProdRespHook {
         this.params = params;
         this.crawler = crawler;
         this.userdataDmp = dmp;
-        this.magirecoProdUrlRegEx = /^(http|https):\/\/l\d+-prod-[0-9a-z\-]+-mfsn\d*\.bilibiligame\.net\/(|maintenance\/)magica\/.+$/;
+        this.magirecoProdUrlRegEx = /^(http|https):\/\/l\d+-prod-[0-9a-z\-]+-mfsn\d*\.bilibiligame\.net\/((|maintenance\/)magica\/.+|favicon\.ico)$/;
         this.magicaMaintenanceConfigRegEx = /^\/maintenance\/magica\/config((|\?.*)$)/;
         this.magirecoPatchUrlRegEx = /^(http|https):\/\/line\d+-prod-patch-mfsn\d*\.bilibiligame\.net\/magica\/.+$/;
         this.apiPathNameRegEx = /^\/magica\/api\/.+$/;
@@ -280,12 +296,16 @@ class fakeMagirecoProdRespHook {
         this.bsgameSdkLoginRegEx = /^(http|https):\/\/line\d+-sdk-center-login-sh\.biligame\.net\/api\/external\/(login|login\/otp|user\.token\.oauth\.login)\/v3((|\?.*)$)/;
         this.bsgameSdkCipherRegEx = /^(http|https):\/\/line\d+-sdk-center-login-sh\.biligame\.net\/api\/external\/issue\/cipher\/v3((|\?.*)$)/;
         this.bsgameSdkOtpSendRegEx = /^(http|https):\/\/line\d+-sdk-center-login-sh\.biligame\.net\/api\/external\/otp\/send\/v3((|\?.*)$)/;
-        this.bilibiliGameAgreementRegEx = /^(http|https):\/\/game\.bilibili\.com\/agreement\/(userterms|privacy)\/.+$/;
+        this.bilibiliAgreementConfigRegEx = /^(http|https):\/\/line\d-sdk-app-api\.biligame\.net\/api\/agreement\/config((|\?.*)$)/;
+        this.bilibiliGameAgreementRegEx = /^(http|https):\/\/game\.bilibili\.com\/agreement\/(updatetips|userterms|privacy)\/.+$/;
+        this.touristLoginRegEx = /^(http|https):\/\/p\.biligame\.com\/api\/external\/tourist\.login\/v3((|\?.*)$)/;
+        this.touristBindTelPwdRegEx = /^(http|https):\/\/line\d+-sdk-center-login-sh\.biligame\.net\/api\/external\/tourist\/bind\/tel\.pwd\/v3((|\?.*)$)/;
+        this.bilibiliGameRealnameAuthRegEx = /^(http|https):\/\/game\.bilibili\.com\/sdk\/authentication?.+$/;
         this.part2Section3RegEx = /^\/magica\/resource\/download\/asset\/master\/resource\/2207081501\/asset_section_10230(1|2|3)\.json$/;
         this.arenaSimulateMap = new Map();
     }
     get stringifiedOverrideDB() {
-        return JSON.stringify(this.params.overridesDB, parameters.replacer);
+        return JSON.stringify(this.params.overridesDB, util_1.replacer);
     }
     get overrides() {
         const lastDump = this.userdataDmp.lastDump;
@@ -356,20 +376,39 @@ class fakeMagirecoProdRespHook {
                 nextAction: "passOnRequest",
                 interceptResponse: false,
             };
+        if ((url === null || url === void 0 ? void 0 : url.pathname) === "/favicon.ico") {
+            return {
+                nextAction: "fakeResponse",
+                fakeResponse: {
+                    statusCode: 200,
+                    statusMessage: "OK",
+                    headers: {
+                        [http2.constants.HTTP2_HEADER_CONTENT_TYPE]: favicon.mimeType,
+                    },
+                    body: favicon.ico,
+                },
+                interceptResponse: false,
+            };
+        }
         const isMagiRecoProd = (url === null || url === void 0 ? void 0 : url.href.match(this.magirecoProdUrlRegEx)) != null;
         const isMagiRecoPatch = (url === null || url === void 0 ? void 0 : url.href.match(this.magirecoPatchUrlRegEx)) != null;
         const isBsgamesdkLogin = (url === null || url === void 0 ? void 0 : url.href.match(this.bsgameSdkLoginRegEx)) != null;
         const isBsgamesdkCipher = (url === null || url === void 0 ? void 0 : url.href.match(this.bsgameSdkCipherRegEx)) != null;
         const isBsgamesdkOtpSend = (url === null || url === void 0 ? void 0 : url.href.match(this.bsgameSdkOtpSendRegEx)) != null;
+        const isTouristLogin = (url === null || url === void 0 ? void 0 : url.href.match(this.touristLoginRegEx)) != null;
+        const isTouristBindTelPwd = (url === null || url === void 0 ? void 0 : url.href.match(this.touristBindTelPwdRegEx)) != null;
+        const isBilibiliAgreementConfig = (url === null || url === void 0 ? void 0 : url.href.match(this.bilibiliAgreementConfigRegEx)) != null;
         const isBilibiliGameAgreement = (url === null || url === void 0 ? void 0 : url.href.match(this.bilibiliGameAgreementRegEx)) != null;
+        const isBilibiliGameRealnameAuth = (url === null || url === void 0 ? void 0 : url.href.match(this.bilibiliGameRealnameAuthRegEx)) != null;
         if (!isMagiRecoProd && !isMagiRecoPatch
             && !isBsgamesdkLogin && !isBsgamesdkCipher && !isBsgamesdkOtpSend
-            && !isBilibiliGameAgreement)
+            && !isTouristLogin && !isTouristBindTelPwd
+            && !isBilibiliAgreementConfig && !isBilibiliGameAgreement && !isBilibiliGameRealnameAuth)
             return {
                 nextAction: "passOnRequest",
                 interceptResponse: false,
             };
-        if (isBsgamesdkCipher || isBsgamesdkOtpSend || isBsgamesdkLogin) {
+        if (isBsgamesdkCipher || isBsgamesdkOtpSend || isBsgamesdkLogin || isTouristLogin || isTouristBindTelPwd) {
             let contentType = 'application/json;charset=UTF-8';
             let respBody;
             if (isBsgamesdkCipher) {
@@ -380,9 +419,13 @@ class fakeMagirecoProdRespHook {
                 console.log(`attempt to fake bsgamesdk otp response`);
                 respBody = this.fakeBsgamesdkOtpSendResp();
             }
-            else if (isBsgamesdkLogin) {
-                console.log(`attempt to fake bsgamesdk login response`);
+            else if (isBsgamesdkLogin || isTouristLogin) {
+                console.log(`attempt to fake bsgamesdk login${isTouristLogin ? " (tourist)" : ""} response`);
                 respBody = this.fakeBsgamesdkLoginResp();
+            }
+            else if (isTouristBindTelPwd) {
+                console.log(`attempt to fake bsgamesdk bind tel.pwd response`);
+                respBody = this.fakeBsgamesdkTouristBindTelPwdResp();
             }
             if (respBody == null)
                 console.log(`failed to fake bsgamesdk login response`);
@@ -402,15 +445,55 @@ class fakeMagirecoProdRespHook {
                 };
             }
         }
-        if (isBilibiliGameAgreement) {
+        if (isBilibiliAgreementConfig) {
+            const headers = {
+                [http2.constants.HTTP2_HEADER_CONTENT_TYPE]: "application/json;charset=UTF-8",
+            };
+            const agreementConfigJson = JSON.stringify({
+                request_id: `${(0, util_1.getRandomGuid)()}`,
+                timestamp: Date.now(),
+                code: 0,
+                message: "响应成功",
+                data: {
+                    cooperation_mode: 1,
+                    agreement_switch: "ON",
+                    agreement_version: "1.0.5",
+                    agreement_link: "https://game.bilibili.com/agreement/privacy/810/628e2b599835f300480e5279",
+                    update_tips_link: "https://game.bilibili.com/agreement/updatetips/810/628e2b7dcfccbc004be18aac",
+                    cp_user_terms_link: "https://game.bilibili.com/agreement/userterms/810/628e2b599835f300480e5278",
+                    cp_privacy_link: "https://game.bilibili.com/agreement/privacy/810/628e2b599835f300480e5279",
+                    update_tips_switch: "ON"
+                },
+                success: true
+            });
+            const respBody = Buffer.from(agreementConfigJson, 'utf-8');
+            return {
+                nextAction: "fakeResponse",
+                fakeResponse: {
+                    statusCode: 200,
+                    statusMessage: "OK",
+                    headers: headers,
+                    body: respBody,
+                },
+                interceptResponse: false,
+            };
+        }
+        if (isBilibiliGameAgreement || isBilibiliGameRealnameAuth) {
             const headers = {
                 [http2.constants.HTTP2_HEADER_CONTENT_TYPE]: "text/html; charset=utf-8",
             };
-            const html = `<!doctype html><html><head><meta charset=\"UTF-8\"><script>`
-                + `document.addEventListener(\"WebViewJavascriptBridgeReady\",function(){`
+            const agreementSkipJs = `document.addEventListener(\"WebViewJavascriptBridgeReady\",function(){`
                 + `var obj={status:1,type:1,event:1};`
                 + `[obj,JSON.stringify(obj)].forEach(o=>{try{window.bridge.callHandler("finishWithJson",o,function(){});}catch(e){}});`
-                + `});`
+                + `});`;
+            const realnameAuthJs = `window.addEventListener(\"load\",function(){`
+                + `var body=JSON.stringify({type:0,message:""});`
+                + `try{window.BiliJsObject.finishWithResult(body);}catch(e){}`
+                + `try{window.webkit.messageHandlers.BiliJsObject.postMessage({method:"finishWithResult",body:body});}catch(e){}`
+                + `});`;
+            const html = `<!doctype html><html><head><meta charset=\"UTF-8\"><script>`
+                + (isBilibiliGameAgreement ? agreementSkipJs : "")
+                + (isBilibiliGameRealnameAuth ? realnameAuthJs : "")
                 + `</script></head></html>`;
             const respBody = Buffer.from(html, 'utf-8');
             return {
@@ -476,6 +559,12 @@ class fakeMagirecoProdRespHook {
                 case "event_banner/list/1":
                     {
                         body = Buffer.from(JSON.stringify(this.fakeResp[apiName]), 'utf-8');
+                        break;
+                    }
+                case "gameUser/cacheClear":
+                    {
+                        // TODO
+                        body = Buffer.from(JSON.stringify({ result: "success" }));
                         break;
                     }
                 // special ones
@@ -558,14 +647,14 @@ class fakeMagirecoProdRespHook {
                     }
                 default:
                     {
-                        body = Buffer.from(this.fakeErrorResp("错误", "API尚未实现", false), 'utf-8');
+                        body = this.fakeErrorResp("错误", "API尚未实现", false);
                         apiUnimplemented = true;
                     }
             }
             if (body == null || apiUnimplemented) {
                 console.error(`matchRequest responding with fakeErrorResp [${url.pathname}]`);
                 if (!apiUnimplemented)
-                    body = Buffer.from(this.fakeErrorResp(), 'utf-8');
+                    body = this.fakeErrorResp();
             }
             const headers = {
                 [http2.constants.HTTP2_HEADER_CONTENT_TYPE]: contentType,
@@ -616,7 +705,7 @@ class fakeMagirecoProdRespHook {
                     let uncompressed = this.crawler.readFile(url.pathname.replace(/\.gz$/, ""));
                     if (uncompressed != null) {
                         contentType = this.crawler.getContentType(url.pathname);
-                        body = local_server_1.localServer.compress(uncompressed, "gzip");
+                        body = (0, util_1.compress)(uncompressed, "gzip");
                         contentEncoding = "gzip";
                     }
                 }
@@ -721,7 +810,7 @@ class fakeMagirecoProdRespHook {
                     }
                 default:
                     {
-                        respBody = Buffer.from(this.fakeErrorResp("错误", "API尚未实现", false), 'utf-8');
+                        respBody = this.fakeErrorResp("错误", "API尚未实现", false);
                         apiUnimplemented = true;
                     }
             }
@@ -731,7 +820,7 @@ class fakeMagirecoProdRespHook {
                 }
                 console.error(`onMatchedRequest responding with fakeErrorResp [${url.pathname}]`);
                 if (!apiUnimplemented)
-                    respBody = Buffer.from(this.fakeErrorResp(), 'utf-8');
+                    respBody = this.fakeErrorResp();
             }
             const headers = {
                 [http2.constants.HTTP2_HEADER_CONTENT_TYPE]: contentType,
@@ -758,10 +847,10 @@ class fakeMagirecoProdRespHook {
     }
     fakeBsgamesdkCipherResp() {
         const obj = {
-            requestId: `${(0, get_random_bytes_1.getRandomHex)(32)}`,
+            requestId: `${(0, util_1.getRandomHex)(32)}`,
             timestamp: `${new Date().getTime()}`,
             code: 0,
-            hash: `${(0, get_random_bytes_1.getRandomHex)(16)}`,
+            hash: `${(0, util_1.getRandomHex)(16)}`,
             cipher_key: "-----BEGIN PUBLIC KEY-----\nMIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDjb4V7EidX/ym28t2ybo0U6t0n\n6p4ej8VjqKHg100va6jkNbNTrLQqMCQCAYtXMXXp2Fwkk6WR+12N9zknLjf+C9sx\n/+l48mjUU8RqahiFD1XT/u2e0m2EN029OhCgkHx3Fc/KlFSIbak93EH/XlYis0w+\nXl69GV6klzgxW6d2xQIDAQAB\n-----END PUBLIC KEY-----",
             server_message: "",
         };
@@ -769,12 +858,21 @@ class fakeMagirecoProdRespHook {
     }
     fakeBsgamesdkOtpSendResp() {
         const obj = {
-            requestId: `${(0, get_random_bytes_1.getRandomHex)(32)}`,
+            requestId: `${(0, util_1.getRandomHex)(32)}`,
             timestamp: `${new Date().getTime()}`,
             code: 0,
-            captcha_key: `${(0, get_random_bytes_1.getRandomHex)(32)}`,
+            captcha_key: `${(0, util_1.getRandomHex)(32)}`,
             verify_tkt: null,
             verify_tkt_type: null,
+            server_message: "",
+        };
+        return Buffer.from(JSON.stringify(obj), 'utf-8');
+    }
+    fakeBsgamesdkTouristBindTelPwdResp() {
+        const obj = {
+            requestId: `${(0, util_1.getRandomHex)(32)}`,
+            timestamp: `${new Date().getTime()}`,
+            code: 0,
             server_message: "",
         };
         return Buffer.from(JSON.stringify(obj), 'utf-8');
@@ -793,7 +891,7 @@ class fakeMagirecoProdRespHook {
         if (user == null)
             return;
         const loginName = user["loginName"];
-        const requestId = (0, get_random_bytes_1.getRandomHex)(32);
+        const requestId = (0, util_1.getRandomHex)(32);
         const tsStr = `${new Date().getTime()}`;
         const expires = Number(tsStr) + 30 * 24 * 60 * 60 * 1000;
         const h5_paid_download = 1;
@@ -808,7 +906,7 @@ class fakeMagirecoProdRespHook {
             h5_paid_download: h5_paid_download,
             h5_paid_download_sign: `${h5_paid_download_sign}`,
             code: 0,
-            access_key: `${(0, get_random_bytes_1.getRandomHex)(32)}_sh`,
+            access_key: `${(0, util_1.getRandomHex)(32)}_sh`,
             expires: expires,
             uid: uid,
             face: "http://static.hdslb.com/images/member/noface.gif",
@@ -829,7 +927,7 @@ class fakeMagirecoProdRespHook {
         const loginName = topPage["loginName"];
         const obj = {
             data: {
-                open_id: `${this.getRandomGuid()}`,
+                open_id: `${(0, util_1.getRandomGuid)()}`,
                 uname: `${loginName}`,
                 code: 0,
                 timestamp: new Date().getTime(),
@@ -884,10 +982,10 @@ class fakeMagirecoProdRespHook {
         }
         const lastDump = this.userdataDmp.lastDump;
         if (lastDump == null)
-            return Buffer.from(this.fakeErrorResp("错误", "未加载个人账号数据"), 'utf-8');
+            return this.fakeErrorResp("错误", "未加载个人账号数据");
         let respBodyObj = userdataDump.getUnBrBody(lastDump.httpResp.get, this.pageKeys[apiName]);
         if (respBodyObj == null)
-            return Buffer.from(this.fakeErrorResp("错误", "读取个人账号数据出错"), 'utf-8');
+            return this.fakeErrorResp("错误", "读取个人账号数据出错");
         // make a replica to avoid changing original
         let replica = JSON.parse(JSON.stringify(respBodyObj));
         // copy "missing" parts from other page to populate common.storage,
@@ -1003,7 +1101,7 @@ class fakeMagirecoProdRespHook {
         const gameUserKey = gameUserKeys[apiName][1];
         const lastDump = this.userdataDmp.lastDump;
         if (lastDump == null)
-            return Buffer.from(this.fakeErrorResp("错误", "未加载个人账号数据"), 'utf-8');
+            return this.fakeErrorResp("错误", "未加载个人账号数据");
         try {
             const parsed = JSON.parse(reqBody);
             const setToVal = parsed[reqKey];
@@ -1072,13 +1170,13 @@ class fakeMagirecoProdRespHook {
         }
         const lastDump = this.userdataDmp.lastDump;
         if (lastDump == null)
-            return Buffer.from(this.fakeErrorResp("错误", "未加载个人账号数据"), 'utf-8');
+            return this.fakeErrorResp("错误", "未加载个人账号数据");
         const myPage = userdataDump.getUnBrBody(lastDump.httpResp.get, this.pageKeys["page/MyPage"]);
         const userCharaList = myPage["userCharaList"];
         const userCardList = myPage["userCardList"];
         if (userCharaList == null || !Array.isArray(userCharaList)
             && userCardList == null || !Array.isArray(userCardList)) {
-            return Buffer.from(this.fakeErrorResp("错误", "读取角色列表时出错"), 'utf-8');
+            return this.fakeErrorResp("错误", "读取角色列表时出错");
         }
         let charaModMap = this.getOverrideValue(`userCharaList`);
         if (charaModMap == null || !(charaModMap instanceof Map)) {
@@ -1180,7 +1278,7 @@ class fakeMagirecoProdRespHook {
         var _a, _b;
         const lastDump = this.userdataDmp.lastDump;
         if (lastDump == null)
-            return Buffer.from(this.fakeErrorResp("错误", "未加载个人账号数据"), 'utf-8');
+            return this.fakeErrorResp("错误", "未加载个人账号数据");
         const urlBases = {
             ["page/PresentHistory"]: `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/PresentHistory`,
             ["page/GachaHistory"]: `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/GachaHistory`,
@@ -1204,7 +1302,7 @@ class fakeMagirecoProdRespHook {
         else {
             const respBodyObj = userdataDump.unBrBase64((_b = (_a = lastDump.httpResp.post.get(urlBase)) === null || _a === void 0 ? void 0 : _a.get(JSON.stringify({ [type]: `${pageNum}` }))) === null || _b === void 0 ? void 0 : _b.brBody);
             if (respBodyObj == null)
-                return Buffer.from(this.fakeErrorResp("错误", `找不到指定${type}`), 'utf-8');
+                return this.fakeErrorResp("错误", `找不到指定${type}`);
             this.fixCurrentTime(respBodyObj);
             return Buffer.from(JSON.stringify(respBodyObj), 'utf-8');
         }
@@ -1222,15 +1320,15 @@ class fakeMagirecoProdRespHook {
         const matched = pathname.match(this.slashGuidEndRegEx);
         const userId = matched != null ? matched[0].replace(/^\//, "") : undefined;
         if (userId == null) {
-            return Buffer.from(this.fakeErrorResp("错误", "参数非法"), 'utf-8');
+            return this.fakeErrorResp("错误", "参数非法");
         }
         const lastDump = this.userdataDmp.lastDump;
         if (lastDump == null)
-            return Buffer.from(this.fakeErrorResp("错误", "未加载个人账号数据"), 'utf-8');
+            return this.fakeErrorResp("错误", "未加载个人账号数据");
         let respBodyObj = userdataDump.getUnBrBody(lastDump.httpResp.get, `${urlBase}${userId}`);
         if (respBodyObj == null) {
             console.error(`fakeGuidResult userId=[${userId}] not found`);
-            return Buffer.from(this.fakeErrorResp("错误", "找不到此项数据"), 'utf-8');
+            return this.fakeErrorResp("错误", "找不到此项数据");
         }
         if (respBodyObj.currentTime != null)
             console.warn(`fakeGuidResult apiName=[${apiName}] typeof respBodyObj.currentTime`, respBodyObj.currentTime);
@@ -1242,10 +1340,10 @@ class fakeMagirecoProdRespHook {
             return;
         const lastDump = this.userdataDmp.lastDump;
         if (lastDump == null)
-            return Buffer.from(this.fakeErrorResp("错误", "未加载个人账号数据"), 'utf-8');
+            return this.fakeErrorResp("错误", "未加载个人账号数据");
         const myUserId = (_b = (_a = userdataDump.getUnBrBody(lastDump.httpResp.get, this.pageKeys["page/TopPage"])) === null || _a === void 0 ? void 0 : _a.gameUser) === null || _b === void 0 ? void 0 : _b.userId;
         if (typeof myUserId !== 'string' || !myUserId.match(userdataDump.guidRegEx)) {
-            return Buffer.from(this.fakeErrorResp("错误", "无法读取用户ID"), 'utf-8');
+            return this.fakeErrorResp("错误", "无法读取用户ID");
         }
         switch (apiName) {
             case "arena/start":
@@ -1255,7 +1353,7 @@ class fakeMagirecoProdRespHook {
                     try {
                         const parsed = JSON.parse(reqBody);
                         if (parsed.arenaBattleType !== "SIMULATE") {
-                            return Buffer.from(this.fakeErrorResp("错误", "目前镜层只支持演习", false), 'utf-8');
+                            return this.fakeErrorResp("错误", "目前镜层只支持演习", false);
                         }
                         opponentUserId = parsed.opponentUserId;
                         if (typeof opponentUserId !== 'string' || !opponentUserId.match(userdataDump.guidRegEx)) {
@@ -1272,7 +1370,7 @@ class fakeMagirecoProdRespHook {
                         console.error(`fakeArenaStart error parsing`, e);
                         return;
                     }
-                    const userQuestBattleResultId = this.getRandomGuid();
+                    const userQuestBattleResultId = (0, util_1.getRandomGuid)();
                     this.arenaSimulateMap.set(userQuestBattleResultId, opponentUserId);
                     const createdAt = this.getDateTimeString();
                     const obj = {
@@ -1387,6 +1485,8 @@ class fakeMagirecoProdRespHook {
                         }
                         replica.webData.gameUser.userQuestBattleResultId = userQuestBattleResultId;
                         console.error(`fakeArenaNativeGet faked quest/native/get response`);
+                        if (this.params.injectMadokamiSE)
+                            this.injectUltimateMadokaSpiritEnhancement(replica);
                         return Buffer.from(JSON.stringify(replica), 'utf-8');
                     }
                     catch (e) {
@@ -1584,7 +1684,7 @@ class fakeMagirecoProdRespHook {
             obj.forceGoto = forceGoto;
         else if (!forceGoto)
             delete obj.forceGoto;
-        return JSON.stringify(obj);
+        return Buffer.from(JSON.stringify(obj), 'utf-8');
     }
     patchMainQuest(apiName, respBodyObj) {
         var _a, _b;
@@ -1630,9 +1730,376 @@ class fakeMagirecoProdRespHook {
         }
         return respBodyObj;
     }
-    getRandomGuid() {
-        return [8, 4, 4, 4, 12].map((len) => crypto.randomBytes(Math.trunc((len + 1) / 2))
-            .toString('hex').substring(0, len)).join("-");
+    injectUltimateMadokaSpiritEnhancement(replica) {
+        const ultimateMadokaEmotionMemoriaList = [
+            {
+                "memoriaId": 2101101,
+                "name": "MP增幅[Ⅱ]",
+                "icon": 1216,
+                "level": 0,
+                "cost": 0,
+                "description": "MP100以上时MP获得量提升[Ⅱ]",
+                "voice": 0,
+                "artList": [
+                    390218202
+                ],
+                "type": "ABILITY",
+                "displayType": "EMOTION"
+            },
+            {
+                "memoriaId": 2101102,
+                "name": "魔女化身强化[Ⅰ]",
+                "icon": 1220,
+                "level": 0,
+                "cost": 0,
+                "description": "魔女化身伤害提升[I]&Magia伤害提升[Ⅰ]",
+                "voice": 0,
+                "artList": [
+                    390218301,
+                    390201401
+                ],
+                "type": "ABILITY",
+                "displayType": "EMOTION"
+            },
+            {
+                "memoriaId": 2101103,
+                "name": "MP增幅[Ⅱ]",
+                "icon": 1216,
+                "level": 0,
+                "cost": 0,
+                "description": "MP100以上时MP获得量提升[Ⅱ]",
+                "voice": 0,
+                "artList": [
+                    390218202
+                ],
+                "type": "ABILITY",
+                "displayType": "EMOTION"
+            },
+            {
+                "memoriaId": 2101104,
+                "name": "加速专家[Ⅱ]",
+                "icon": 1090,
+                "level": 0,
+                "cost": 0,
+                "description": "Accele MP提升[Ⅱ]",
+                "voice": 0,
+                "artList": [
+                    390201602
+                ],
+                "type": "ABILITY",
+                "displayType": "EMOTION"
+            },
+            {
+                "memoriaId": 2101105,
+                "name": "魔女化身强化[Ⅰ]",
+                "icon": 1220,
+                "level": 0,
+                "cost": 0,
+                "description": "魔女化身伤害提升[I]&Magia伤害提升[Ⅰ]",
+                "voice": 0,
+                "artList": [
+                    390218301,
+                    390201401
+                ],
+                "type": "ABILITY",
+                "displayType": "EMOTION"
+            },
+            {
+                "memoriaId": 2101106,
+                "name": "Magia强化[Ⅱ]",
+                "icon": 1088,
+                "level": 0,
+                "cost": 0,
+                "description": "Magia伤害提升[Ⅱ]",
+                "voice": 0,
+                "artList": [
+                    390201402
+                ],
+                "type": "ABILITY",
+                "displayType": "EMOTION"
+            },
+            {
+                "memoriaId": 2101107,
+                "name": "暴击强化[Ⅱ]",
+                "icon": 1121,
+                "level": 0,
+                "cost": 0,
+                "description": "一定几率暴击[Ⅱ]",
+                "voice": 0,
+                "artList": [
+                    690206302
+                ],
+                "type": "ABILITY",
+                "displayType": "EMOTION"
+            },
+            {
+                "memoriaId": 2101108,
+                "name": "Blast强化[Ⅱ]",
+                "icon": 1092,
+                "level": 0,
+                "cost": 0,
+                "description": "Blast 伤害提升[Ⅱ]",
+                "voice": 0,
+                "artList": [
+                    390201842
+                ],
+                "type": "ABILITY",
+                "displayType": "EMOTION"
+            },
+            {
+                "memoriaId": 2101109,
+                "name": "Charge强化[Ⅱ]",
+                "icon": 1091,
+                "level": 0,
+                "cost": 0,
+                "description": "Charge后伤害提升[Ⅱ]",
+                "voice": 0,
+                "artList": [
+                    390201742
+                ],
+                "type": "ABILITY",
+                "displayType": "EMOTION"
+            },
+            {
+                "memoriaId": 2101110,
+                "name": "紧急强化[Ⅲ]",
+                "icon": 1213,
+                "level": 0,
+                "cost": 0,
+                "description": "对魔女伤害提升[Ⅲ]",
+                "voice": 0,
+                "artList": [
+                    690216803
+                ],
+                "type": "ABILITY",
+                "displayType": "EMOTION"
+            },
+            {
+                "memoriaId": 2101111,
+                "name": "(非官方翻译)energy shield·adept[Ⅲ]",
+                "icon": 1206,
+                "level": 0,
+                "cost": 0,
+                "description": "火·水·木属性伤害削减状态[Ⅲ]",
+                "voice": 0,
+                "artList": [
+                    690217403,
+                    690217503,
+                    690217603
+                ],
+                "type": "ABILITY",
+                "displayType": "EMOTION"
+            },
+            {
+                "memoriaId": 2101112,
+                "name": "(非官方翻译)nursing care[Ⅲ]",
+                "icon": 1129,
+                "level": 0,
+                "cost": 0,
+                "description": "HP自动回复[Ⅲ] \u0026 MP自动回复[Ⅲ]",
+                "voice": 0,
+                "artList": [
+                    690207703,
+                    690214803
+                ],
+                "type": "ABILITY",
+                "displayType": "EMOTION"
+            },
+            {
+                "memoriaId": 2101113,
+                "name": "(非官方翻译)all disk·circle[Ⅶ]",
+                "icon": 1092,
+                "level": 0,
+                "cost": 10,
+                "description": "全行动盘效果UP[Ⅶ](全体/3T)\u000a(若无标记,其余精强技能为官方翻译)",
+                "voice": 71,
+                "artList": [
+                    330301827,
+                    330301727,
+                    330301627
+                ],
+                "type": "SKILL",
+                "displayType": "EMOTION"
+            },
+        ];
+        const artList = [
+            {
+                "artId": 390201602,
+                "code": "BUFF",
+                "target": "SELF",
+                "sub": "ACCEL",
+                "effect": 125,
+                "rate": 1000,
+                "growPoint": 25
+            },
+            {
+                "artId": 690217403,
+                "code": "CONDITION_GOOD",
+                "target": "SELF",
+                "sub": "DAMAGE_DOWN_FIRE",
+                "effect": 150,
+                "rate": 1000,
+                "growPoint": 0
+            },
+            {
+                "artId": 390201401,
+                "code": "BUFF",
+                "target": "SELF",
+                "sub": "MAGIA",
+                "effect": 50,
+                "rate": 1000,
+                "growPoint": 25
+            },
+            {
+                "artId": 390218202,
+                "code": "BUFF",
+                "target": "SELF",
+                "sub": "MP_GAIN_OVER100",
+                "effect": 200,
+                "growPoint": 0
+            },
+            {
+                "artId": 390201402,
+                "code": "BUFF",
+                "target": "SELF",
+                "sub": "MAGIA",
+                "effect": 75,
+                "rate": 1000,
+                "growPoint": 25
+            },
+            {
+                "artId": 390218301,
+                "code": "BUFF",
+                "target": "SELF",
+                "sub": "DOPPEL",
+                "effect": 50,
+                "growPoint": 0
+            },
+            {
+                "artId": 390201842,
+                "code": "BUFF",
+                "target": "SELF",
+                "sub": "BLAST",
+                "effect": 165,
+                "rate": 1000,
+                "growPoint": 25
+            },
+            {
+                "artId": 690207703,
+                "code": "CONDITION_GOOD",
+                "target": "SELF",
+                "sub": "AUTO_HEAL",
+                "effect": 40,
+                "rate": 1000,
+                "growPoint": 10
+            },
+            {
+                "artId": 690217603,
+                "code": "CONDITION_GOOD",
+                "target": "SELF",
+                "sub": "DAMAGE_DOWN_TIMBER",
+                "effect": 150,
+                "rate": 1000,
+                "growPoint": 0
+            },
+            {
+                "artId": 330301727,
+                "code": "BUFF",
+                "target": "ALL",
+                "sub": "CHARGE",
+                "effect": 140,
+                "turn": 3,
+                "growPoint": 25
+            },
+            {
+                "artId": 690214803,
+                "code": "CONDITION_GOOD",
+                "target": "SELF",
+                "sub": "AUTO_HEAL",
+                "effect": 60,
+                "rate": 60,
+                "growPoint": 10,
+                "genericValue": "MP"
+            },
+            {
+                "artId": 330301827,
+                "code": "BUFF",
+                "target": "ALL",
+                "sub": "BLAST",
+                "effect": 155,
+                "turn": 3,
+                "growPoint": 25
+            },
+            {
+                "artId": 690217503,
+                "code": "CONDITION_GOOD",
+                "target": "SELF",
+                "sub": "DAMAGE_DOWN_WATER",
+                "effect": 150,
+                "rate": 1000,
+                "growPoint": 0
+            },
+            {
+                "artId": 690206302,
+                "code": "CONDITION_GOOD",
+                "target": "SELF",
+                "sub": "CRITICAL",
+                "effect": 2000,
+                "rate": 150,
+                "growPoint": 0
+            },
+            {
+                "artId": 690216803,
+                "code": "LIMITED_ENEMY_TYPE",
+                "target": "SELF",
+                "sub": "DAMAGE_UP",
+                "effect": 150,
+                "rate": 1000,
+                "growPoint": 15,
+                "genericValue": "WITCH"
+            },
+            {
+                "artId": 330301627,
+                "code": "BUFF",
+                "target": "ALL",
+                "sub": "ACCEL",
+                "effect": 150,
+                "turn": 3,
+                "growPoint": 25
+            },
+            {
+                "artId": 390201742,
+                "code": "BUFF",
+                "target": "SELF",
+                "sub": "CHARGE",
+                "effect": 100,
+                "rate": 1000,
+                "growPoint": 25
+            },
+        ];
+        const artMap = new Map();
+        artList.forEach((art) => artMap.set(art.artId, art));
+        const existingArtSet = new Set();
+        replica.artList.forEach((art) => existingArtSet.add(art.artId));
+        replica.playerList.forEach((player) => {
+            //if (player.diskId != 21015) return;
+            ultimateMadokaEmotionMemoriaList.forEach((memoria) => {
+                let playerMemoriaList = player === null || player === void 0 ? void 0 : player.memoriaList;
+                if (!playerMemoriaList.find((memoriaId) => memoriaId == memoria.memoriaId)) {
+                    playerMemoriaList.push(memoria.memoriaId);
+                }
+                let replicaMemoriaList = replica.memoriaList;
+                if (!replicaMemoriaList.find((existing) => existing.memoriaId == memoria.memoriaId)) {
+                    replicaMemoriaList.push(memoria);
+                    memoria.artList.forEach((artId) => {
+                        if (existingArtSet.has(artId))
+                            return;
+                        replica.artList.push(artMap.get(artId));
+                        existingArtSet.add(artId);
+                    });
+                }
+            });
+        });
     }
 }
 exports.fakeMagirecoProdRespHook = fakeMagirecoProdRespHook;

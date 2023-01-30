@@ -45,6 +45,7 @@ export declare class params {
     saveOverrideDB(fileContent?: string): void;
     get mode(): mode;
     get autoOpenWeb(): boolean;
+    get injectMadokamiSE(): boolean;
     get listenList(): listenList;
     get lastHttpProxy(): listenAddr;
     get httpProxyUsername(): string;
@@ -81,6 +82,3 @@ export declare class params {
     private static avoidUsedPorts;
     private static checkIsAliveMarker;
 }
-export declare function replacer(key: any, value: any): any;
-export declare function reviver(key: any, value: any): any;
-export declare function resolveToIP(hostname: string): Promise<string>;

@@ -19,7 +19,11 @@ export declare class fakeMagirecoProdRespHook implements hook {
     private readonly bsgameSdkLoginRegEx;
     private readonly bsgameSdkCipherRegEx;
     private readonly bsgameSdkOtpSendRegEx;
+    private readonly bilibiliAgreementConfigRegEx;
     private readonly bilibiliGameAgreementRegEx;
+    private readonly bilibiliGameRealnameAuthRegEx;
+    private readonly touristLoginRegEx;
+    private readonly touristBindTelPwdRegEx;
     private readonly part2Section3RegEx;
     private readonly arenaSimulateMap;
     get stringifiedOverrideDB(): string;
@@ -34,6 +38,7 @@ export declare class fakeMagirecoProdRespHook implements hook {
     onMatchedResponse(statusCode?: number, statusMessage?: string, httpVersion?: string, headers?: http.IncomingHttpHeaders | (http2.IncomingHttpHeaders & http2.IncomingHttpStatusHeader), body?: string | Buffer): void;
     private fakeBsgamesdkCipherResp;
     private fakeBsgamesdkOtpSendResp;
+    private fakeBsgamesdkTouristBindTelPwdResp;
     private fakeBsgamesdkLoginResp;
     private fakeSystemLogin;
     private fakeEmptyResp;
@@ -57,5 +62,5 @@ export declare class fakeMagirecoProdRespHook implements hook {
     private checkForMissing;
     private patchMainQuest;
     private patchCharaListTop;
-    private getRandomGuid;
+    private injectUltimateMadokaSpiritEnhancement;
 }

@@ -5,7 +5,7 @@ const net = require("net");
 const http = require("http");
 const http2 = require("http2");
 const tls = require("tls");
-const zlib = require("zlib");
+const util_1 = require("./util");
 const parameters = require("./parameters");
 const certGenerator = require("./cert_generator");
 const url_1 = require("url");
@@ -166,7 +166,7 @@ class localServer {
                                     let respBodyBuf = Buffer.concat(respBodyBufArray), respBodyStr;
                                     try {
                                         const encoding = respHeaders["content-encoding"];
-                                        respBodyBuf = localServer.decompress(respBodyBuf, encoding);
+                                        respBodyBuf = (0, util_1.decompress)(respBodyBuf, encoding);
                                         const charset = parse_charset_1.parseCharset.get(respHeaders);
                                         respBodyStr = respBodyBuf.toString(charset);
                                     }
@@ -235,7 +235,7 @@ class localServer {
                         let reqBodyBuf = Buffer.concat(reqBodyBufArray), reqBodyStr;
                         try {
                             const encoding = reqHeaders["content-encoding"];
-                            reqBodyBuf = localServer.decompress(reqBodyBuf, encoding);
+                            reqBodyBuf = (0, util_1.decompress)(reqBodyBuf, encoding);
                             const charset = parse_charset_1.parseCharset.get(reqHeaders);
                             reqBodyStr = reqBodyBuf.toString(charset);
                         }
@@ -431,7 +431,7 @@ class localServer {
                         let respBodyBuf = Buffer.concat(respBodyBufArray), respBodyStr;
                         try {
                             const encoding = respHeaders["content-encoding"];
-                            respBodyBuf = localServer.decompress(respBodyBuf, encoding);
+                            respBodyBuf = (0, util_1.decompress)(respBodyBuf, encoding);
                             const charset = parse_charset_1.parseCharset.get(respHeaders);
                             respBodyStr = respBodyBuf.toString(charset);
                         }
@@ -483,7 +483,7 @@ class localServer {
                         let reqBodyBuf = Buffer.concat(reqBodyBufArray), reqBodyStr;
                         try {
                             const encoding = reqHeaders["content-encoding"];
-                            reqBodyBuf = localServer.decompress(reqBodyBuf, encoding);
+                            reqBodyBuf = (0, util_1.decompress)(reqBodyBuf, encoding);
                             const charset = parse_charset_1.parseCharset.get(reqHeaders);
                             reqBodyStr = reqBodyBuf.toString(charset);
                         }
@@ -628,7 +628,7 @@ class localServer {
         if (!net.isIPv6(host))
             host = host.replace(/:\d+$/, ""); //strip port number
         if (!net.isIP(host))
-            host = await parameters.resolveToIP(host);
+            host = await (0, util_1.resolveToIP)(host);
         if (["127.0.0.1", "::1",].find((ip) => ip === host))
             return true;
         for (let key in listenList) {
@@ -921,7 +921,7 @@ class localServer {
             let respBodyBuf = Buffer.concat(respBodyBufArray), respBodyStr;
             try {
                 const encoding = respHeaders["content-encoding"];
-                respBodyBuf = localServer.decompress(respBodyBuf, encoding);
+                respBodyBuf = (0, util_1.decompress)(respBodyBuf, encoding);
                 if (cvtBufToStr) {
                     const charset = parse_charset_1.parseCharset.get(respHeaders);
                     respBodyStr = respBodyBuf.toString(charset);
@@ -934,84 +934,6 @@ class localServer {
             const body = respBodyStr != null ? respBodyStr : respBodyBuf;
             resolve({ headers: respHeaders, respBody: body });
         });
-    }
-    static compress(data, encoding, quality = 8) {
-        if (encoding == null)
-            return data = Buffer.concat([data]);
-        let compressed;
-        switch (encoding) {
-            case 'gzip':
-                compressed = zlib.gzipSync(data);
-                break;
-            case 'deflate':
-                compressed = zlib.deflateSync(data);
-                break;
-            case 'br':
-                compressed = zlib.brotliCompressSync(data, {
-                    params: {
-                        [zlib.constants.BROTLI_PARAM_MODE]: zlib.constants.BROTLI_MODE_TEXT,
-                        [zlib.constants.BROTLI_PARAM_QUALITY]: quality,
-                        [zlib.constants.BROTLI_PARAM_SIZE_HINT]: data.byteLength,
-                    },
-                });
-                break;
-            default:
-                throw new Error(`unknown compress encoding=${encoding}`);
-        }
-        return compressed;
-    }
-    static decompress(data, encoding) {
-        if (encoding == null)
-            return data = Buffer.concat([data]);
-        let decompressed = data;
-        let encodingArray = encoding.replace(/\s/g, "").split(",").filter((enc) => enc !== "");
-        try {
-            encodingArray.forEach((enc) => {
-                decompressed = this.decompressSingle(decompressed, enc);
-            });
-        }
-        catch (e) {
-            console.error(`decompress failed, try reverse...`, e);
-            try {
-                decompressed = data;
-                encodingArray.reverse().forEach((enc) => {
-                    decompressed = this.decompressSingle(decompressed, enc);
-                });
-            }
-            catch (e2) {
-                console.error(`decompressing in reversed order failed, try JSON.parse...`, e2);
-                try {
-                    JSON.parse(data.toString('utf-8'));
-                    console.warn(`data is uncompressed json`);
-                    return data = Buffer.concat([data]);
-                }
-                catch (e3) {
-                    let msg = `JSON.parse after decompress decompressing in reversed order attempt failed`;
-                    console.error(msg, e3);
-                    throw new Error(msg);
-                }
-            }
-        }
-        return decompressed;
-    }
-    static decompressSingle(data, encoding) {
-        if (encoding == null)
-            return data = Buffer.concat([data]);
-        let decompressed;
-        switch (encoding) {
-            case 'gzip':
-                decompressed = zlib.gunzipSync(data);
-                break;
-            case 'deflate':
-                decompressed = zlib.inflateSync(data);
-                break;
-            case 'br':
-                decompressed = zlib.brotliDecompressSync(data);
-                break;
-            default:
-                throw new Error(`unknown compress encoding=${encoding}`);
-        }
-        return decompressed;
     }
 }
 exports.localServer = localServer;

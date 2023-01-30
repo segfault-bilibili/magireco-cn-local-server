@@ -8,6 +8,7 @@ const http = require("http");
 const process = require("process");
 const ChildProcess = require("child_process");
 const os = require("os");
+const util_1 = require("./util");
 const parameters = require("./parameters");
 const http_proxy_1 = require("./http_proxy");
 const local_server_1 = require("./local_server");
@@ -20,6 +21,7 @@ const staticResCrawler = require("./static_res_crawler");
 const fake_magireco_prod_resp_hook_1 = require("./hooks/fake_magireco_prod_resp_hook");
 const save_access_key_hook_1 = require("./hooks/save_access_key_hook");
 const save_open_id_ticket_hook_1 = require("./hooks/save_open_id_ticket_hook");
+const favicon = require("./favicon");
 class controlInterface {
     constructor(params, serverList) {
         this.closing = false;
@@ -52,6 +54,11 @@ class controlInterface {
                 console.error(`rejected disallowed referer`);
                 res.writeHead(403, { ["Content-Type"]: "text/plain" });
                 res.end("403 Forbidden");
+                return;
+            }
+            if (req.url === "/favicon.ico") {
+                res.writeHead(200, { ["Content-Type"]: favicon.mimeType });
+                res.end(favicon.ico);
                 return;
             }
             if (req.url.startsWith("/api/")) {
@@ -238,6 +245,20 @@ class controlInterface {
                             let newAutoOpenWeb = autoOpenWebParams.get("auto_open_web") != null;
                             await this.params.save({ key: "autoOpenWeb", val: newAutoOpenWeb });
                             let resultText = "sucessfully updated auto open web settings";
+                            console.log(resultText);
+                            this.sendResultAsync(res, 200, resultText);
+                        }
+                        catch (e) {
+                            console.error(`${apiName} error`, e);
+                            this.sendResultAsync(res, 500, e instanceof Error ? e.message : `${apiName} error`);
+                        }
+                        return;
+                    case "set_inject_madokami_se":
+                        try {
+                            let injectMadokamiSEParams = await this.getParsedPostData(req);
+                            let newInjectMadokamiSE = injectMadokamiSEParams.get("inject_madokami_se") != null;
+                            await this.params.save({ key: "injectMadokamiSE", val: newInjectMadokamiSE });
+                            let resultText = "sucessfully updated inject madokami se settings";
                             console.log(resultText);
                             this.sendResultAsync(res, 200, resultText);
                         }
@@ -473,7 +494,7 @@ class controlInterface {
                         ["Content-Type"]: "application/json; charset=utf-8",
                         ["Content-Disposition"]: `attachment; filename=\"${req.url.replace(/^\//, "")}\"`,
                     });
-                    res.end(JSON.stringify(this.params.overridesDB, parameters.replacer));
+                    res.end(JSON.stringify(this.params.overridesDB, util_1.replacer));
                     return;
             }
             const yamlRegEx = /^\/magirecolocal_(\d{1,3}\.){3}\d{1,3}_\d{1,5}\.yaml$/;
@@ -508,7 +529,7 @@ class controlInterface {
                     };
                     let pipelineList;
                     console.log(`stringifying object to [${userdataDumpFileName}] ...`);
-                    let stringified = JSON.stringify(dump, parameters.replacer);
+                    let stringified = JSON.stringify(dump, util_1.replacer);
                     console.log(`stringified object to [${userdataDumpFileName}]. creating buffer...`);
                     let stringifiedBuf = Buffer.from(stringified, 'utf-8');
                     console.log(`created buffer for [${userdataDumpFileName}], sending it`);
@@ -735,6 +756,7 @@ class controlInterface {
         const isOnlineMode = this.params.mode === parameters.mode.ONLINE;
         const isLocalOfflineMode = this.params.mode === parameters.mode.LOCAL_OFFLINE;
         const autoOpenWeb = this.params.autoOpenWeb;
+        const injectMadokamiSE = this.params.injectMadokamiSE;
         let httpProxyAddr = "", httpProxyPort = "";
         const listenList = this.params.listenList;
         if (listenList != null) {
@@ -1135,6 +1157,20 @@ class controlInterface {
             + `\n    </div>`
             + `\n    <div>`
             + `\n      <input type=\"submit\" id=\"set_auto_open_web_btn\" value=\"应用\">`
+            + `\n    </div>`
+            + `\n  </form>`
+            + `\n  </fieldset>`
+            + `\n  <fieldset>`
+            + `\n  <legend>圆神附体</legend>`
+            + `\n  <form action=\"/api/set_inject_madokami_se\" method=\"post\">`
+            + `\n    <i>需要修改libmadomagi_native.so才能把精强主动技能按钮显示出来。</i>`
+            + `\n    <br><i>国服关服前并未提供圆神精强数据，数据实际上来自日服；技能名称翻译则参考了开启精强的其他角色。</i>`
+            + `\n    <div>`
+            + `\n      <input id=\"inject_madokami_se\" name=\"inject_madokami_se\" value=\"true\" type=\"checkbox\" ${injectMadokamiSE ? "checked" : ""}>`
+            + `\n      <label for=\"inject_madokami_se\">镜层演习我方全体角色获得圆神精强技能</label>`
+            + `\n    </div>`
+            + `\n    <div>`
+            + `\n      <input type=\"submit\" id=\"set_inject_madokami_se_btn\" value=\"应用\">`
             + `\n    </div>`
             + `\n  </form>`
             + `\n  </fieldset>`
