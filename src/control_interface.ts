@@ -165,6 +165,17 @@ export class controlInterface {
                                 host: this.params.lastHttpProxy.host,
                             }
                             listenList.httpProxy = last;
+                            if (listenList.httpProxy.host === curr.host) {
+                                const LOCALHOST = "127.0.0.1", ALL_INTERFACE = "0.0.0.0";
+                                switch (listenList.httpProxy.host) {
+                                    case LOCALHOST:
+                                        listenList.httpProxy.host = ALL_INTERFACE;
+                                        break;
+                                    case ALL_INTERFACE:
+                                        listenList.httpProxy.host = LOCALHOST;
+                                        break;
+                                }
+                            }
                             if (this.isTogglingLoopbackListen) {
                                 this.sendResultAsync(res, 429, "last http proxy listen address toggling is still not finished");
                             } else {
