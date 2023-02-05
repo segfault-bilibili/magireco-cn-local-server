@@ -288,6 +288,7 @@ export class fakeMagirecoProdRespHook implements hook {
                 case "gameUser/changeLeader":
                 case "userChara/visualize":
                 case "userLive2d/set":
+                case "search/friend_search/_search":
                 case "arena/start":
                 case "quest/native/get":
                 case "quest/native/result/send":
@@ -558,6 +559,11 @@ export class fakeMagirecoProdRespHook implements hook {
                         break;
                     }
 
+                case "search/friend_search/_search":
+                    {
+                        respBody = this.fakeFriendSearch(apiName, reqBody);
+                        break;
+                    }
                 case "page/CharaEnhancementTree":
                 case "page/PresentHistory":
                 case "page/GachaHistory":
@@ -1023,6 +1029,39 @@ export class fakeMagirecoProdRespHook implements hook {
                 userCharaList: modifiedCharaArray,
             }), 'utf-8');
         }
+    }
+
+    private fakeFriendSearch(apiName: string, reqBody: string | Buffer | undefined): Buffer | undefined {
+        if (typeof reqBody !== 'string') return;
+        let type: number | undefined;
+        try {
+            type = JSON.parse(reqBody).type;
+        } catch (e) {
+            console.error(`fakeFriendSearch parse type error`, e);
+            return;
+        }
+        if (typeof type !== 'number') {
+            console.error(`fakeFriendSearch type is not number`);
+            return;
+        }
+        if (type != 0) {
+            //TODO
+            return this.fakeErrorResp("错误", `尚不支持搜索玩家 (type=${type})`, false);
+        }
+
+        const lastDump = this.userdataDmp.lastDump;
+        if (lastDump == null) return this.fakeErrorResp("错误", "未加载个人账号数据");
+
+        if (apiName !== "search/friend_search/_search") {
+            console.error(`fakePagedResult invalid apiName=[${apiName}]`);
+            return;
+        }
+        const urlBase = this.pageKeys[apiName];
+
+        const respBodyObj = userdataDump.unBrBase64(
+            lastDump.httpResp.post.get(urlBase)?.get(JSON.stringify({ type: type }))?.brBody);
+        if (respBodyObj == null) return this.fakeErrorResp("错误", `找不到好友推荐数据`);
+        return Buffer.from(JSON.stringify(respBodyObj), 'utf-8');
     }
 
     private parsePageNum(reqBody: string | Buffer | undefined, type: "page" | "charaId"): number | undefined {
@@ -1562,6 +1601,8 @@ export class fakeMagirecoProdRespHook implements hook {
             + `&timeStamp=`,
         //好友（粉丝，仅GUID）
         ["friend/follower/list/1"]: `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/friend/follower/list/1`,
+        //好友推荐
+        ["search/friend_search/_search"]: `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/search/friend_search/_search`,
         //长按好友打开支援详情
         ["page/ProfileFormationSupport"]: `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/ProfileFormationSupport?value=`
             + `userFormationSheetList`
