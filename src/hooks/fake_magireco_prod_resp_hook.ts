@@ -402,7 +402,7 @@ export class fakeMagirecoProdRespHook implements hook {
                                 if (apiName === "page/CharaListTop") {
                                     respBodyObj = this.patchCharaListTop(apiName, respBodyObj);
                                 }
-                                this.fixCurrentTime(respBodyObj);
+                                if (apiName !== "page/ShopTop") this.fixCurrentTime(respBodyObj);
                                 body = Buffer.from(JSON.stringify(respBodyObj), 'utf-8');
                             }
                         }
