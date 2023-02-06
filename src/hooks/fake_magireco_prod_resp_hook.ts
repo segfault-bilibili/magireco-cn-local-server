@@ -1128,8 +1128,8 @@ export class fakeMagirecoProdRespHook implements hook {
         const urlBase = urlBases[apiName];
 
         const matched = pathname.match(this.slashGuidEndRegEx);
-        const userId = matched != null ? matched[0].replace(/^\//, "") : undefined;
-        if (userId == null) {
+        const guid = matched != null ? matched[0].replace(/^\//, "") : undefined;
+        if (guid == null) {
             return this.fakeErrorResp("错误", "参数非法");
         }
 
@@ -1137,15 +1137,45 @@ export class fakeMagirecoProdRespHook implements hook {
         if (lastDump == null) return this.fakeErrorResp("错误", "未加载个人账号数据");
 
         let respBodyObj = userdataDump.getUnBrBody(lastDump.httpResp.get,
-            `${urlBase}${userId}`
+            `${urlBase}${guid}`
         );
         if (respBodyObj == null) {
-            console.error(`fakeGuidResult userId=[${userId}] not found`);
+            console.error(`fakeGuidResult guid=[${guid}] not found`);
             return this.fakeErrorResp("错误", "找不到此项数据");
         }
 
-        if (respBodyObj.currentTime != null) console.warn(`fakeGuidResult apiName=[${apiName}] typeof respBodyObj.currentTime`,
-            respBodyObj.currentTime);
+        if (apiName === "friend/user") {
+            const userId = userdataDump.getUnBrBody(lastDump.httpResp.get, this.pageKeys["page/TopPage"])
+                ?.gameUser?.userId;
+            if (typeof userId !== 'string') {
+                console.error(`fakeGuidResult apiName=${apiName} cannot read TopPage.gameUser.userId`);
+            } else if (userId === respBodyObj?.gameUser?.userId) {
+                //patch profile of myself
+                const leaderIdKey = "gameUser.leaderId";
+                const newLeaderId = this.getOverrideValue(leaderIdKey);
+                if (typeof newLeaderId === "string") {
+                    respBodyObj.gameUser.leaderId = newLeaderId;
+                    const userCardList = userdataDump.getUnBrBody(lastDump.httpResp.get, this.pageKeys["page/MyPage"])
+                        ?.userCardList;
+                    if (!Array.isArray(userCardList)) {
+                        console.error(`fakeGuidResult apiName=${apiName} cannot read MyPage.userCardList`);
+                    } else {
+                        const newLeaderUserCard = userCardList.find((card: any) => card?.id === newLeaderId);
+                        if (newLeaderUserCard == null) {
+                            console.error(`fakeGuidResult apiName=${apiName} cannot find newLeaderUserCard in userCardList`);
+                        } else {
+                            const charaId = newLeaderUserCard?.card?.charaNo;
+                            const charaModMap: Map<number, Map<string, string | number>> = this.getOverrideValue(`userCharaList`);
+                            const newDisplayCardId = charaModMap.get(charaId)?.get("displayCardId");
+                            if (typeof newDisplayCardId === 'number' && !isNaN(newDisplayCardId)) {
+                                newLeaderUserCard.displayCardId = newDisplayCardId;
+                            }
+                            respBodyObj.leaderUserCard = JSON.parse(JSON.stringify(newLeaderUserCard));
+                        }
+                    }
+                }
+            }
+        }
 
         return Buffer.from(JSON.stringify(respBodyObj), 'utf-8');
     }
