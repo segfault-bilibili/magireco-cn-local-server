@@ -135,6 +135,10 @@ export class crawler {
         ipAddr: "180.97.245.90",
         resDir: null
     });
+    static readonly maintenanceViewJsonStr = JSON.stringify({
+        message: "<p>例行维护中：9月8日10:00～9<span>月8日</span>17:00<br/>奇迹与魔法都是需要维护的|•&#39;-&#39;•)&nbsp;◇</p>",
+        url: ""
+    });
 
     stopCrawling = false;
     get isCrawling(): boolean {
@@ -199,6 +203,14 @@ export class crawler {
             this.staticFileMap = new Map<string, Array<fileMeta>>();
         }
 
+        // add localized maintenance page (wh, weihu)
+        const whPages = [
+            { fileMeta: { md5: "11f496e6cf3f340734528e6f5dcec379", contentType: "text/html" }, path: "index.html" },
+            { fileMeta: { md5: "ab9f293cfa18f249d6e3ba75faa69ab1", contentType: "text/css" }, path: "css/_common/base.css", },
+            { fileMeta: { md5: "7762eb580b04e09ca93cb29090940ee7", contentType: "application/javascript" }, path: "js/base.js", },
+        ];
+        whPages.forEach((page) => this.staticFileMap.set("/magica/wh/" + page.path, [page.fileMeta]));
+
         // window.isBrowser - browser debug mode
         this.browserPathMap = new Map<string, string>();
         const downloadedPathRegEx = /^(\/magica\/resource)(\/download\/asset\/master\/resource\/)(\d+)(\/.*)$/;
@@ -223,6 +235,10 @@ export class crawler {
         const zhiheiFromApk = "/apk/assets/fonts/TTZhiHeiGB3-W4.ttf"; // guessed
         this.browserPathMap.set(browserFont, zhiheiFromApk);
         this.staticFileMap.set(zhiheiFromApk, [{ md5: browserFontMD5, contentType: "font/ttf" }]);
+
+        // remove "virtual" files if they still exist in the map
+        this.staticFileMap.delete("/maintenance/magica/config");
+        this.staticFileMap.delete("/favicon.ico");
 
         if (!fs.existsSync(crawler.staticFile404SetPath) && !fs.existsSync(crawler.staticFile404SetPathUncomp)) {
             console.error(`creating new staticFile404Set`);
@@ -467,8 +483,7 @@ export class crawler {
                 new Promise<void>((resolve) => {
                     let okay = false;
                     try {
-                        if (pathInUrl === `/maintenance/magica/config`) okay = true;
-                        else if (this.checkAlreadyExist(pathInUrl, fileMetaArray[0].md5)) okay = true;
+                        if (this.checkAlreadyExist(pathInUrl, fileMetaArray[0].md5)) okay = true;
                     } catch (e) {
                         console.error(e);
                     }

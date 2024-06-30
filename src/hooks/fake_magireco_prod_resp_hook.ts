@@ -17,6 +17,7 @@ export class fakeMagirecoProdRespHook implements hook {
 
     private readonly magirecoProdUrlRegEx: RegExp;
     private readonly magicaMaintenanceConfigRegEx: RegExp;
+    private readonly magicaMaintenanceViewJsonRegEx: RegExp;
     private readonly magirecoPatchUrlRegEx: RegExp;
     private readonly apiPathNameRegEx: RegExp;
     private readonly slashGuidEndRegEx: RegExp;
@@ -106,6 +107,7 @@ export class fakeMagirecoProdRespHook implements hook {
 
         this.magirecoProdUrlRegEx = /^(http|https):\/\/l\d+-prod-[0-9a-z\-]+-mfsn\d*\.bilibiligame\.net\/((|maintenance\/)magica\/.+|favicon\.ico)$/;
         this.magicaMaintenanceConfigRegEx = /^\/maintenance\/magica\/config((|\?.*)$)/;
+        this.magicaMaintenanceViewJsonRegEx = /^\/maintenance\/magica\/view\/json((|\?.*)$)/;
         this.magirecoPatchUrlRegEx = /^(http|https):\/\/line\d+-prod-patch-mfsn\d*\.bilibiligame\.net\/magica\/.+$/;
         this.apiPathNameRegEx = /^\/magica\/api\/.+$/;
         this.slashGuidEndRegEx = /\/[\da-f]{8}(-[\da-f]{4}){3}-[\da-f]{12}$/;
@@ -286,6 +288,9 @@ export class fakeMagirecoProdRespHook implements hook {
             let contentType = `application/json;charset=UTF-8`;
             let body: Buffer | undefined;
 
+            const serverDown = Date.now() > 0 ? undefined : { reason: "maintenance" };// DEBUG TODO this.params.serverDown;
+            const isBanned = Date.now() > 0 ? undefined : true;// DEBUG TODO this.params.isBanned;
+
             const apiName = url.pathname.replace(/^\/magica\/api\//, "")
                 .replace(this.slashGuidEndRegEx, "");
 
@@ -294,6 +299,26 @@ export class fakeMagirecoProdRespHook implements hook {
                 const loginType = apiName.replace(/\/[0-9a-z]{32}$/, "").replace(/\//g, " ");
                 if (body != null) console.log(`faked ${loginType}`);
                 else console.error(`failed to fake ${loginType}`);
+            } else if (isBanned && apiName !== "page/Ban") {
+                // it is observed that JP server used "#/Ban"
+                // however I don't know how CN server handled this because I had never been banned
+                // removing slash ("#Ban") seems to work, however this is discovered by trial-and-error
+                const interruptPage = "#Ban";
+                body = Buffer.from(JSON.stringify({ interrupt: { page: interruptPage, force: true } }), 'utf-8');
+            } else if (serverDown != null) switch (serverDown.reason) {
+                case "maintenance": {
+                    body = this.fakeErrorResp("维护中", "正在维护中...", "maintenance");
+                    break;
+                }
+                case "newVersion": {
+                    body = this.fakeErrorResp("需要更新版本", "需要更新版本。请到应用商店下载最新版本。"
+                        + "<br>（此文字提示仅为猜测，并非来自官服）", "forceUpdateClient");
+                    break;
+                }
+                default: {
+                    body = this.fakeErrorResp("错误", "服务器已被设为下线"
+                        + "<br>（官服下线并不会这样提示）");
+                }
             } else switch (apiName) {
                 // (can be) HTTP POST
                 case "test/logger/error":
@@ -358,6 +383,19 @@ export class fakeMagirecoProdRespHook implements hook {
                         break;
                     }
                 // special ones
+                case "page/Ban":
+                    {
+                        let inviteCode: string | undefined;
+                        const bannedTime = `${this.getDateTimeString()} [此为当前时间，请去本地服务器后台解封]`;
+                        const lastDump = this.userdataDmp.lastDump;
+                        if (lastDump != null) {
+                            const respBodyObj = userdataDump.getUnBrBody(lastDump.httpResp.get, this.pageKeys["page/TopPage"]);
+                            inviteCode = respBodyObj?.gameUser?.inviteCode;
+                        }
+                        if (typeof inviteCode !== "string") inviteCode = "[无法获取玩家ID]";
+                        body = Buffer.from(JSON.stringify({ inviteCode: inviteCode, bannedTime: bannedTime }), 'utf-8');
+                        break;
+                    }
                 case "page/MyPage":
                     {
                         body = this.fakeMyPage(apiName);
@@ -473,6 +511,8 @@ export class fakeMagirecoProdRespHook implements hook {
                 if (body == null) {
                     if (url.pathname.match(this.magicaMaintenanceConfigRegEx) != null) {
                         body = Buffer.from(staticResCrawler.crawler.maintenanceConfigStr, 'utf-8');
+                    } else if (url.pathname.match(this.magicaMaintenanceViewJsonRegEx) != null) {
+                        body = Buffer.from(staticResCrawler.crawler.maintenanceViewJsonStr, 'utf-8');
                     } else if (url.pathname.match(this.part2Section3RegEx) != null) {
                         // not a workaround: response from offical server was like this
                         body = Buffer.from(JSON.stringify([]), 'utf-8');
@@ -792,10 +832,12 @@ export class fakeMagirecoProdRespHook implements hook {
     }
 
     private fakeMyPage(apiName: string): Buffer | undefined {
-        if (apiName !== "page/MyPage") {
+        if (apiName !== "page/MyPage" && apiName !== "page/Ban") {//DEBUG
             console.error(`fakeMyPage invalid apiName=[${apiName}]`);
             return;
         }
+        const isBan = apiName === "page/Ban";//DEBUG
+        apiName = "page/MyPage";//DEBUG
 
         const lastDump = this.userdataDmp.lastDump;
         if (lastDump == null) return this.fakeErrorResp("错误", "未加载个人账号数据");
@@ -890,6 +932,14 @@ export class fakeMagirecoProdRespHook implements hook {
                     });
                 });
             }
+        }
+        if (isBan) {
+            //DEBUG
+            replica = replica.gameUser;
+            replica.bannedTime = "不知道怎么填，就填个无限期吧";
+            let r = JSON.parse(JSON.stringify(replica));
+            replica.gameUser = r;
+            replica.user = r;
         }
         // convert to buffer
         return Buffer.from(JSON.stringify(replica), 'utf-8');
@@ -1855,6 +1905,17 @@ export class fakeMagirecoProdRespHook implements hook {
                 matchPattern: /:gameInit\(\)}}\);$/,
                 replacePattern: /(,gameInit=function\(\)\{)(window\.isBrowser\?\()(window\.isDebug=!0,)/,
                 replacement: "$1$3window.showBackdoor=!0,$2",
+            },
+            */
+            /*
+            // workaround "#/Ban" "#/NewVersionRecommend" "#/Maintenance" issues on game client, no longer needed
+            // for CN client:
+            // 1. "#Ban" already works
+            // 2. maintenance and new version situations are controlled by /maintenance/magica/config
+            ["/magica/js/_common/ajaxControl.js"]: {
+                matchPattern: /error:\{content:"请在通讯环境良好的地方再次进行尝试。"\}\}\)\}\),that\}\);$/,
+                replacePattern: /cmd\.nativeReload\(([^\)]+)\)/g,
+                replacement: "(location.href=$1)",
             },
             */
         }
