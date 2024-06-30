@@ -137,6 +137,8 @@ export class fakeMagirecoProdRespHook implements hook {
             nextAction: "passOnRequest",
             interceptResponse: false,
         }
+        console.log(`${method} ${url?.href}`);
+
         if (url?.pathname === "/favicon.ico") {
             return {
                 nextAction: "fakeResponse",
