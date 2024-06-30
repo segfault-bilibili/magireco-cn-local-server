@@ -355,7 +355,8 @@ export class fakeMagirecoProdRespHook implements hook {
                 case "page/MemoriaList":
                 case "page/MemoriaSetList":
                 case "page/MagiRepoDetail":
-                // empty ones - backdoor test
+                /*
+                // empty ones - backdoor test - no longer needed, handled before apiUnimplemented
                 case "page/Backdoor":
                 case "page/BackdoorLive2d":
                 case "page/NativeSandBox":
@@ -365,6 +366,7 @@ export class fakeMagirecoProdRespHook implements hook {
                 case "page/EffectTest":
                 // empty ones - browser mode
                 case "page/ArenaStub":
+                */
                     {
                         body = this.fakeEmptyResp(apiName);
                         break;
@@ -471,8 +473,17 @@ export class fakeMagirecoProdRespHook implements hook {
                     }
                 default:
                     {
-                        body = this.fakeErrorResp("错误", "API尚未实现", false);
-                        apiUnimplemented = true;
+                        if (apiName.startsWith("page/")) {
+                            // handle debug backdoor pages
+                            body = this.crawler.readFile(`magica/json/${apiName}.json`);
+                            if (body?.toString('utf-8') === "{}") {
+                                body = this.fakeEmptyResp(apiName);
+                            }
+                        }
+                        if (body == null) {
+                            body = this.fakeErrorResp("错误", "API尚未实现", false);
+                            apiUnimplemented = true;
+                        }
                     }
             }
 
