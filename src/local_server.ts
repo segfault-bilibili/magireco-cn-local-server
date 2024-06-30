@@ -339,6 +339,13 @@ export class localServer {
         });
 
         http2SecureServer.on('stream', async (cliReqStream, reqHeaders, flags) => {
+            if (cliReqStream.session == null) {
+                try {
+                    cliReqStream.destroy(new Error("cliReqStream.session == null"));
+                } catch (e) {}
+                return;
+            }
+
             const alpn = cliReqStream.session.alpnProtocol;
             const sni = (cliReqStream.session.socket as any).servername;
 
