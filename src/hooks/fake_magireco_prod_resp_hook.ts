@@ -1174,6 +1174,10 @@ export class fakeMagirecoProdRespHook implements hook {
                             if (typeof newDisplayCardId === 'number' && !isNaN(newDisplayCardId)) {
                                 newLeaderUserCard.displayCardId = newDisplayCardId;
                             }
+                            const newCardId = charaModMap.get(charaId)?.get("commandVisualId");
+                            if (typeof newCardId === 'number' && !isNaN(newCardId)) {
+                                newLeaderUserCard.cardId = newCardId;
+                            }
                             respBodyObj.leaderUserCard = JSON.parse(JSON.stringify(newLeaderUserCard));
                         }
                     }
