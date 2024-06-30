@@ -1578,11 +1578,10 @@ export class fakeMagirecoProdRespHook implements hook {
                 if (numberStr.length < 3) {
                     numberStr = Array.from({ length: 3 - numberStr.length }, () => "0").join("") + numberStr;
                 }
-                let item: Record<string, number | string> = {
-                    part: part,
-                    number: number,
-                    imagePath: `/part${part}/magirepo_0${part}_${numberStr}.png`
-                }
+                let item: Record<string, number | string> = {};
+                item.part = part;
+                item.number = number;
+                item.imagePath = `/part${part}/magirepo_0${part}_${numberStr}.png`;
                 if (part == 2) {
                     if (item.number <= 30) delete item.startAt;
                     else if (item.number <= 36) item.startAt = "2021/05/31 13:00:00";
