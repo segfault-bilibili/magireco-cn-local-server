@@ -934,6 +934,14 @@ export class controlInterface {
             + `\n</head>`
             + `\n<body>`
             + `\n  <h1>魔法纪录国服本地服务器${pkgVersionStr}</h1>`
+            + `\n  <fieldset><legend>浏览器调试</legend>`
+            + `\n    <div>`
+            + `\n      通过下面这个链接即可通过浏览器登录游戏，便于调试。`
+            + `\n      <br>${aHref("index.html", "https://line3-prod-patch-mfsn2.bilibiligame.net/magica/index.html")}`
+            + `\n      <br><i>需要F12然后开启设备模拟才能模拟触控操作。</i>`
+            + `\n      <br><i>手机端可能需要切换到桌面UA（电脑版）。</i>`
+            + `\n    </div>`
+            + `\n  </fieldset>`
             + `\n  <fieldset>`
             + `\n  <legend>HTTP代理</legend>`
             + `\n  <fieldset><legend>HTTP代理信息</legend>`

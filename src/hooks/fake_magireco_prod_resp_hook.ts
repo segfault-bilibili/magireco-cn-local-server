@@ -21,6 +21,8 @@ export class fakeMagirecoProdRespHook implements hook {
     private readonly apiPathNameRegEx: RegExp;
     private readonly slashGuidEndRegEx: RegExp;
 
+    private readonly browserDebugUrlRegEx: RegExp;
+
     private readonly bsgameSdkLoginRegEx: RegExp;
     private readonly bsgameSdkCipherRegEx: RegExp;
     private readonly bsgameSdkOtpSendRegEx: RegExp;
@@ -108,6 +110,8 @@ export class fakeMagirecoProdRespHook implements hook {
         this.apiPathNameRegEx = /^\/magica\/api\/.+$/;
         this.slashGuidEndRegEx = /\/[\da-f]{8}(-[\da-f]{4}){3}-[\da-f]{12}$/;
 
+        this.browserDebugUrlRegEx = /^(http|https):\/\/10\.24\.19\.50:9997\/(magica\/.+|favicon.ico)$/;
+
         this.bsgameSdkLoginRegEx = /^(http|https):\/\/line\d+-sdk-center-login-sh\.biligame\.net\/api\/external\/(login|login\/otp|user\.token\.oauth\.login)\/v3((|\?.*)$)/;
         this.bsgameSdkCipherRegEx = /^(http|https):\/\/line\d+-sdk-center-login-sh\.biligame\.net\/api\/external\/issue\/cipher\/v3((|\?.*)$)/;
         this.bsgameSdkOtpSendRegEx = /^(http|https):\/\/line\d+-sdk-center-login-sh\.biligame\.net\/api\/external\/otp\/send\/v3((|\?.*)$)/;
@@ -164,12 +168,15 @@ export class fakeMagirecoProdRespHook implements hook {
         const isBilibiliAgreementConfig = url?.href.match(this.bilibiliAgreementConfigRegEx) != null;
         const isBilibiliGameAgreement = url?.href.match(this.bilibiliGameAgreementRegEx) != null;
         const isBilibiliGameRealnameAuth = url?.href.match(this.bilibiliGameRealnameAuthRegEx) != null;
+        const isBrowserDebug = url?.href.match(this.browserDebugUrlRegEx) != null || (
+            isMagiRecoPatch && url.pathname === "/magica/fonts/lzs_v_2_1_p.ttf");
 
         if (
             !isMagiRecoProd && !isMagiRecoPatch
             && !isBsgamesdkLogin && !isBsgamesdkCipher && !isBsgamesdkOtpSend
             && !isTouristLogin && !isTouristBindTelPwd
             && !isBilibiliAgreementConfig && !isBilibiliGameAgreement && !isBilibiliGameRealnameAuth
+            && !isBrowserDebug
         ) return {
             nextAction: "passOnRequest",
             interceptResponse: false,
@@ -281,7 +288,13 @@ export class fakeMagirecoProdRespHook implements hook {
 
             const apiName = url.pathname.replace(/^\/magica\/api\//, "")
                 .replace(this.slashGuidEndRegEx, "");
-            switch (apiName) {
+
+            if (apiName.match(/^system\/(game\/login|sns\/login\/[0-9a-z]{32})$/)) {
+                body = this.fakeSystemLogin();
+                const loginType = apiName.replace(/\/[0-9a-z]{32}$/, "").replace(/\//g, " ");
+                if (body != null) console.log(`faked ${loginType}`);
+                else console.error(`failed to fake ${loginType}`);
+            } else switch (apiName) {
                 // (can be) HTTP POST
                 case "test/logger/error":
                 case "gameUser/setBackground":
@@ -317,6 +330,16 @@ export class fakeMagirecoProdRespHook implements hook {
                 case "page/MemoriaList":
                 case "page/MemoriaSetList":
                 case "page/MagiRepoDetail":
+                // empty ones - backdoor test
+                case "page/Backdoor":
+                case "page/BackdoorLive2d":
+                case "page/NativeSandBox":
+                case "page/SoundTest":
+                case "page/SelectStoryTest":
+                case "page/TipsTest":
+                case "page/EffectTest":
+                // empty ones - browser mode
+                case "page/ArenaStub":
                     {
                         body = this.fakeEmptyResp(apiName);
                         break;
@@ -335,13 +358,6 @@ export class fakeMagirecoProdRespHook implements hook {
                         break;
                     }
                 // special ones
-                case "system/game/login":
-                    {
-                        body = this.fakeSystemLogin();
-                        if (body != null) console.log(`faked system login`);
-                        else console.error(`failed to fake system login`);
-                        break;
-                    }
                 case "page/MyPage":
                     {
                         body = this.fakeMyPage(apiName);
@@ -356,6 +372,11 @@ export class fakeMagirecoProdRespHook implements hook {
                 case "page/MagiRepo":
                     {
                         body = this.fakeMagiRepo(apiName);
+                        break;
+                    }
+                case "page/NewVersionRecommend":
+                    {
+                        body = Buffer.from(JSON.stringify({ requiredVersion: "9.9.9" }), 'utf-8');
                         break;
                     }
                 // remaining ones
@@ -437,11 +458,18 @@ export class fakeMagirecoProdRespHook implements hook {
             }
         } else {
             let statusCode: number;
-            let contentType = this.crawler.getContentType(url.pathname);
+            let contentType: string;
+            const defMimeType = "application/octet-stream";
             let contentEncoding: string | undefined;
             let body: Buffer | undefined;
             try {
-                body = this.crawler.readFile(url.pathname);
+                let pathname = url.pathname;;
+                if (isBrowserDebug) {
+                    const mappedTo = this.crawler.browserPathMap.get(url.pathname);
+                    if (mappedTo != null) pathname = mappedTo;
+                }
+                contentType = this.crawler.getContentType(pathname);
+                body = this.crawler.readFile(pathname);
                 if (body == null) {
                     if (url.pathname.match(this.magicaMaintenanceConfigRegEx) != null) {
                         body = Buffer.from(staticResCrawler.crawler.maintenanceConfigStr, 'utf-8');
@@ -451,6 +479,7 @@ export class fakeMagirecoProdRespHook implements hook {
                     }
                 }
             } catch (e) {
+                contentType = defMimeType;
                 console.error(`error serving[${url.pathname}]`, e);
                 body = undefined;
             }
@@ -1808,6 +1837,26 @@ export class fakeMagirecoProdRespHook implements hook {
                 replacePattern: /(#filterInitialList\{top):92(px\})/,
                 replacement: "$1:215$2",
             },
+            // fix mixed content in browser debug mode
+            ["/magica/js/_common/isBrowser.js"]: {
+                matchPattern: /^"use strict";define\(\["underscore","backbone","backboneCommon","ajaxControl","command","text!css\/test\/isBrowser\.css"/,
+                replacePattern: /http:\/\//g,
+                replacement: "https://",
+            },
+            // show debug backdoor
+            ["/magica/js/system/replacement.js"]: {
+                matchPattern: /^window\.fileTimeStamp={/,
+                replacePattern: /(^window\.fileTimeStamp={)/,
+                replacement: "window.isDebug=window.showBackdoor=!0;$1",
+            },
+            /*
+            // no longer needed, because replacement.js patch is already simple and effective
+            ["/magica/js/_common/base.js"]: {
+                matchPattern: /:gameInit\(\)}}\);$/,
+                replacePattern: /(,gameInit=function\(\)\{)(window\.isBrowser\?\()(window\.isDebug=!0,)/,
+                replacement: "$1$3window.showBackdoor=!0,$2",
+            },
+            */
         }
 
     private checkForMissing = (existingArray: Array<any>, missingArray: Array<any>, key: string) => {

@@ -101,6 +101,7 @@ export class crawler {
     static readonly defMimeType = "application/octet-stream";
 
     private readonly staticFileMap: staticFileMap;
+    readonly browserPathMap: Map<string, string>;
     private readonly staticFile404Set: staticFile404Set;
     private readonly localRootDir: string;
     private readonly localConflictDir: string;
@@ -197,6 +198,32 @@ export class crawler {
             console.error(`error loading staticFileMap, creating new one`, e);
             this.staticFileMap = new Map<string, Array<fileMeta>>();
         }
+
+        // window.isBrowser - browser debug mode
+        this.browserPathMap = new Map<string, string>();
+        const downloadedPathRegEx = /^(\/magica\/resource)(\/download\/asset\/master\/resource\/)(\d+)(\/.*)$/;
+        this.staticFileMap.forEach((val, key) => {
+            const newMappedTo = key;
+            const matched = newMappedTo.match(downloadedPathRegEx);
+            if (matched == null) return;
+            const mappedFrom = matched[1] + matched[4];
+            const oldMappedTo = this.browserPathMap.get(mappedFrom);
+            if (oldMappedTo != null) {
+                const newVersion = Number(matched[3]);
+                const oldVersion = Number((oldMappedTo.match(downloadedPathRegEx) as RegExpMatchArray)[3]);
+                console.error(`browserPathMap replacing mappedFrom=[${mappedFrom}]`
+                    + ` oldVersion=${oldVersion} newVersion=${newVersion}`);
+                if (!(newVersion > oldVersion)) return;
+            }
+            this.browserPathMap.set(mappedFrom, newMappedTo);
+        });
+        // add missing font for browser (guessed, unofficial)
+        const browserFont = "/magica/fonts/lzs_v_2_1_p.ttf";
+        const browserFontMD5 = "9e4857f74bfbb437665dc168a80c16cb";
+        const zhiheiFromApk = "/apk/assets/fonts/TTZhiHeiGB3-W4.ttf"; // guessed
+        this.browserPathMap.set(browserFont, zhiheiFromApk);
+        this.staticFileMap.set(zhiheiFromApk, [{ md5: browserFontMD5, contentType: "font/ttf" }]);
+
         if (!fs.existsSync(crawler.staticFile404SetPath) && !fs.existsSync(crawler.staticFile404SetPathUncomp)) {
             console.error(`creating new staticFile404Set`);
             this.staticFile404Set = new Set<string>();
