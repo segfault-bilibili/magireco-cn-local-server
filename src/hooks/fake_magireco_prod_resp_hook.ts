@@ -329,6 +329,7 @@ export class fakeMagirecoProdRespHook implements hook {
                 case "userChara/visualize":
                 case "userLive2d/set":
                 case "search/friend_search/_search":
+                case "quest/start":
                 case "arena/start":
                 case "quest/native/get":
                 case "quest/native/result/send":
@@ -364,8 +365,6 @@ export class fakeMagirecoProdRespHook implements hook {
                 case "page/SelectStoryTest":
                 case "page/TipsTest":
                 case "page/EffectTest":
-                // empty ones - browser mode
-                case "page/ArenaStub":
                 */
                     {
                         body = this.fakeEmptyResp(apiName);
@@ -396,6 +395,14 @@ export class fakeMagirecoProdRespHook implements hook {
                         }
                         if (typeof inviteCode !== "string") inviteCode = "[无法获取玩家ID]";
                         body = Buffer.from(JSON.stringify({ inviteCode: inviteCode, bannedTime: bannedTime }), 'utf-8');
+                        break;
+                    }
+                case "page/QuestStub":
+                case "page/ArenaStub":
+                    {
+                        // browser debug - quest/arena stub
+                        // FIXME use MyPage for now
+                        body = this.fakeMyPage("page/MyPage");
                         break;
                     }
                 case "page/MyPage":
@@ -654,6 +661,7 @@ export class fakeMagirecoProdRespHook implements hook {
                         respBody = this.fakePagedResult(apiName, reqBody, type);
                         break;
                     }
+                case "quest/start": //FIXME
                 case "arena/start":
                 case "quest/native/get":
                 case "quest/native/result/send":
@@ -1287,6 +1295,16 @@ export class fakeMagirecoProdRespHook implements hook {
         const myUserId = userdataDump.getUnBrBody(lastDump.httpResp.get, this.pageKeys["page/TopPage"])?.gameUser?.userId;
         if (typeof myUserId !== 'string' || !myUserId.match(userdataDump.guidRegEx)) {
             return this.fakeErrorResp("错误", "无法读取用户ID");
+        }
+
+        if (apiName === "quest/start") {
+            apiName = "arena/start"; // FIXME: pretend to be arena/start - apis afterwards NOT WORKING
+            const faked = {
+                arenaBattleType: "SIMULATE",
+                opponentUserId: getRandomGuid(),
+                arenaBattleOpponentTeamType: "FAKE",
+            }
+            reqBody = JSON.stringify(faked);
         }
 
         switch (apiName) {
