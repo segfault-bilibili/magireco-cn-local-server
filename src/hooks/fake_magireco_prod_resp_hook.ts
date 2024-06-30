@@ -755,7 +755,9 @@ export class fakeMagirecoProdRespHook implements hook {
     }
 
     private fixCurrentTime(respBodyObj: any): void {
-        if (typeof respBodyObj?.currentTime === 'string') respBodyObj.currentTime = this.getDateTimeString();
+        if (typeof respBodyObj?.currentTime === 'string') {
+            respBodyObj.currentTime = respBodyObj.currentTime.substring(0, 10) + this.getDateTimeString().substring(10);
+        }
     }
 
     private fakeMyPage(apiName: string): Buffer | undefined {
