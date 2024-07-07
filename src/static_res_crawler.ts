@@ -337,51 +337,20 @@ export class crawler {
         if (contentType != null) return contentType;
         else return crawler.defMimeType;
     }
-    readFile(pathInUrl: string, specifiedMd5?: string): Buffer | undefined {
+    readFile(pathInUrl: string): Buffer | undefined {
         // not checking md5 here
         let logPrefix = `readFile`;
         const readPath = path.join(this.localRootDir, pathInUrl);
-        if (specifiedMd5 == null) {
-            if (fs.existsSync(readPath)) {
-                if (fs.statSync(readPath).isFile()) {
-                    const content = fs.readFileSync(readPath);
-                    if (parameters.params.VERBOSE) console.log(`${logPrefix}: [${pathInUrl}]`);
-                    return content;
-                }
-                else throw new Error(`readPath=[${readPath}] exists but it is not a file`);
-            } else {
-                if (parameters.params.VERBOSE) console.log(`${logPrefix} (not found) : [${pathInUrl}]`);
-                return undefined;
+        if (fs.existsSync(readPath)) {
+            if (fs.statSync(readPath).isFile()) {
+                const content = fs.readFileSync(readPath);
+                if (parameters.params.VERBOSE) console.log(`${logPrefix}: [${pathInUrl}]`);
+                return content;
             }
-        } // else specifiedMd5 != null
-        logPrefix += ` with specified md5`;
-        const metaArray = this.staticFileMap.get(pathInUrl) || [];
-        if (metaArray[0]?.md5 === specifiedMd5) {
-            if (fs.existsSync(readPath)) {
-                if (fs.statSync(readPath).isFile()) {
-                    const content = fs.readFileSync(readPath);
-                    if (parameters.params.VERBOSE) console.log(`${logPrefix}: [${pathInUrl}]`);
-                    return content;
-                }
-                else throw new Error(`readPath=[${readPath}] exists but it is not a file`);
-            } else throw new Error(`staticFileMap has the record of readPath=[${readPath}] but that file does not exist`);
+            else throw new Error(`readPath=[${readPath}] exists but it is not a file`);
         } else {
-            if (metaArray.find((meta) => meta.md5 === specifiedMd5) != null) {
-                const conflictDirNameWithoutMd5 = path.dirname(path.join(this.localConflictDir, pathInUrl));
-                const conflictDirNameWithMd5 = path.join(conflictDirNameWithoutMd5, specifiedMd5);
-                const conflictReadPath = path.join(conflictDirNameWithMd5, path.basename(pathInUrl));
-                if (fs.existsSync(conflictReadPath)) {
-                    if (fs.statSync(conflictReadPath).isFile()) {
-                        const content = fs.readFileSync(readPath);
-                        if (parameters.params.VERBOSE) console.log(`${logPrefix} (in conflict dir) : [${pathInUrl}]`);
-                        return content;
-                    }
-                    else throw new Error(`conflictReadPath=[${conflictReadPath}] exists but it is not a file`);
-                } else throw new Error(`staticFileMap has the record of conflictReadPath=[${conflictReadPath}] but that file does not exist`);
-            } else {
-                if (parameters.params.VERBOSE) console.log(`${logPrefix} (not found) : [${pathInUrl}]`);
-                return undefined;
-            }
+            if (parameters.params.VERBOSE) console.log(`${logPrefix} (not found) : [${pathInUrl}]`);
+            return undefined;
         }
     }
     saveFile(pathInUrl: string, content: Buffer, contentType: string | undefined, preCalcMd5?: string): void {
