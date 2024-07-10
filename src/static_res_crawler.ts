@@ -218,7 +218,8 @@ export class crawler {
         const browserFont = "/magica/fonts/lzs_v_2_1_p.ttf";
         const browserFontMD5 = "9e4857f74bfbb437665dc168a80c16cb";
         const zhiheiFromApk = "/apk/assets/fonts/TTZhiHeiGB3-W4.ttf"; // guessed
-        this.staticFileMap.set(zhiheiFromApk, [{ md5: browserFontMD5, contentType: "font/ttf" }]);
+        this.staticFileMap.set(browserFont, [{ md5: browserFontMD5, contentType: "font/ttf" }]);
+        this.staticFileMap.delete(zhiheiFromApk);
 
         // remove "virtual" files if they still exist in the map
         this.staticFileMap.delete("/maintenance/magica/config");
@@ -427,10 +428,19 @@ export class crawler {
                     return;
                 }
                 const pathInUrl: string = val.value[0], fileMetaArray: Array<fileMeta> = val.value[1];
-                new Promise<void>((resolve) => {
+                new Promise<void>(async (resolve) => {
                     let okay = false;
                     try {
-                        if (this.checkAlreadyExist(pathInUrl, fileMetaArray[0].md5)) okay = true;
+                        let data = await this.zippedAssets.readFileAsync(pathInUrl);
+                        if (data == null) {
+                            okay = false;
+                            console.log(`[${pathInUrl}] missing`);
+                        } else {
+                            let md5 = crypto.createHash('md5').update(data).digest().toString('hex').toLowerCase();
+                            okay = md5 === fileMetaArray[0].md5;
+                            if (!okay) console.log(`[${pathInUrl}] md5 mismatch, expected ${fileMetaArray[0].md5} actual ${md5}`);
+                        }
+                        // if (this.checkAlreadyExist(pathInUrl, fileMetaArray[0].md5)) okay = true;
                     } catch (e) {
                         console.error(e);
                     }
