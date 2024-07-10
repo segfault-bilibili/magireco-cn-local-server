@@ -15,12 +15,12 @@ export class saveResponseBodyHook implements hook {
     }
 
     // if matched, keep a copy of request/response data in memory
-    matchRequest(
+    async matchRequest(
         method?: string,
         url?: URL,
         httpVersion?: string,
         headers?: http.IncomingHttpHeaders | http2.IncomingHttpHeaders
-    ): passOnRequest {
+    ): Promise<passOnRequest> {
         return {
             nextAction: "passOnRequest",
             interceptResponse: url?.href.match(this.urlRegEx) ? true : false,

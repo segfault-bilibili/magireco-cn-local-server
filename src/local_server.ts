@@ -45,7 +45,7 @@ export interface hook {
         url?: URL,
         httpVersion?: string,
         headers?: http.IncomingHttpHeaders | http2.IncomingHttpHeaders
-    ) => fakeResponse | passOnRequest;
+    ) => Promise<fakeResponse | passOnRequest>;
 
     onMatchedRequest: (
         method?: string,
@@ -123,9 +123,9 @@ export class localServer {
                 let fakedResponse = false;
                 const reqBodyBufArray: Array<Buffer> = [];
 
-                let matchedHooks = this.hooks.filter((item): boolean => {
+                let hooksPromises = this.hooks.map(async (item): Promise<boolean> => {
                     if (fakedResponse) return false;
-                    let nextAction = item.matchRequest(modifiedMethod, new URL(cliReq.url, `https://${reqHeaders["host"]}`),
+                    let nextAction = await item.matchRequest(modifiedMethod, new URL(cliReq.url, `https://${reqHeaders["host"]}`),
                         reqHttpVer, reqHeaders);
                     switch (nextAction.nextAction) {
                         case "fakeResponse":
@@ -149,6 +149,8 @@ export class localServer {
                     }
                     return fakedResponse ? false : nextAction.interceptResponse;
                 });
+                let all = await Promise.all(hooksPromises);
+                let matchedHooks = this.hooks.filter((item, index) => all[index]);
                 if (this.checkOfflineMode(reqHeaders["host"])) {
                     if (matchedHooks.length == 0 && !fakedResponse) cliReq.destroy();
                 }
@@ -385,9 +387,9 @@ export class localServer {
                 let fakedResponse = false;
                 const reqBodyBufArray: Array<Buffer> = [];
 
-                let matchedHooks = this.hooks.filter((item): boolean => {
+                let hooksPromises = this.hooks.map(async (item): Promise<boolean> => {
                     if (fakedResponse) return false;
-                    let nextAction = item.matchRequest(reqHeaders[":method"],
+                    let nextAction = await item.matchRequest(reqHeaders[":method"],
                         reqHeaders[":path"] == null ? undefined : new URL(reqHeaders[":path"], `https://${reqHeaders[":authority"]}/`),
                         reqHttpVer, reqHeaders);
                     switch (nextAction.nextAction) {
@@ -417,6 +419,8 @@ export class localServer {
                     }
                     return fakedResponse ? false : nextAction.interceptResponse;
                 });
+                let all = await Promise.all(hooksPromises);
+                let matchedHooks = this.hooks.filter((item, index) => all[index]);
                 if (this.checkOfflineMode(reqHeaders[":authority"])) {
                     if (matchedHooks.length == 0 && !fakedResponse) cliReqStream.destroy();
                 }

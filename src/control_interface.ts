@@ -19,6 +19,7 @@ import { fakeMagirecoProdRespHook } from "./hooks/fake_magireco_prod_resp_hook";
 import { saveAccessKeyHook } from "./hooks/save_access_key_hook";
 import { saveOpenIdTicketHook } from "./hooks/save_open_id_ticket_hook";
 import * as favicon from "./favicon";
+import { zippedAssets } from "./zipped_assets";
 
 type parsedMultiPart = Array<{ filename?: string, name?: string, type?: string, data: Buffer }>;
 export class controlInterface {
@@ -35,9 +36,11 @@ export class controlInterface {
     static async launch(): Promise<void> {
         const params = await parameters.params.load();
         if (params.checkModified()) await params.save();
+        let zippedassets = await zippedAssets.init();
         let localserver = new localServer(params);
         let httpproxy = new httpProxy(params);
-        let control_interface = new controlInterface(params, [localserver, httpproxy]);
+        let crawler = await staticResCrawler.crawler.init(params, localserver, zippedassets);
+        let control_interface = new controlInterface(params, [localserver, httpproxy], crawler);
         control_interface.openWebOnAndroid();
     }
     openWebOnAndroid(): void {
@@ -60,7 +63,7 @@ export class controlInterface {
             }
 
             if (shellCmd == null || !this.params.autoOpenWeb) {
-                console.log(`请手动在浏览器中打开Web控制界面\n  ${webUrl}`);
+                console.log(`请手动在浏览器中打开Web控制界面\nOpen Web control interface in your browser manually\n  ${webUrl}`);
                 return;
             }
 
@@ -68,7 +71,8 @@ export class controlInterface {
                 try {
                     if (error == null) {
                         console.log(`    即将从浏览器打开Web控制界面...\n  ${webUrl}`);
-                        console.log(`  【如果没成功自动打开浏览器，请手动复制上述网址粘贴到浏览器地址栏】`);
+                        console.log(`  如果没成功自动打开浏览器，请手动复制上述网址粘贴到浏览器地址栏`);
+                        console.log(`  Please manually copy the URL above to the address bar of your browser, in case it did not pop up automatically`);
                     } else {
                         console.error("error", error);
                         console.error("stdout", stdout);
@@ -84,12 +88,11 @@ export class controlInterface {
         console.log("（按CTRL+C即可中断程序运行）");
     }
 
-    constructor(params: parameters.params, serverList: Array<localServer | httpProxy>) {
+    private constructor(params: parameters.params, serverList: Array<localServer | httpProxy>, crawler: staticResCrawler.crawler) {
         const httpPxy = serverList.find((s) => s instanceof httpProxy) as httpProxy;
         const localsvr = serverList.find((s) => s instanceof localServer) as localServer;
         const bsgamesdkPwdAuth = new bsgamesdkPwdAuthenticate.bsgamesdkPwdAuth(params, localsvr);
         const userdataDmp = new userdataDump.userdataDmp(params, localsvr);
-        const crawler = new staticResCrawler.crawler(params, localsvr);
 
         const hooks = [
             new saveAccessKeyHook(params),

@@ -5,6 +5,7 @@ import * as http2 from "http2";
 import * as fs from "fs";
 import * as path from "path";
 import * as crypto from "crypto";
+import { zippedAssets } from "./zipped_assets";
 
 type http2StrResult = {
     is404: boolean,
@@ -100,16 +101,17 @@ export class crawler {
 
     static readonly defMimeType = "application/octet-stream";
 
-    private readonly staticFileMap: staticFileMap;
-    readonly browserPathMap: Map<string, string>;
+    private readonly staticFileMap: staticFileMap; // legacy
     private readonly staticFile404Set: staticFile404Set;
     private readonly localRootDir: string;
-    private readonly localConflictDir: string;
+    private readonly localConflictDir: string; // actually never used
     private static readonly staticFileMapPath = path.join(".", "staticFileMap.json.br");
     private static readonly staticFileMapPathUncomp = this.staticFileMapPath.replace(/\.br$/, "");
     private static readonly staticFile404SetPath = path.join(".", "staticFile404Set.json.br");
     private static readonly staticFile404SetPathUncomp = this.staticFile404SetPath.replace(/\.br$/, "");
     private static readonly brotliQuality = 0;
+
+    private zippedAssets: zippedAssets;
 
     private static readonly prodHost = "l3-prod-all-gs-mfsn2.bilibiligame.net";
     private get httpsProdMagicaNoSlash(): string { return `https://${crawler.prodHost}/magica`; }
@@ -173,9 +175,10 @@ export class crawler {
     }
     private _fsckStatus?: fsckStatus;
 
-    constructor(params: parameters.params, localsvr: localServer) {
+    private constructor(params: parameters.params, localsvr: localServer, zippedAssets: zippedAssets) {
         this.params = params;
         this.localServer = localsvr;
+        this.zippedAssets = zippedAssets;
 
         this.device_id = [8, 4, 4, 4, 12].map((len) => crypto.randomBytes(Math.trunc((len + 1) / 2))
             .toString('hex').substring(0, len)).join("-");
@@ -211,29 +214,10 @@ export class crawler {
         ];
         whPages.forEach((page) => this.staticFileMap.set("/magica/wh/" + page.path, [page.fileMeta]));
 
-        // window.isBrowser - browser debug mode
-        this.browserPathMap = new Map<string, string>();
-        const downloadedPathRegEx = /^(\/magica\/resource)(\/download\/asset\/master\/resource\/)(\d+)(\/.*)$/;
-        this.staticFileMap.forEach((val, key) => {
-            const newMappedTo = key;
-            const matched = newMappedTo.match(downloadedPathRegEx);
-            if (matched == null) return;
-            const mappedFrom = matched[1] + matched[4];
-            const oldMappedTo = this.browserPathMap.get(mappedFrom);
-            if (oldMappedTo != null) {
-                const newVersion = Number(matched[3]);
-                const oldVersion = Number((oldMappedTo.match(downloadedPathRegEx) as RegExpMatchArray)[3]);
-                console.error(`browserPathMap replacing mappedFrom=[${mappedFrom}]`
-                    + ` oldVersion=${oldVersion} newVersion=${newVersion}`);
-                if (!(newVersion > oldVersion)) return;
-            }
-            this.browserPathMap.set(mappedFrom, newMappedTo);
-        });
         // add missing font for browser (guessed, unofficial)
         const browserFont = "/magica/fonts/lzs_v_2_1_p.ttf";
         const browserFontMD5 = "9e4857f74bfbb437665dc168a80c16cb";
         const zhiheiFromApk = "/apk/assets/fonts/TTZhiHeiGB3-W4.ttf"; // guessed
-        this.browserPathMap.set(browserFont, zhiheiFromApk);
         this.staticFileMap.set(zhiheiFromApk, [{ md5: browserFontMD5, contentType: "font/ttf" }]);
 
         // remove "virtual" files if they still exist in the map
@@ -269,6 +253,10 @@ export class crawler {
         const { isWebResCompleted, isAssetsCompleted } = this.checkStaticCompleted();
         this.isWebResCompleted = isWebResCompleted;
         this.isAssetsCompleted = isAssetsCompleted;
+    }
+
+    static async init(params: parameters.params, localsvr: localServer, zippedAssets: zippedAssets): Promise<crawler> {
+        return new crawler(params, localsvr, zippedAssets);
     }
 
     fetchAllAsync(): Promise<void> {
@@ -331,27 +319,25 @@ export class crawler {
     }
 
     getContentType(pathInUrl: string): string {
-        const fileMetaArray = this.staticFileMap.get(pathInUrl);
-        if (fileMetaArray == null || fileMetaArray.length == 0) return crawler.defMimeType;
-        const contentType = fileMetaArray[0].contentType;
-        if (contentType != null) return contentType;
-        else return crawler.defMimeType;
+        return zippedAssets.getContentType(pathInUrl);
     }
-    readFile(pathInUrl: string): Buffer | undefined {
-        // not checking md5 here
-        let logPrefix = `readFile`;
+    private readFile(pathInUrl: string): Buffer | undefined {
+        // legacy
         const readPath = path.join(this.localRootDir, pathInUrl);
-        if (fs.existsSync(readPath)) {
-            if (fs.statSync(readPath).isFile()) {
-                const content = fs.readFileSync(readPath);
-                if (parameters.params.VERBOSE) console.log(`${logPrefix}: [${pathInUrl}]`);
-                return content;
-            }
-            else throw new Error(`readPath=[${readPath}] exists but it is not a file`);
-        } else {
-            if (parameters.params.VERBOSE) console.log(`${logPrefix} (not found) : [${pathInUrl}]`);
-            return undefined;
+        if (fs.existsSync(readPath) && fs.statSync(readPath).isFile()) {
+            return fs.readFileSync(readPath);
         }
+    }
+    async readFileAsync(pathInUrl: string): Promise<Buffer | undefined> {
+        // not checking md5 here
+        // work flow: (1) check ./static/ first; (2) then ./zip/ if not found
+        const readPath = path.join(this.localRootDir, pathInUrl);
+        // (1) check ./static/ first
+        if (fs.existsSync(readPath) && fs.statSync(readPath).isFile()) {
+            return fs.readFileSync(readPath);
+        }
+        // (2) then ./static_zip/ if not found
+        return await this.zippedAssets?.readFileAsync(pathInUrl);
     }
     saveFile(pathInUrl: string, content: Buffer, contentType: string | undefined, preCalcMd5?: string): void {
         let logPrefix = `saveFile`;
@@ -437,14 +423,6 @@ export class crawler {
                     }
                     console.log(this.lastFsckResult);
                     notOkaySet.forEach((pathInUrl) => this.staticFileMap.delete(pathInUrl));
-                    try {
-                        const { isWebResCompleted, isAssetsCompleted } = this.checkStaticCompleted();
-                        this.isWebResCompleted = isWebResCompleted;
-                        this.isAssetsCompleted = isAssetsCompleted;
-                        this.saveFileMeta();
-                    } catch (e) {
-                        console.error(e);
-                    }
                     resolve(notOkaySet.size == 0);
                     return;
                 }

@@ -132,12 +132,12 @@ export class fakeMagirecoProdRespHook implements hook {
     }
 
     // if matched, keep a copy of request/response data in memory
-    matchRequest(
+    async matchRequest(
         method?: string,
         url?: URL,
         httpVersion?: string,
         headers?: http.IncomingHttpHeaders | http2.IncomingHttpHeaders
-    ): fakeResponse | passOnRequest {
+    ): Promise<fakeResponse | passOnRequest> {
         const mode = this.params.mode;
         if (mode !== parameters.mode.LOCAL_OFFLINE) return {
             nextAction: "passOnRequest",
@@ -482,7 +482,7 @@ export class fakeMagirecoProdRespHook implements hook {
                     {
                         if (apiName.startsWith("page/")) {
                             // handle debug backdoor pages
-                            body = this.crawler.readFile(`magica/json/${apiName}.json`);
+                            body = await this.crawler.readFileAsync(`magica/json/${apiName}.json`);
                             if (body?.toString('utf-8') === "{}") {
                                 body = this.fakeEmptyResp(apiName);
                             }
@@ -519,13 +519,9 @@ export class fakeMagirecoProdRespHook implements hook {
             let contentEncoding: string | undefined;
             let body: Buffer | undefined;
             try {
-                let pathname = url.pathname;;
-                if (isBrowserDebug) {
-                    const mappedTo = this.crawler.browserPathMap.get(url.pathname);
-                    if (mappedTo != null) pathname = mappedTo;
-                }
+                let pathname = url.pathname;
                 contentType = this.crawler.getContentType(pathname);
-                body = this.crawler.readFile(pathname);
+                body = await this.crawler.readFileAsync(pathname);
                 if (body == null) {
                     if (url.pathname.match(this.magicaMaintenanceConfigRegEx) != null) {
                         body = Buffer.from(staticResCrawler.crawler.maintenanceConfigStr, 'utf-8');
@@ -538,7 +534,7 @@ export class fakeMagirecoProdRespHook implements hook {
                 }
             } catch (e) {
                 contentType = defMimeType;
-                console.error(`error serving[${url.pathname}]`, e);
+                console.error(`error serving [${url.pathname}]`, e);
                 body = undefined;
             }
             if (body != null) {
@@ -552,7 +548,7 @@ export class fakeMagirecoProdRespHook implements hook {
             }
             if (body == null && url.pathname.endsWith(".gz")) {
                 try {
-                    let uncompressed = this.crawler.readFile(url.pathname.replace(/\.gz$/, ""));
+                    let uncompressed = await this.crawler.readFileAsync(url.pathname.replace(/\.gz$/, ""));
                     if (uncompressed != null) {
                         contentType = this.crawler.getContentType(url.pathname);
                         body = compress(uncompressed, "gzip");

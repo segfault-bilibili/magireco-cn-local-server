@@ -17,15 +17,15 @@ export class saveOpenIdTicketHook extends saveResponseBodyHook {
     private readonly webSessionIdRegEx = /^Webview-Session-Id$/i;
     private readonly webSessionIdValueRegEx = /^\d{14}$/;
 
-    matchRequest(
+    async matchRequest(
         method?: string,
         url?: URL,
         httpVersion?: string,
         headers?: http.IncomingHttpHeaders | http2.IncomingHttpHeaders
-    ): passOnRequest {
+    ): Promise<passOnRequest> {
         const tag = "saveOpenIdTicketHook";
 
-        const isGameLogin = super.matchRequest(method, url, httpVersion, headers).interceptResponse;
+        const isGameLogin = (await super.matchRequest(method, url, httpVersion, headers)).interceptResponse;
         if (isGameLogin) return {
             nextAction: "passOnRequest",
             interceptResponse: true,
