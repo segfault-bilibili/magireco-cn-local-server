@@ -81,10 +81,11 @@ class certGen {
                 }];
             const ipType = net.isIP(commonName);
             if (ipType == 4 || ipType == 6) {
-                altNames.push({
+                const browserDebugIP = "10.24.19.50";
+                [commonName, browserDebugIP].forEach((ip) => altNames.push({
                     type: iPAddress,
-                    ip: commonName,
-                });
+                    ip: ip,
+                }));
             }
             exts.push({
                 name: 'subjectAltName',

@@ -12,9 +12,9 @@ class saveOpenIdTicketHook extends save_response_body_hook_1.saveResponseBodyHoo
         this.webSessionIdRegEx = /^Webview-Session-Id$/i;
         this.webSessionIdValueRegEx = /^\d{14}$/;
     }
-    matchRequest(method, url, httpVersion, headers) {
+    async matchRequest(method, url, httpVersion, headers) {
         const tag = "saveOpenIdTicketHook";
-        const isGameLogin = super.matchRequest(method, url, httpVersion, headers).interceptResponse;
+        const isGameLogin = (await super.matchRequest(method, url, httpVersion, headers)).interceptResponse;
         if (isGameLogin)
             return {
                 nextAction: "passOnRequest",

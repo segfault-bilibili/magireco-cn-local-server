@@ -22,15 +22,71 @@ const fake_magireco_prod_resp_hook_1 = require("./hooks/fake_magireco_prod_resp_
 const save_access_key_hook_1 = require("./hooks/save_access_key_hook");
 const save_open_id_ticket_hook_1 = require("./hooks/save_open_id_ticket_hook");
 const favicon = require("./favicon");
+const zipped_assets_1 = require("./zipped_assets");
 class controlInterface {
-    constructor(params, serverList) {
+    static async launch() {
+        const params = await parameters.params.load();
+        if (params.checkModified())
+            await params.save();
+        let zippedassets = await zipped_assets_1.zippedAssets.init();
+        let localserver = new local_server_1.localServer(params);
+        let httpproxy = new http_proxy_1.httpProxy(params);
+        let crawler = await staticResCrawler.crawler.init(params, localserver, zippedassets);
+        let control_interface = new controlInterface(params, [localserver, httpproxy], crawler);
+        control_interface.openWebOnAndroid();
+    }
+    openWebOnAndroid() {
+        var _a;
+        try {
+            const addr = this.params.listenList.controlInterface;
+            const webUrl = `http://${addr.host}:${addr.port}/`;
+            let shellCmd;
+            const androidSpecificFileList = [
+                "/system/build.prop",
+                "/sdcard",
+                "/storage/emulated",
+            ];
+            let found = androidSpecificFileList.filter((path) => fs.existsSync(path));
+            if (found.length > 0) {
+                shellCmd = `am start -a \"android.intent.action.VIEW\" -d \"${webUrl}\"`;
+            }
+            else if ((_a = process.env["windir"]) === null || _a === void 0 ? void 0 : _a.match(/^[A-Z]\:\\WINDOWS/i)) {
+                shellCmd = `start ${webUrl}`;
+            }
+            if (shellCmd == null || !this.params.autoOpenWeb) {
+                console.log(`请手动在浏览器中打开Web控制界面\nOpen Web control interface in your browser manually\n  ${webUrl}`);
+                return;
+            }
+            ChildProcess.exec(shellCmd, (error, stdout, stderr) => {
+                try {
+                    if (error == null) {
+                        console.log(`    即将从浏览器打开Web控制界面...\n  ${webUrl}`);
+                        console.log(`  如果没成功自动打开浏览器，请手动复制上述网址粘贴到浏览器地址栏`);
+                        console.log(`  Please manually copy the URL above to the address bar of your browser, in case it did not pop up automatically`);
+                    }
+                    else {
+                        console.error("error", error);
+                        console.error("stdout", stdout);
+                        console.error("stderr", stderr);
+                    }
+                }
+                catch (e) {
+                    console.error(e);
+                }
+            });
+        }
+        catch (e) {
+            console.error(e);
+        }
+        console.log("（按CTRL+C即可中断程序运行）");
+    }
+    constructor(params, serverList, crawler) {
         this.closing = false;
         this.isTogglingLoopbackListen = false;
         const httpPxy = serverList.find((s) => s instanceof http_proxy_1.httpProxy);
         const localsvr = serverList.find((s) => s instanceof local_server_1.localServer);
         const bsgamesdkPwdAuth = new bsgamesdkPwdAuthenticate.bsgamesdkPwdAuth(params, localsvr);
         const userdataDmp = new userdataDump.userdataDmp(params, localsvr);
-        const crawler = new staticResCrawler.crawler(params, localsvr);
         const hooks = [
             new save_access_key_hook_1.saveAccessKeyHook(params),
             new save_open_id_ticket_hook_1.saveOpenIdTicketHook(params),
@@ -104,6 +160,17 @@ class controlInterface {
                                 host: this.params.lastHttpProxy.host,
                             };
                             listenList.httpProxy = last;
+                            if (listenList.httpProxy.host === curr.host) {
+                                const LOCALHOST = "127.0.0.1", ALL_INTERFACE = "0.0.0.0";
+                                switch (listenList.httpProxy.host) {
+                                    case LOCALHOST:
+                                        listenList.httpProxy.host = ALL_INTERFACE;
+                                        break;
+                                    case ALL_INTERFACE:
+                                        listenList.httpProxy.host = LOCALHOST;
+                                        break;
+                                }
+                            }
                             if (this.isTogglingLoopbackListen) {
                                 this.sendResultAsync(res, 429, "last http proxy listen address toggling is still not finished");
                             }
@@ -568,59 +635,6 @@ class controlInterface {
         this.userdataDmp = userdataDmp;
         this.crawler = crawler;
     }
-    static async launch() {
-        const params = await parameters.params.load();
-        if (params.checkModified())
-            await params.save();
-        let localserver = new local_server_1.localServer(params);
-        let httpproxy = new http_proxy_1.httpProxy(params);
-        let control_interface = new controlInterface(params, [localserver, httpproxy]);
-        control_interface.openWebOnAndroid();
-    }
-    openWebOnAndroid() {
-        var _a;
-        try {
-            const addr = this.params.listenList.controlInterface;
-            const webUrl = `http://${addr.host}:${addr.port}/`;
-            let shellCmd;
-            const androidSpecificFileList = [
-                "/system/build.prop",
-                "/sdcard",
-                "/storage/emulated",
-            ];
-            let found = androidSpecificFileList.filter((path) => fs.existsSync(path));
-            if (found.length > 0) {
-                shellCmd = `am start -a \"android.intent.action.VIEW\" -d \"${webUrl}\"`;
-            }
-            else if ((_a = process.env["windir"]) === null || _a === void 0 ? void 0 : _a.match(/^[A-Z]\:\\WINDOWS/i)) {
-                shellCmd = `start ${webUrl}`;
-            }
-            if (shellCmd == null || !this.params.autoOpenWeb) {
-                console.log(`请手动在浏览器中打开Web控制界面\n  ${webUrl}`);
-                return;
-            }
-            ChildProcess.exec(shellCmd, (error, stdout, stderr) => {
-                try {
-                    if (error == null) {
-                        console.log(`    即将从浏览器打开Web控制界面...\n  ${webUrl}`);
-                        console.log(`  【如果没成功自动打开浏览器，请手动复制上述网址粘贴到浏览器地址栏】`);
-                    }
-                    else {
-                        console.error("error", error);
-                        console.error("stdout", stdout);
-                        console.error("stderr", stderr);
-                    }
-                }
-                catch (e) {
-                    console.error(e);
-                }
-            });
-        }
-        catch (e) {
-            console.error(e);
-        }
-        console.log("（按CTRL+C即可中断程序运行）");
-    }
     async closeAll() {
         let promises = this.serverList.map((server) => server.close());
         promises.push(new Promise((resolve) => {
@@ -944,6 +958,14 @@ class controlInterface {
             + `\n</head>`
             + `\n<body>`
             + `\n  <h1>魔法纪录国服本地服务器${pkgVersionStr}</h1>`
+            + `\n  <fieldset><legend>浏览器调试</legend>`
+            + `\n    <div>`
+            + `\n      通过下面这个链接即可通过浏览器登录游戏，便于调试。`
+            + `\n      <br>${aHref("index.html", "https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/index.html")}`
+            + `\n      <br><i>需要F12然后开启设备模拟才能模拟触控操作。</i>`
+            + `\n      <br><i>手机端可能需要切换到桌面UA（电脑版）。</i>`
+            + `\n    </div>`
+            + `\n  </fieldset>`
             + `\n  <fieldset>`
             + `\n  <legend>HTTP代理</legend>`
             + `\n  <fieldset><legend>HTTP代理信息</legend>`
@@ -1341,7 +1363,7 @@ class controlInterface {
             + `\n  </div>`
             + `\n  <form action=\"/api/fsck\" method=\"post\">`
             + `\n    <div>`
-            + `\n      <input type=\"submit\" id=\"fsck_btn\" ${isFscking ? "" : "disabled"} value=\"开始检查\">`
+            + `\n      <input type=\"submit\" id=\"fsck_btn\" ${isFscking ? "" : "disabled"} value=\"检查并删除重复文件\">`
             + `\n    </div>`
             + `\n  </form>`
             + `\n  </fieldset>`

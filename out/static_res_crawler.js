@@ -8,83 +8,15 @@ const http2 = require("http2");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+const zipped_assets_1 = require("./zipped_assets");
 class crawler {
-    constructor(params, localsvr) {
-        this.stopCrawling = false;
-        this._isCrawling = false;
-        this._crawlingStatus = "";
-        this.isCrawlingCompleted = false;
-        this.params = params;
-        this.localServer = localsvr;
-        this.device_id = [8, 4, 4, 4, 12].map((len) => crypto.randomBytes(Math.trunc((len + 1) / 2))
-            .toString('hex').substring(0, len)).join("-");
-        if (!fs.existsSync(crawler.staticFileMapPath) && !fs.existsSync(crawler.staticFileMapPathUncomp)) {
-            console.error(`creating new staticFileMap`);
-            this.staticFileMap = new Map();
-        }
-        else
-            try {
-                let json;
-                if (fs.existsSync(crawler.staticFileMapPathUncomp) && fs.statSync(crawler.staticFileMapPathUncomp).isFile()) {
-                    let uncompressed = fs.readFileSync(crawler.staticFileMapPathUncomp);
-                    json = uncompressed.toString('utf-8');
-                    let compressed = (0, util_1.compress)(uncompressed, 'br', crawler.brotliQuality);
-                    fs.writeFileSync(crawler.staticFileMapPath, compressed);
-                    fs.rmSync(crawler.staticFileMapPathUncomp);
-                }
-                else {
-                    let compressed = fs.readFileSync(crawler.staticFileMapPath);
-                    json = (0, util_1.decompress)(compressed, "br").toString("utf-8");
-                }
-                let map = JSON.parse(json, util_1.reviver);
-                if (!(map instanceof Map))
-                    throw new Error(`not instance of map`);
-                this.staticFileMap = map;
-            }
-            catch (e) {
-                console.error(`error loading staticFileMap, creating new one`, e);
-                this.staticFileMap = new Map();
-            }
-        if (!fs.existsSync(crawler.staticFile404SetPath) && !fs.existsSync(crawler.staticFile404SetPathUncomp)) {
-            console.error(`creating new staticFile404Set`);
-            this.staticFile404Set = new Set();
-        }
-        else
-            try {
-                let json;
-                if (fs.existsSync(crawler.staticFile404SetPathUncomp) && fs.statSync(crawler.staticFile404SetPathUncomp).isFile()) {
-                    let uncompressed = fs.readFileSync(crawler.staticFile404SetPathUncomp);
-                    json = uncompressed.toString('utf-8');
-                    let compressed = (0, util_1.compress)(uncompressed, 'br', crawler.brotliQuality);
-                    fs.writeFileSync(crawler.staticFile404SetPath, compressed);
-                    fs.rmSync(crawler.staticFile404SetPathUncomp);
-                }
-                else {
-                    let compressed = fs.readFileSync(crawler.staticFile404SetPath);
-                    json = (0, util_1.decompress)(compressed, "br").toString("utf-8");
-                }
-                let set = JSON.parse(json, util_1.reviver);
-                if (!(set instanceof Set))
-                    throw new Error(`not instance of set`);
-                this.staticFile404Set = set;
-            }
-            catch (e) {
-                console.error(`error loading staticFile404Set, creating new one`, e);
-                this.staticFile404Set = new Set();
-            }
-        this.localRootDir = path.join(".", "static");
-        this.localConflictDir = path.join(".", "conflict");
-        const { isWebResCompleted, isAssetsCompleted } = this.checkStaticCompleted();
-        this.isWebResCompleted = isWebResCompleted;
-        this.isAssetsCompleted = isAssetsCompleted;
-    }
     get timeStampSec() {
         let ts = new Date().getTime();
         let tsSec = Math.trunc(ts / 1000);
         return String(tsSec);
     }
-    get httpsProdMagicaNoSlash() { return `https://${crawler.prodHost}/magica`; }
-    get httpsPatchMagicaNoSlash() { return `https://${crawler.patchHost}/magica`; }
+    get httpsProdMagicaNoSlash() { return `https://${_a.prodHost}/magica`; }
+    get httpsPatchMagicaNoSlash() { return `https://${_a.patchHost}/magica`; }
     get isCrawling() {
         return this._isCrawling;
     }
@@ -107,11 +39,91 @@ class crawler {
         const fsckStatus = this._fsckStatus;
         if (fsckStatus == null)
             return "";
-        return `[${fsckStatus.passed}] passed, [${fsckStatus.remaining}] remaining`
+        return `[${fsckStatus.passed}] passed, [${fsckStatus.deleted}] deleted, [${fsckStatus.remaining}] remaining`
             + `, [${fsckStatus.notPassed}] missing/mismatch/error`;
     }
     get fsckStatus() {
         return this._fsckStatus;
+    }
+    constructor(params, localsvr, zippedAssets) {
+        this.isWebResCompleted = false;
+        this.isAssetsCompleted = false;
+        this.localRootDir = path.join(".", "static");
+        this.localConflictDir = path.join(".", "conflict"); // actually never used
+        this.localStagingCNDir = path.join(".", "static_staging_cn");
+        this.stopCrawling = false;
+        this._isCrawling = false;
+        this._crawlingStatus = "";
+        this.isCrawlingCompleted = false;
+        this.params = params;
+        this.localServer = localsvr;
+        this.zippedAssets = zippedAssets;
+        this.device_id = [8, 4, 4, 4, 12].map((len) => crypto.randomBytes(Math.trunc((len + 1) / 2))
+            .toString('hex').substring(0, len)).join("-");
+        if (!fs.existsSync(_a.staticFileMapPath) && !fs.existsSync(_a.staticFileMapPathUncomp)) {
+            console.error(`creating new staticFileMap`);
+            this.staticFileMap = new Map();
+        }
+        else
+            try {
+                let json;
+                if (fs.existsSync(_a.staticFileMapPathUncomp) && fs.statSync(_a.staticFileMapPathUncomp).isFile()) {
+                    let uncompressed = fs.readFileSync(_a.staticFileMapPathUncomp);
+                    json = uncompressed.toString('utf-8');
+                    let compressed = (0, util_1.compress)(uncompressed, 'br', _a.brotliQuality);
+                    fs.writeFileSync(_a.staticFileMapPath, compressed);
+                    fs.rmSync(_a.staticFileMapPathUncomp);
+                }
+                else {
+                    let compressed = fs.readFileSync(_a.staticFileMapPath);
+                    json = (0, util_1.decompress)(compressed, "br").toString("utf-8");
+                }
+                let map = JSON.parse(json, util_1.reviver);
+                if (!(map instanceof Map))
+                    throw new Error(`not instance of map`);
+                this.staticFileMap = map;
+            }
+            catch (e) {
+                console.error(`error loading staticFileMap, creating new one`, e);
+                this.staticFileMap = new Map();
+            }
+        // remove "virtual" files if they still exist in the map
+        this.staticFileMap.delete("/maintenance/magica/config");
+        this.staticFileMap.delete("/favicon.ico");
+        if (!fs.existsSync(_a.staticFile404SetPath) && !fs.existsSync(_a.staticFile404SetPathUncomp)) {
+            console.error(`creating new staticFile404Set`);
+            this.staticFile404Set = new Set();
+        }
+        else
+            try {
+                let json;
+                if (fs.existsSync(_a.staticFile404SetPathUncomp) && fs.statSync(_a.staticFile404SetPathUncomp).isFile()) {
+                    let uncompressed = fs.readFileSync(_a.staticFile404SetPathUncomp);
+                    json = uncompressed.toString('utf-8');
+                    let compressed = (0, util_1.compress)(uncompressed, 'br', _a.brotliQuality);
+                    fs.writeFileSync(_a.staticFile404SetPath, compressed);
+                    fs.rmSync(_a.staticFile404SetPathUncomp);
+                }
+                else {
+                    let compressed = fs.readFileSync(_a.staticFile404SetPath);
+                    json = (0, util_1.decompress)(compressed, "br").toString("utf-8");
+                }
+                let set = JSON.parse(json, util_1.reviver);
+                if (!(set instanceof Set))
+                    throw new Error(`not instance of set`);
+                this.staticFile404Set = set;
+            }
+            catch (e) {
+                console.error(`error loading staticFile404Set, creating new one`, e);
+                this.staticFile404Set = new Set();
+            }
+        this.checkStaticCompleted().then((result) => {
+            this.isWebResCompleted = result.isWebResCompleted;
+            this.isAssetsCompleted = result.isAssetsCompleted;
+        });
+    }
+    static async init(params, localsvr, zippedAssets) {
+        return new _a(params, localsvr, zippedAssets);
     }
     fetchAllAsync() {
         return new Promise((resolve, reject) => this.getFetchAllPromise()
@@ -124,15 +136,14 @@ class crawler {
             });
         }).finally(() => {
             // not changing this._crawlingStatus
-            try {
-                const { isWebResCompleted, isAssetsCompleted } = this.checkStaticCompleted();
-                this.isWebResCompleted = isWebResCompleted;
-                this.isAssetsCompleted = isAssetsCompleted;
-            }
-            catch (e) {
+            this.checkStaticCompleted().then((result) => {
+                this.isWebResCompleted = result.isWebResCompleted;
+                this.isAssetsCompleted = result.isAssetsCompleted;
+            }).catch((e) => {
                 console.error(e);
-            }
-            this.saveFileMeta();
+            }).finally(() => {
+                this.saveFileMeta();
+            });
         }));
     }
     async getFetchAllPromise() {
@@ -150,7 +161,7 @@ class crawler {
         const crawlWebRes = this.params.crawlWebRes, crawlAssets = this.params.crawlAssets;
         if (crawlWebRes) {
             console.log(this._crawlingStatus = `crawling index.html ...`);
-            let indexHtml = await this.fetchSinglePage(crawler.prodHost, "/magica/index.html", crawler.htmlRegEx);
+            let indexHtml = await this.fetchSinglePage(_a.prodHost, "/magica/index.html", _a.htmlRegEx);
             let matched = indexHtml.match(/<head\s+time="(\d+)"/);
             if (matched == null)
                 throw this._lastError = new Error(`cannot match time in index.html`);
@@ -158,7 +169,7 @@ class crawler {
             if (isNaN(headTime))
                 throw this._lastError = new Error(`headTime is NaN`);
             console.log(this._crawlingStatus = `crawling baseConfig.js ...`);
-            await this.fetchSinglePage(crawler.prodHost, `/magica/js/_common/baseConfig.js?v=${headTime}`, crawler.javaScriptRegEx);
+            await this.fetchSinglePage(_a.prodHost, `/magica/js/_common/baseConfig.js?v=${headTime}`, _a.javaScriptRegEx);
             console.log(this._crawlingStatus = `crawling files in replacement.js ...`);
             await this.fetchFilesInReplacementJs(headTime);
         }
@@ -172,77 +183,57 @@ class crawler {
         this.isCrawlingCompleted = true;
     }
     getContentType(pathInUrl) {
-        const fileMetaArray = this.staticFileMap.get(pathInUrl);
-        if (fileMetaArray == null || fileMetaArray.length == 0)
-            return crawler.defMimeType;
-        const contentType = fileMetaArray[0].contentType;
-        if (contentType != null)
-            return contentType;
-        else
-            return crawler.defMimeType;
+        return zipped_assets_1.zippedAssets.getContentType(pathInUrl);
     }
-    readFile(pathInUrl, specifiedMd5) {
-        var _b;
-        // not checking md5 here
-        let logPrefix = `readFile`;
+    readFile(pathInUrl) {
+        // legacy
         const readPath = path.join(this.localRootDir, pathInUrl);
-        if (specifiedMd5 == null) {
-            if (fs.existsSync(readPath)) {
-                if (fs.statSync(readPath).isFile()) {
-                    const content = fs.readFileSync(readPath);
-                    if (parameters.params.VERBOSE)
-                        console.log(`${logPrefix}: [${pathInUrl}]`);
-                    return content;
-                }
-                else
-                    throw new Error(`readPath=[${readPath}] exists but it is not a file`);
-            }
-            else {
-                if (parameters.params.VERBOSE)
-                    console.log(`${logPrefix} (not found) : [${pathInUrl}]`);
-                return undefined;
-            }
-        } // else specifiedMd5 != null
-        logPrefix += ` with specified md5`;
-        const metaArray = this.staticFileMap.get(pathInUrl) || [];
-        if (((_b = metaArray[0]) === null || _b === void 0 ? void 0 : _b.md5) === specifiedMd5) {
-            if (fs.existsSync(readPath)) {
-                if (fs.statSync(readPath).isFile()) {
-                    const content = fs.readFileSync(readPath);
-                    if (parameters.params.VERBOSE)
-                        console.log(`${logPrefix}: [${pathInUrl}]`);
-                    return content;
-                }
-                else
-                    throw new Error(`readPath=[${readPath}] exists but it is not a file`);
-            }
+        if (fs.existsSync(readPath) && fs.statSync(readPath).isFile()) {
+            return fs.readFileSync(readPath);
+        }
+    }
+    deleteFileIfMatch(pathInUrl, md5, deletedSet) {
+        let filePath = path.join(this.localRootDir, pathInUrl);
+        if (!fs.existsSync(filePath))
+            return;
+        if (!fs.statSync(filePath).isFile())
+            return;
+        let data = fs.readFileSync(filePath);
+        if (data == null)
+            return;
+        let calc = crypto.createHash('md5').update(data).digest().toString('hex').toLowerCase();
+        if (calc === md5) {
+            fs.unlinkSync(filePath);
+            deletedSet.add(pathInUrl);
+            console.log(`deleted matched file ${filePath}`);
+        }
+        let dirname = path.dirname(filePath);
+        while (dirname.startsWith(this.localRootDir)
+            && fs.existsSync(dirname) && fs.statSync(dirname).isDirectory()
+            && fs.readdirSync(dirname).length == 0) {
+            fs.rmdirSync(dirname);
+            console.log(`deleted empty dir [${dirname}]`);
+            let parent = path.dirname(dirname);
+            if (parent === dirname)
+                break;
             else
-                throw new Error(`staticFileMap has the record of readPath=[${readPath}] but that file does not exist`);
+                dirname = parent;
         }
-        else {
-            if (metaArray.find((meta) => meta.md5 === specifiedMd5) != null) {
-                const conflictDirNameWithoutMd5 = path.dirname(path.join(this.localConflictDir, pathInUrl));
-                const conflictDirNameWithMd5 = path.join(conflictDirNameWithoutMd5, specifiedMd5);
-                const conflictReadPath = path.join(conflictDirNameWithMd5, path.basename(pathInUrl));
-                if (fs.existsSync(conflictReadPath)) {
-                    if (fs.statSync(conflictReadPath).isFile()) {
-                        const content = fs.readFileSync(readPath);
-                        if (parameters.params.VERBOSE)
-                            console.log(`${logPrefix} (in conflict dir) : [${pathInUrl}]`);
-                        return content;
-                    }
-                    else
-                        throw new Error(`conflictReadPath=[${conflictReadPath}] exists but it is not a file`);
-                }
-                else
-                    throw new Error(`staticFileMap has the record of conflictReadPath=[${conflictReadPath}] but that file does not exist`);
-            }
-            else {
-                if (parameters.params.VERBOSE)
-                    console.log(`${logPrefix} (not found) : [${pathInUrl}]`);
-                return undefined;
-            }
+    }
+    async readFileAsync(pathInUrl) {
+        // not checking md5 here
+        // (1) check ./static_staging/ first
+        let readPath = path.join(this.localStagingCNDir, pathInUrl);
+        if (fs.existsSync(readPath) && fs.statSync(readPath).isFile()) {
+            return fs.readFileSync(readPath);
         }
+        // (2) then ./static/
+        readPath = path.join(this.localRootDir, pathInUrl);
+        if (fs.existsSync(readPath) && fs.statSync(readPath).isFile()) {
+            return fs.readFileSync(readPath);
+        }
+        // (3) then ./static_zip/ if not found
+        return await this.zippedAssets.readFileAsync(pathInUrl);
     }
     saveFile(pathInUrl, content, contentType, preCalcMd5) {
         let logPrefix = `saveFile`;
@@ -299,13 +290,13 @@ class crawler {
     saveFileMeta() {
         console.log(`saving stringifiedMap ...`);
         let stringifiedMap = JSON.stringify(this.staticFileMap, util_1.replacer);
-        let compressedMap = (0, util_1.compress)(Buffer.from(stringifiedMap, 'utf-8'), 'br', crawler.brotliQuality);
-        fs.writeFileSync(crawler.staticFileMapPath, compressedMap);
+        let compressedMap = (0, util_1.compress)(Buffer.from(stringifiedMap, 'utf-8'), 'br', _a.brotliQuality);
+        fs.writeFileSync(_a.staticFileMapPath, compressedMap);
         console.log(`saved stringifiedMap`);
         console.log(`saving stringified404Set ...`);
         let stringified404Set = JSON.stringify(this.staticFile404Set, util_1.replacer);
-        let compressed404Set = (0, util_1.compress)(Buffer.from(stringified404Set, 'utf-8'), 'br', crawler.brotliQuality);
-        fs.writeFileSync(crawler.staticFile404SetPath, compressed404Set);
+        let compressed404Set = (0, util_1.compress)(Buffer.from(stringified404Set, 'utf-8'), 'br', _a.brotliQuality);
+        fs.writeFileSync(_a.staticFile404SetPath, compressed404Set);
         console.log(`saved stringified404Set`);
     }
     fsck() {
@@ -321,40 +312,47 @@ class crawler {
             const total = this.staticFileMap.size;
             this._fsckStatus = {
                 passed: 0,
+                deleted: 0,
                 remaining: total,
                 notPassed: 0,
             };
             const okaySet = new Set(), notOkaySet = new Set();
+            const deletedSet = new Set();
             const checkNextFile = (it) => {
                 const val = it.next();
                 if (val.done) {
                     this._fsckStatus = {
                         passed: okaySet.size,
+                        deleted: deletedSet.size,
                         remaining: total - okaySet.size - notOkaySet.size,
                         notPassed: notOkaySet.size,
                     };
                     console.log(this.lastFsckResult);
                     notOkaySet.forEach((pathInUrl) => this.staticFileMap.delete(pathInUrl));
-                    try {
-                        const { isWebResCompleted, isAssetsCompleted } = this.checkStaticCompleted();
-                        this.isWebResCompleted = isWebResCompleted;
-                        this.isAssetsCompleted = isAssetsCompleted;
-                        this.saveFileMeta();
-                    }
-                    catch (e) {
-                        console.error(e);
-                    }
                     resolve(notOkaySet.size == 0);
                     return;
                 }
                 const pathInUrl = val.value[0], fileMetaArray = val.value[1];
-                new Promise((resolve) => {
+                new Promise(async (resolve) => {
                     let okay = false;
                     try {
-                        if (pathInUrl === `/maintenance/magica/config`)
-                            okay = true;
-                        else if (this.checkAlreadyExist(pathInUrl, fileMetaArray[0].md5))
-                            okay = true;
+                        let data = await this.zippedAssets.readFileAsync(pathInUrl);
+                        if (data == null) {
+                            okay = false;
+                            console.log(`[${pathInUrl}] missing`);
+                        }
+                        else {
+                            let md5 = crypto.createHash('md5').update(data).digest().toString('hex').toLowerCase();
+                            okay = md5 === fileMetaArray[0].md5;
+                            if (okay) {
+                                // remove legacy asset file in ./static/ if it's available in zippedAssets
+                                this.deleteFileIfMatch(pathInUrl, fileMetaArray[0].md5, deletedSet);
+                            }
+                            else {
+                                console.log(`[${pathInUrl}] is modified, expected ${fileMetaArray[0].md5} actual ${md5}`);
+                            }
+                        }
+                        // if (this.checkAlreadyExist(pathInUrl, fileMetaArray[0].md5)) okay = true;
                     }
                     catch (e) {
                         console.error(e);
@@ -367,6 +365,7 @@ class crawler {
                     }
                     this._fsckStatus = {
                         passed: okaySet.size,
+                        deleted: deletedSet.size,
                         remaining: total - okaySet.size - notOkaySet.size,
                         notPassed: notOkaySet.size,
                     };
@@ -379,16 +378,16 @@ class crawler {
     isKnown404(pathInUrl) {
         return this.staticFile404Set.has(pathInUrl);
     }
-    checkStaticCompleted() {
-        var _b;
+    async checkStaticCompleted() {
+        var _b, _c;
         const unsortedFileExtSet = new Set();
         let isWebResCompleted;
         try {
-            const replacementJs = (_b = this.readFile("/magica/js/system/replacement.js")) === null || _b === void 0 ? void 0 : _b.toString('utf-8');
+            const replacementJs = (_b = (await this.zippedAssets.readFileAsync("/magica/js/system/replacement.js"))) === null || _b === void 0 ? void 0 : _b.toString('utf-8');
             if (replacementJs != null) {
                 const fileTimeStampObj = JSON.parse(replacementJs.replace(/^\s*window\.fileTimeStamp\s*=\s*/, ""));
                 for (let subPath in fileTimeStampObj) {
-                    let matched = subPath.match(crawler.fileExtRegEx);
+                    let matched = subPath.match(_a.fileExtRegEx);
                     if (matched)
                         unsortedFileExtSet.add(matched[0]);
                 }
@@ -412,24 +411,23 @@ class crawler {
         let isAssetsCompleted;
         try {
             let completed;
-            const maintenanceConfigStr = crawler.maintenanceConfigStr;
+            const maintenanceConfigStr = _a.maintenanceConfigStr;
             if (maintenanceConfigStr != null) {
                 const assetver = this.readAssetVer(maintenanceConfigStr);
                 const mergedAssetList = [];
                 let allAssetListExists = true;
-                crawler.assetListFileNameList.find((fileName) => {
-                    var _b;
-                    const assetListStr = (_b = this.readFile(`/magica/resource/download/asset/master/resource/${assetver}/${fileName}`)) === null || _b === void 0 ? void 0 : _b.toString('utf-8');
+                for (let fileName of _a.assetListFileNameList) {
+                    const assetListStr = (_c = (await this.zippedAssets.readFileAsync(`/magica/resource/download/asset/master/resource/${assetver}/${fileName}`))) === null || _c === void 0 ? void 0 : _c.toString('utf-8');
                     if (assetListStr == null) {
                         allAssetListExists = false;
-                        return true;
+                        break;
                     }
                     const assetList = JSON.parse(assetListStr);
                     assetList.forEach((item) => mergedAssetList.push(item));
-                });
+                }
                 if (allAssetListExists) {
                     mergedAssetList.forEach((item) => {
-                        let matched = item.file_list[0].url.match(crawler.fileExtRegEx);
+                        let matched = item.file_list[0].url.match(_a.fileExtRegEx);
                         if (matched)
                             unsortedFileExtSet.add(matched[0]);
                     });
@@ -492,8 +490,8 @@ class crawler {
             [http2.constants.HTTP2_HEADER_ACCEPT_LANGUAGE]: `zh-CN,en-US;q=0.9`,
             ["X-Requested-With"]: `com.bilibili.madoka.bilibili`,
         };
-        const fileExtMatched = url.pathname.match(crawler.fileExtRegEx);
-        if (fileExtMatched != null && crawler.compressableFileExtSet.has(fileExtMatched[0])) {
+        const fileExtMatched = url.pathname.match(_a.fileExtRegEx);
+        if (fileExtMatched != null && _a.compressableFileExtSet.has(fileExtMatched[0])) {
             reqHeaders[http2.constants.HTTP2_HEADER_ACCEPT_ENCODING] = `gzip, deflate`;
         }
         const resp = await this.localServer.sendHttp2RequestAsync(authorityURL, reqHeaders, postData, cvtBufToStr);
@@ -660,7 +658,7 @@ class crawler {
         const replacementJsUrl = new URL(`${this.httpsProdMagicaNoSlash}/js/system/replacement.js?${headTime}`);
         const resp = await this.http2GetStr(replacementJsUrl);
         const contentType = resp.contentType;
-        if (!(contentType === null || contentType === void 0 ? void 0 : contentType.match(crawler.javaScriptRegEx)))
+        if (!(contentType === null || contentType === void 0 ? void 0 : contentType.match(_a.javaScriptRegEx)))
             throw new Error(`replacement.js contentType=[${contentType}] not application/javascript`);
         const replacementJs = resp.body;
         this.saveFile(replacementJsUrl.pathname, Buffer.from(replacementJs, 'utf-8'), contentType);
@@ -696,16 +694,16 @@ class crawler {
             crawler.jsonRegEx
         );
         */
-        const assetver = this.readAssetVer(crawler.maintenanceConfigStr);
+        const assetver = this.readAssetVer(_a.maintenanceConfigStr);
         console.log(this._crawlingStatus = `crawling asset_config.json ...`);
-        const assetConfigStr = await this.fetchSinglePage(crawler.patchHost, `/magica/resource/download/asset/master/resource/${assetver}/asset_config.json?${this.timeStampSec}`, crawler.jsonRegEx);
+        const assetConfigStr = await this.fetchSinglePage(_a.patchHost, `/magica/resource/download/asset/master/resource/${assetver}/asset_config.json?${this.timeStampSec}`, _a.jsonRegEx);
         const assetConfig = JSON.parse(assetConfigStr);
         const assetConfigVersion = assetConfig["version"];
         if (typeof assetConfigVersion !== 'number')
             throw new Error("assetConfig.version is not number");
-        let promises = crawler.assetListFileNameList.map(async (fileName) => {
+        let promises = _a.assetListFileNameList.map(async (fileName) => {
             console.log(this._crawlingStatus = `crawling ${fileName} ...`);
-            const jsonStr = await this.fetchSinglePage(crawler.patchHost, `/magica/resource/download/asset/master/resource/${assetver}/${fileName}?${this.timeStampSec}`, crawler.jsonRegEx);
+            const jsonStr = await this.fetchSinglePage(_a.patchHost, `/magica/resource/download/asset/master/resource/${assetver}/${fileName}?${this.timeStampSec}`, _a.jsonRegEx);
             const assetList = JSON.parse(jsonStr);
             if (!Array.isArray(assetList))
                 throw new Error("assetList is not array");
@@ -714,7 +712,7 @@ class crawler {
             if (!Array.isArray(assetList[0].file_list)) {
                 throw new Error("assetList[0].file_list is not array");
             }
-            if (typeof assetList[0].md5 !== 'string' || !assetList[0].md5.match(crawler.md5RegEx)) {
+            if (typeof assetList[0].md5 !== 'string' || !assetList[0].md5.match(_a.md5RegEx)) {
                 throw new Error("assetList[0].md5 is not md5");
             }
             if (typeof assetList[0].path !== 'string') {
@@ -733,7 +731,7 @@ class crawler {
                 throw new Error("list.status is not fulfilled");
         });
         // guess asset_section_[event_]1068.json filenames
-        let assetFullVoiceIndex = crawler.assetListFileNameList.findIndex((name) => name === "asset_fullvoice.json");
+        let assetFullVoiceIndex = _a.assetListFileNameList.findIndex((name) => name === "asset_fullvoice.json");
         let sectionNameSet = new Set();
         listOfAssetList.forEach((list, index) => {
             if (list.status === 'fulfilled') {
@@ -838,6 +836,10 @@ crawler.maintenanceConfigStr = JSON.stringify({
     ],
     ipAddr: "180.97.245.90",
     resDir: null
+});
+crawler.maintenanceViewJsonStr = JSON.stringify({
+    message: "<p>例行维护中：9月8日10:00～9<span>月8日</span>17:00<br/>奇迹与魔法都是需要维护的|•&#39;-&#39;•)&nbsp;◇</p>",
+    url: ""
 });
 crawler.assetListFileNameList = [
     "asset_char_list.json",

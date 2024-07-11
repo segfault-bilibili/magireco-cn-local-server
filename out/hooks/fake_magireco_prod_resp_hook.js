@@ -11,6 +11,70 @@ const bsgamesdk_pwd_authenticate_1 = require("../bsgamesdk-pwd-authenticate");
 const missing_data_1 = require("./etc/missing_data");
 const favicon = require("../favicon");
 class fakeMagirecoProdRespHook {
+    get stringifiedOverrideDB() {
+        return JSON.stringify(this.params.overridesDB, util_1.replacer);
+    }
+    get overrides() {
+        const lastDump = this.userdataDmp.lastDump;
+        if (lastDump == null)
+            return;
+        const uid = lastDump.uid;
+        if (typeof uid !== 'number' || isNaN(uid))
+            return;
+        let overrides = this.params.overridesDB.get(uid);
+        if (overrides == null) {
+            overrides = {};
+            this.params.overridesDB.set(uid, overrides);
+        }
+        return overrides;
+    }
+    getOverrideValue(key) {
+        return key.split(".").reduce((prev, curr) => {
+            if (prev == null)
+                return;
+            if (!(curr in prev))
+                return;
+            return prev[curr];
+        }, this.overrides);
+    }
+    isOverriden(key) {
+        const keysPopped = key.split(".");
+        const lastKey = keysPopped.pop();
+        const obj = keysPopped.reduce((prev, curr) => {
+            if (prev == null)
+                return;
+            if (!(curr in prev))
+                return;
+            return prev[curr];
+        }, this.overrides);
+        if (obj == null)
+            return false; // avoid crash
+        if (lastKey == null) {
+            console.error(`isOverriden key=[${key}] lastKey == null`);
+            throw new Error(`lastKey == null`);
+        }
+        return lastKey in obj;
+    }
+    setOverrideValue(key, val, reset = false) {
+        console.log(`setOverrideValue ... key=[${key}] val`, val);
+        const keysPopped = key.split(".");
+        const lastKey = keysPopped.pop();
+        if (lastKey == null)
+            return;
+        const obj = keysPopped.reduce((prev, curr) => {
+            if (prev == null)
+                return;
+            if (prev[curr] == null)
+                prev[curr] = {};
+            return prev[curr];
+        }, this.overrides);
+        if (val == null && reset)
+            delete obj[lastKey];
+        else
+            obj[lastKey] = val;
+        console.log(`setOverrideValue done key=[${key}] val`, val);
+        this.params.saveOverrideDB();
+    }
     constructor(params, crawler, dmp) {
         this.pageKeys = {
             //登录页
@@ -113,6 +177,8 @@ class fakeMagirecoProdRespHook {
                 + `&timeStamp=`,
             //好友（粉丝，仅GUID）
             ["friend/follower/list/1"]: `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/friend/follower/list/1`,
+            //好友推荐
+            ["search/friend_search/_search"]: `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/search/friend_search/_search`,
             //长按好友打开支援详情
             ["page/ProfileFormationSupport"]: `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/ProfileFormationSupport?value=`
                 + `userFormationSheetList`
@@ -273,6 +339,37 @@ class fakeMagirecoProdRespHook {
                 replacePattern: /(#filterInitialList\{top):92(px\})/,
                 replacement: "$1:215$2",
             },
+            // fix mixed content in browser debug mode
+            ["/magica/js/_common/isBrowser.js"]: {
+                matchPattern: /^"use strict";define\(\["underscore","backbone","backboneCommon","ajaxControl","command","text!css\/test\/isBrowser\.css"/,
+                replacePattern: /http:\/\//g,
+                replacement: "https://",
+            },
+            // show debug backdoor
+            ["/magica/js/system/replacement.js"]: {
+                matchPattern: /^window\.fileTimeStamp={/,
+                replacePattern: /(^window\.fileTimeStamp={)/,
+                replacement: "window.isDebug=window.showBackdoor=!0;$1",
+            },
+            /*
+            // no longer needed, because replacement.js patch is already simple and effective
+            ["/magica/js/_common/base.js"]: {
+                matchPattern: /:gameInit\(\)}}\);$/,
+                replacePattern: /(,gameInit=function\(\)\{)(window\.isBrowser\?\()(window\.isDebug=!0,)/,
+                replacement: "$1$3window.showBackdoor=!0,$2",
+            },
+            */
+            /*
+            // workaround "#/Ban" "#/NewVersionRecommend" "#/Maintenance" issues on game client, no longer needed
+            // for CN client:
+            // 1. "#Ban" already works
+            // 2. maintenance and new version situations are controlled by /maintenance/magica/config
+            ["/magica/js/_common/ajaxControl.js"]: {
+                matchPattern: /error:\{content:"请在通讯环境良好的地方再次进行尝试。"\}\}\)\}\),that\}\);$/,
+                replacePattern: /cmd\.nativeReload\(([^\)]+)\)/g,
+                replacement: "(location.href=$1)",
+            },
+            */
         };
         this.checkForMissing = (existingArray, missingArray, key) => {
             if (existingArray == null || missingArray == null)
@@ -290,9 +387,11 @@ class fakeMagirecoProdRespHook {
         this.userdataDmp = dmp;
         this.magirecoProdUrlRegEx = /^(http|https):\/\/l\d+-prod-[0-9a-z\-]+-mfsn\d*\.bilibiligame\.net\/((|maintenance\/)magica\/.+|favicon\.ico)$/;
         this.magicaMaintenanceConfigRegEx = /^\/maintenance\/magica\/config((|\?.*)$)/;
+        this.magicaMaintenanceViewJsonRegEx = /^\/maintenance\/magica\/view\/json((|\?.*)$)/;
         this.magirecoPatchUrlRegEx = /^(http|https):\/\/line\d+-prod-patch-mfsn\d*\.bilibiligame\.net\/magica\/.+$/;
         this.apiPathNameRegEx = /^\/magica\/api\/.+$/;
         this.slashGuidEndRegEx = /\/[\da-f]{8}(-[\da-f]{4}){3}-[\da-f]{12}$/;
+        this.browserDebugUrlRegEx = /^(http|https):\/\/10\.24\.19\.50:9997\/(magica\/.+|favicon.ico)$/;
         this.bsgameSdkLoginRegEx = /^(http|https):\/\/line\d+-sdk-center-login-sh\.biligame\.net\/api\/external\/(login|login\/otp|user\.token\.oauth\.login)\/v3((|\?.*)$)/;
         this.bsgameSdkCipherRegEx = /^(http|https):\/\/line\d+-sdk-center-login-sh\.biligame\.net\/api\/external\/issue\/cipher\/v3((|\?.*)$)/;
         this.bsgameSdkOtpSendRegEx = /^(http|https):\/\/line\d+-sdk-center-login-sh\.biligame\.net\/api\/external\/otp\/send\/v3((|\?.*)$)/;
@@ -304,78 +403,16 @@ class fakeMagirecoProdRespHook {
         this.part2Section3RegEx = /^\/magica\/resource\/download\/asset\/master\/resource\/2207081501\/asset_section_10230(1|2|3)\.json$/;
         this.arenaSimulateMap = new Map();
     }
-    get stringifiedOverrideDB() {
-        return JSON.stringify(this.params.overridesDB, util_1.replacer);
-    }
-    get overrides() {
-        const lastDump = this.userdataDmp.lastDump;
-        if (lastDump == null)
-            return;
-        const uid = lastDump.uid;
-        if (typeof uid !== 'number' || isNaN(uid))
-            return;
-        let overrides = this.params.overridesDB.get(uid);
-        if (overrides == null) {
-            overrides = {};
-            this.params.overridesDB.set(uid, overrides);
-        }
-        return overrides;
-    }
-    getOverrideValue(key) {
-        return key.split(".").reduce((prev, curr) => {
-            if (prev == null)
-                return;
-            if (!(curr in prev))
-                return;
-            return prev[curr];
-        }, this.overrides);
-    }
-    isOverriden(key) {
-        const keysPopped = key.split(".");
-        const lastKey = keysPopped.pop();
-        const obj = keysPopped.reduce((prev, curr) => {
-            if (prev == null)
-                return;
-            if (!(curr in prev))
-                return;
-            return prev[curr];
-        }, this.overrides);
-        if (obj == null)
-            return false; // avoid crash
-        if (lastKey == null) {
-            console.error(`isOverriden key=[${key}] lastKey == null`);
-            throw new Error(`lastKey == null`);
-        }
-        return lastKey in obj;
-    }
-    setOverrideValue(key, val, reset = false) {
-        console.log(`setOverrideValue ... key=[${key}] val`, val);
-        const keysPopped = key.split(".");
-        const lastKey = keysPopped.pop();
-        if (lastKey == null)
-            return;
-        const obj = keysPopped.reduce((prev, curr) => {
-            if (prev == null)
-                return;
-            if (prev[curr] == null)
-                prev[curr] = {};
-            return prev[curr];
-        }, this.overrides);
-        if (val == null && reset)
-            delete obj[lastKey];
-        else
-            obj[lastKey] = val;
-        console.log(`setOverrideValue done key=[${key}] val`, val);
-        this.params.saveOverrideDB();
-    }
     // if matched, keep a copy of request/response data in memory
-    matchRequest(method, url, httpVersion, headers) {
+    async matchRequest(method, url, httpVersion, headers) {
+        var _a;
         const mode = this.params.mode;
         if (mode !== parameters.mode.LOCAL_OFFLINE)
             return {
                 nextAction: "passOnRequest",
                 interceptResponse: false,
             };
+        console.log(`${method} ${url === null || url === void 0 ? void 0 : url.href}`);
         if ((url === null || url === void 0 ? void 0 : url.pathname) === "/favicon.ico") {
             return {
                 nextAction: "fakeResponse",
@@ -400,10 +437,12 @@ class fakeMagirecoProdRespHook {
         const isBilibiliAgreementConfig = (url === null || url === void 0 ? void 0 : url.href.match(this.bilibiliAgreementConfigRegEx)) != null;
         const isBilibiliGameAgreement = (url === null || url === void 0 ? void 0 : url.href.match(this.bilibiliGameAgreementRegEx)) != null;
         const isBilibiliGameRealnameAuth = (url === null || url === void 0 ? void 0 : url.href.match(this.bilibiliGameRealnameAuthRegEx)) != null;
+        const isBrowserDebug = (url === null || url === void 0 ? void 0 : url.href.match(this.browserDebugUrlRegEx)) != null || (isMagiRecoPatch && url.pathname === "/magica/fonts/lzs_v_2_1_p.ttf");
         if (!isMagiRecoProd && !isMagiRecoPatch
             && !isBsgamesdkLogin && !isBsgamesdkCipher && !isBsgamesdkOtpSend
             && !isTouristLogin && !isTouristBindTelPwd
-            && !isBilibiliAgreementConfig && !isBilibiliGameAgreement && !isBilibiliGameRealnameAuth)
+            && !isBilibiliAgreementConfig && !isBilibiliGameAgreement && !isBilibiliGameRealnameAuth
+            && !isBrowserDebug)
             return {
                 nextAction: "passOnRequest",
                 interceptResponse: false,
@@ -513,144 +552,218 @@ class fakeMagirecoProdRespHook {
             let statusCode = 200;
             let contentType = `application/json;charset=UTF-8`;
             let body;
+            const serverDown = Date.now() > 0 ? undefined : { reason: "maintenance" }; // DEBUG TODO this.params.serverDown;
+            const isBanned = Date.now() > 0 ? undefined : true; // DEBUG TODO this.params.isBanned;
             const apiName = url.pathname.replace(/^\/magica\/api\//, "")
                 .replace(this.slashGuidEndRegEx, "");
-            switch (apiName) {
-                // (can be) HTTP POST
-                case "test/logger/error":
-                case "gameUser/setBackground":
-                case "page/PresentHistory":
-                case "page/GachaHistory":
-                case "gameUser/changeLeader":
-                case "userChara/visualize":
-                case "userLive2d/set":
-                case "arena/start":
-                case "quest/native/get":
-                case "quest/native/result/send":
-                case "page/ArenaResult":
-                case "page/CharaEnhancementTree":
-                    {
-                        return {
-                            nextAction: "passOnRequest",
-                            interceptResponse: true,
-                        };
-                    }
-                // empty ones
-                case "page/ResumeBackground":
-                case "page/BackgroundSet":
-                case "page/CharaListCompose":
-                case "page/CharaListComposeMagia":
-                case "page/CharaListCustomize":
-                case "page/CharaListEquip":
-                case "page/QuestBattleSelect":
-                case "page/QuestBackground":
-                case "page/MainQuestSingleRaid":
-                case "page/MainQuestBranch":
-                case "page/MemoriaEquip":
-                case "page/MemoriaList":
-                case "page/MemoriaSetList":
-                case "page/MagiRepoDetail":
-                    {
-                        body = this.fakeEmptyResp(apiName);
+            if (apiName.match(/^system\/(game\/login|sns\/login\/[0-9a-z]{32})$/)) {
+                body = this.fakeSystemLogin();
+                const loginType = apiName.replace(/\/[0-9a-z]{32}$/, "").replace(/\//g, " ");
+                if (body != null)
+                    console.log(`faked ${loginType}`);
+                else
+                    console.error(`failed to fake ${loginType}`);
+            }
+            else if (isBanned && apiName !== "page/Ban") {
+                // it is observed that JP server used "#/Ban"
+                // however I don't know how CN server handled this because I had never been banned
+                // removing slash ("#Ban") seems to work, however this is discovered by trial-and-error
+                const interruptPage = "#Ban";
+                body = Buffer.from(JSON.stringify({ interrupt: { page: interruptPage, force: true } }), 'utf-8');
+            }
+            else if (serverDown != null)
+                switch (serverDown.reason) {
+                    case "maintenance": {
+                        body = this.fakeErrorResp("维护中", "正在维护中...", "maintenance");
                         break;
                     }
-                // simple fake responses
-                case "announcements/red/obvious":
-                case "event_banner/list/1":
-                    {
-                        body = Buffer.from(JSON.stringify(this.fakeResp[apiName]), 'utf-8');
+                    case "newVersion": {
+                        body = this.fakeErrorResp("需要更新版本", "需要更新版本。请到应用商店下载最新版本。"
+                            + "<br>（此文字提示仅为猜测，并非来自官服）", "forceUpdateClient");
                         break;
                     }
-                case "gameUser/cacheClear":
-                    {
-                        // TODO
-                        body = Buffer.from(JSON.stringify({ result: "success" }));
-                        break;
+                    default: {
+                        body = this.fakeErrorResp("错误", "服务器已被设为下线"
+                            + "<br>（官服下线并不会这样提示）");
                     }
-                // special ones
-                case "system/game/login":
-                    {
-                        body = this.fakeSystemLogin();
-                        if (body != null)
-                            console.log(`faked system login`);
-                        else
-                            console.error(`failed to fake system login`);
-                        break;
-                    }
-                case "page/MyPage":
-                    {
-                        body = this.fakeMyPage(apiName);
-                        break;
-                    }
-                case "gacha/result":
-                case "friend/user":
-                    {
-                        body = this.fakeGuidResult(apiName, url.pathname);
-                        break;
-                    }
-                case "page/MagiRepo":
-                    {
-                        body = this.fakeMagiRepo(apiName);
-                        break;
-                    }
-                // remaining ones
-                case "page/TopPage":
-                case "page/CharaListTop":
-                case "page/MemoriaTop":
-                case "page/PieceArchive":
-                case "page/GachaTop":
-                case "page/MissionTop":
-                case "page/PanelMissionTop":
-                case "page/ShopTop":
-                case "page/PresentList":
-                case "page/CollectionTop":
-                case "page/CharaCollection":
-                case "page/PieceCollection":
-                case "page/StoryCollection":
-                case "page/DoppelCollection":
-                case "page/EnemyCollection":
-                case "page/ItemListTop":
-                case "page/SearchQuest":
-                case "page/FollowTop":
-                case "friend/follower/list/1":
-                case "page/ProfileFormationSupport":
-                case "page/ConfigTop":
-                case "page/FormationTop":
-                case "page/DeckFormation":
-                case "page/MemoriaSetEquip":
-                case "page/ArenaTop":
-                case "page/ArenaFreeRank":
-                case "page/ArenaSimulate":
-                case "page/ArenaHistory":
-                case "page/EventArenaRankingHistory":
-                case "page/ArenaReward":
-                case "page/MainQuest":
-                case "page/SubQuest":
-                case "page/CharaQuest":
-                case "page/EventQuest":
-                    {
-                        const lastDump = this.userdataDmp.lastDump;
-                        if (lastDump != null) {
-                            let respBodyObj = userdataDump.getUnBrBody(lastDump.httpResp.get, this.pageKeys[apiName]);
-                            if (respBodyObj != null) {
-                                if (apiName === "page/MainQuest") {
-                                    respBodyObj = this.patchMainQuest(apiName, respBodyObj);
+                }
+            else
+                switch (apiName) {
+                    // (can be) HTTP POST
+                    case "test/logger/error":
+                    case "gameUser/setBackground":
+                    case "page/PresentHistory":
+                    case "page/GachaHistory":
+                    case "gameUser/changeLeader":
+                    case "userChara/visualize":
+                    case "userLive2d/set":
+                    case "search/friend_search/_search":
+                    case "quest/start":
+                    case "arena/start":
+                    case "quest/native/get":
+                    case "quest/native/result/send":
+                    case "page/ArenaResult":
+                    case "page/CharaEnhancementTree":
+                        {
+                            return {
+                                nextAction: "passOnRequest",
+                                interceptResponse: true,
+                            };
+                        }
+                    // empty ones
+                    case "page/ResumeBackground":
+                    case "page/BackgroundSet":
+                    case "page/CharaListCompose":
+                    case "page/CharaListComposeMagia":
+                    case "page/CharaListCustomize":
+                    case "page/CharaListEquip":
+                    case "page/QuestBattleSelect":
+                    case "page/QuestBackground":
+                    case "page/MainQuestSingleRaid":
+                    case "page/MainQuestBranch":
+                    case "page/MemoriaEquip":
+                    case "page/MemoriaList":
+                    case "page/MemoriaSetList":
+                    case "page/MagiRepoDetail":
+                        /*
+                        // empty ones - backdoor test - no longer needed, handled before apiUnimplemented
+                        case "page/Backdoor":
+                        case "page/BackdoorLive2d":
+                        case "page/NativeSandBox":
+                        case "page/SoundTest":
+                        case "page/SelectStoryTest":
+                        case "page/TipsTest":
+                        case "page/EffectTest":
+                        */
+                        {
+                            body = this.fakeEmptyResp(apiName);
+                            break;
+                        }
+                    // simple fake responses
+                    case "announcements/red/obvious":
+                    case "event_banner/list/1":
+                        {
+                            body = Buffer.from(JSON.stringify(this.fakeResp[apiName]), 'utf-8');
+                            break;
+                        }
+                    case "gameUser/cacheClear":
+                        {
+                            // TODO
+                            body = Buffer.from(JSON.stringify({ result: "success" }));
+                            break;
+                        }
+                    // special ones
+                    case "page/Ban":
+                        {
+                            let inviteCode;
+                            const bannedTime = `${this.getDateTimeString()} [此为当前时间，请去本地服务器后台解封]`;
+                            const lastDump = this.userdataDmp.lastDump;
+                            if (lastDump != null) {
+                                const respBodyObj = userdataDump.getUnBrBody(lastDump.httpResp.get, this.pageKeys["page/TopPage"]);
+                                inviteCode = (_a = respBodyObj === null || respBodyObj === void 0 ? void 0 : respBodyObj.gameUser) === null || _a === void 0 ? void 0 : _a.inviteCode;
+                            }
+                            if (typeof inviteCode !== "string")
+                                inviteCode = "[无法获取玩家ID]";
+                            body = Buffer.from(JSON.stringify({ inviteCode: inviteCode, bannedTime: bannedTime }), 'utf-8');
+                            break;
+                        }
+                    case "page/QuestStub":
+                    case "page/ArenaStub":
+                        {
+                            // browser debug - quest/arena stub
+                            // FIXME use MyPage for now
+                            body = this.fakeMyPage("page/MyPage");
+                            break;
+                        }
+                    case "page/MyPage":
+                        {
+                            body = this.fakeMyPage(apiName);
+                            break;
+                        }
+                    case "gacha/result":
+                    case "friend/user":
+                        {
+                            body = this.fakeGuidResult(apiName, url.pathname);
+                            break;
+                        }
+                    case "page/MagiRepo":
+                        {
+                            body = this.fakeMagiRepo(apiName);
+                            break;
+                        }
+                    case "page/NewVersionRecommend":
+                        {
+                            body = Buffer.from(JSON.stringify({ requiredVersion: "9.9.9" }), 'utf-8');
+                            break;
+                        }
+                    // remaining ones
+                    case "page/TopPage":
+                    case "page/CharaListTop":
+                    case "page/MemoriaTop":
+                    case "page/PieceArchive":
+                    case "page/GachaTop":
+                    case "page/MissionTop":
+                    case "page/PanelMissionTop":
+                    case "page/ShopTop":
+                    case "page/PresentList":
+                    case "page/CollectionTop":
+                    case "page/CharaCollection":
+                    case "page/PieceCollection":
+                    case "page/StoryCollection":
+                    case "page/DoppelCollection":
+                    case "page/EnemyCollection":
+                    case "page/ItemListTop":
+                    case "page/SearchQuest":
+                    case "page/FollowTop":
+                    case "friend/follower/list/1":
+                    case "page/ProfileFormationSupport":
+                    case "page/ConfigTop":
+                    case "page/FormationTop":
+                    case "page/DeckFormation":
+                    case "page/MemoriaSetEquip":
+                    case "page/ArenaTop":
+                    case "page/ArenaFreeRank":
+                    case "page/ArenaSimulate":
+                    case "page/ArenaHistory":
+                    case "page/EventArenaRankingHistory":
+                    case "page/ArenaReward":
+                    case "page/MainQuest":
+                    case "page/SubQuest":
+                    case "page/CharaQuest":
+                    case "page/EventQuest":
+                        {
+                            const lastDump = this.userdataDmp.lastDump;
+                            if (lastDump != null) {
+                                let respBodyObj = userdataDump.getUnBrBody(lastDump.httpResp.get, this.pageKeys[apiName]);
+                                if (respBodyObj != null) {
+                                    if (apiName === "page/MainQuest") {
+                                        respBodyObj = this.patchMainQuest(apiName, respBodyObj);
+                                    }
+                                    if (apiName === "page/CharaListTop") {
+                                        respBodyObj = this.patchCharaListTop(apiName, respBodyObj);
+                                    }
+                                    if (apiName !== "page/ShopTop")
+                                        this.fixCurrentTime(respBodyObj);
+                                    body = Buffer.from(JSON.stringify(respBodyObj), 'utf-8');
                                 }
-                                if (apiName === "page/CharaListTop") {
-                                    respBodyObj = this.patchCharaListTop(apiName, respBodyObj);
+                            }
+                            break;
+                        }
+                    default:
+                        {
+                            if (apiName.startsWith("page/")) {
+                                // handle debug backdoor pages
+                                body = await this.crawler.readFileAsync(`magica/json/${apiName}.json`);
+                                if ((body === null || body === void 0 ? void 0 : body.toString('utf-8')) === "{}") {
+                                    body = this.fakeEmptyResp(apiName);
                                 }
-                                this.fixCurrentTime(respBodyObj);
-                                body = Buffer.from(JSON.stringify(respBodyObj), 'utf-8');
+                            }
+                            if (body == null) {
+                                body = this.fakeErrorResp("错误", "API尚未实现", false);
+                                apiUnimplemented = true;
                             }
                         }
-                        break;
-                    }
-                default:
-                    {
-                        body = this.fakeErrorResp("错误", "API尚未实现", false);
-                        apiUnimplemented = true;
-                    }
-            }
+                }
             if (body == null || apiUnimplemented) {
                 console.error(`matchRequest responding with fakeErrorResp [${url.pathname}]`);
                 if (!apiUnimplemented)
@@ -672,23 +785,33 @@ class fakeMagirecoProdRespHook {
         }
         else {
             let statusCode;
-            let contentType = this.crawler.getContentType(url.pathname);
+            let contentType;
+            const defMimeType = "application/octet-stream";
             let contentEncoding;
             let body;
             try {
-                body = this.crawler.readFile(url.pathname);
+                let pathname = url.pathname;
+                contentType = this.crawler.getContentType(pathname);
+                body = await this.crawler.readFileAsync(pathname);
                 if (body == null) {
                     if (url.pathname.match(this.magicaMaintenanceConfigRegEx) != null) {
+                        contentType = "application/json; charset=utf-8";
                         body = Buffer.from(staticResCrawler.crawler.maintenanceConfigStr, 'utf-8');
+                    }
+                    else if (url.pathname.match(this.magicaMaintenanceViewJsonRegEx) != null) {
+                        contentType = "application/json; charset=utf-8";
+                        body = Buffer.from(staticResCrawler.crawler.maintenanceViewJsonStr, 'utf-8');
                     }
                     else if (url.pathname.match(this.part2Section3RegEx) != null) {
                         // not a workaround: response from offical server was like this
+                        contentType = "application/json; charset=utf-8";
                         body = Buffer.from(JSON.stringify([]), 'utf-8');
                     }
                 }
             }
             catch (e) {
-                console.error(`error serving[${url.pathname}]`, e);
+                contentType = defMimeType;
+                console.error(`error serving [${url.pathname}]`, e);
                 body = undefined;
             }
             if (body != null) {
@@ -702,7 +825,7 @@ class fakeMagirecoProdRespHook {
             }
             if (body == null && url.pathname.endsWith(".gz")) {
                 try {
-                    let uncompressed = this.crawler.readFile(url.pathname.replace(/\.gz$/, ""));
+                    let uncompressed = await this.crawler.readFileAsync(url.pathname.replace(/\.gz$/, ""));
                     if (uncompressed != null) {
                         contentType = this.crawler.getContentType(url.pathname);
                         body = (0, util_1.compress)(uncompressed, "gzip");
@@ -792,6 +915,11 @@ class fakeMagirecoProdRespHook {
                         respBody = this.modifyGameChara(apiName, reqBody);
                         break;
                     }
+                case "search/friend_search/_search":
+                    {
+                        respBody = this.fakeFriendSearch(apiName, reqBody);
+                        break;
+                    }
                 case "page/CharaEnhancementTree":
                 case "page/PresentHistory":
                 case "page/GachaHistory":
@@ -800,6 +928,7 @@ class fakeMagirecoProdRespHook {
                         respBody = this.fakePagedResult(apiName, reqBody, type);
                         break;
                     }
+                case "quest/start": //FIXME
                 case "arena/start":
                 case "quest/native/get":
                 case "quest/native/result/send":
@@ -850,7 +979,7 @@ class fakeMagirecoProdRespHook {
             requestId: `${(0, util_1.getRandomHex)(32)}`,
             timestamp: `${new Date().getTime()}`,
             code: 0,
-            hash: `${(0, util_1.getRandomHex)(16)}`,
+            hash: `${(0, util_1.getRandomHex)(16)}`, // fake one
             cipher_key: "-----BEGIN PUBLIC KEY-----\nMIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDjb4V7EidX/ym28t2ybo0U6t0n\n6p4ej8VjqKHg100va6jkNbNTrLQqMCQCAYtXMXXp2Fwkk6WR+12N9zknLjf+C9sx\n/+l48mjUU8RqahiFD1XT/u2e0m2EN029OhCgkHx3Fc/KlFSIbak93EH/XlYis0w+\nXl69GV6klzgxW6d2xQIDAQAB\n-----END PUBLIC KEY-----",
             server_message: "",
         };
@@ -971,15 +1100,18 @@ class fakeMagirecoProdRespHook {
         return `${year}/${monthDate.join("/")} ${time.join(":")}`;
     }
     fixCurrentTime(respBodyObj) {
-        if (typeof (respBodyObj === null || respBodyObj === void 0 ? void 0 : respBodyObj.currentTime) === 'string')
-            respBodyObj.currentTime = this.getDateTimeString();
+        if (typeof (respBodyObj === null || respBodyObj === void 0 ? void 0 : respBodyObj.currentTime) === 'string') {
+            respBodyObj.currentTime = respBodyObj.currentTime.substring(0, 10) + this.getDateTimeString().substring(10);
+        }
     }
     fakeMyPage(apiName) {
         var _a, _b;
-        if (apiName !== "page/MyPage") {
+        if (apiName !== "page/MyPage" && apiName !== "page/Ban") { //DEBUG
             console.error(`fakeMyPage invalid apiName=[${apiName}]`);
             return;
         }
+        const isBan = apiName === "page/Ban"; //DEBUG
+        apiName = "page/MyPage"; //DEBUG
         const lastDump = this.userdataDmp.lastDump;
         if (lastDump == null)
             return this.fakeErrorResp("错误", "未加载个人账号数据");
@@ -1081,6 +1213,14 @@ class fakeMagirecoProdRespHook {
                     });
                 });
             }
+        }
+        if (isBan) {
+            //DEBUG
+            replica = replica.gameUser;
+            replica.bannedTime = "不知道怎么填，就填个无限期吧";
+            let r = JSON.parse(JSON.stringify(replica));
+            replica.gameUser = r;
+            replica.user = r;
         }
         // convert to buffer
         return Buffer.from(JSON.stringify(replica), 'utf-8');
@@ -1253,6 +1393,39 @@ class fakeMagirecoProdRespHook {
             }), 'utf-8');
         }
     }
+    fakeFriendSearch(apiName, reqBody) {
+        var _a, _b;
+        if (typeof reqBody !== 'string')
+            return;
+        let type;
+        try {
+            type = JSON.parse(reqBody).type;
+        }
+        catch (e) {
+            console.error(`fakeFriendSearch parse type error`, e);
+            return;
+        }
+        if (typeof type !== 'number') {
+            console.error(`fakeFriendSearch type is not number`);
+            return;
+        }
+        if (type != 0) {
+            //TODO
+            return this.fakeErrorResp("错误", `尚不支持搜索玩家 (type=${type})`, false);
+        }
+        const lastDump = this.userdataDmp.lastDump;
+        if (lastDump == null)
+            return this.fakeErrorResp("错误", "未加载个人账号数据");
+        if (apiName !== "search/friend_search/_search") {
+            console.error(`fakePagedResult invalid apiName=[${apiName}]`);
+            return;
+        }
+        const urlBase = this.pageKeys[apiName];
+        const respBodyObj = userdataDump.unBrBase64((_b = (_a = lastDump.httpResp.post.get(urlBase)) === null || _a === void 0 ? void 0 : _a.get(JSON.stringify({ type: type }))) === null || _b === void 0 ? void 0 : _b.brBody);
+        if (respBodyObj == null)
+            return this.fakeErrorResp("错误", `找不到好友推荐数据`);
+        return Buffer.from(JSON.stringify(respBodyObj), 'utf-8');
+    }
     parsePageNum(reqBody, type) {
         if (reqBody != null && typeof reqBody !== 'string')
             return;
@@ -1308,6 +1481,7 @@ class fakeMagirecoProdRespHook {
         }
     }
     fakeGuidResult(apiName, pathname) {
+        var _a, _b, _c, _d, _e, _f, _g;
         const urlBases = {
             ["friend/user"]: `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/friend/user/`,
             ["gacha/result"]: `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/gacha/result/`,
@@ -1318,20 +1492,55 @@ class fakeMagirecoProdRespHook {
         }
         const urlBase = urlBases[apiName];
         const matched = pathname.match(this.slashGuidEndRegEx);
-        const userId = matched != null ? matched[0].replace(/^\//, "") : undefined;
-        if (userId == null) {
+        const guid = matched != null ? matched[0].replace(/^\//, "") : undefined;
+        if (guid == null) {
             return this.fakeErrorResp("错误", "参数非法");
         }
         const lastDump = this.userdataDmp.lastDump;
         if (lastDump == null)
             return this.fakeErrorResp("错误", "未加载个人账号数据");
-        let respBodyObj = userdataDump.getUnBrBody(lastDump.httpResp.get, `${urlBase}${userId}`);
+        let respBodyObj = userdataDump.getUnBrBody(lastDump.httpResp.get, `${urlBase}${guid}`);
         if (respBodyObj == null) {
-            console.error(`fakeGuidResult userId=[${userId}] not found`);
+            console.error(`fakeGuidResult guid=[${guid}] not found`);
             return this.fakeErrorResp("错误", "找不到此项数据");
         }
-        if (respBodyObj.currentTime != null)
-            console.warn(`fakeGuidResult apiName=[${apiName}] typeof respBodyObj.currentTime`, respBodyObj.currentTime);
+        if (apiName === "friend/user") {
+            const userId = (_b = (_a = userdataDump.getUnBrBody(lastDump.httpResp.get, this.pageKeys["page/TopPage"])) === null || _a === void 0 ? void 0 : _a.gameUser) === null || _b === void 0 ? void 0 : _b.userId;
+            if (typeof userId !== 'string') {
+                console.error(`fakeGuidResult apiName=${apiName} cannot read TopPage.gameUser.userId`);
+            }
+            else if (userId === ((_c = respBodyObj === null || respBodyObj === void 0 ? void 0 : respBodyObj.gameUser) === null || _c === void 0 ? void 0 : _c.userId)) {
+                //patch profile of myself
+                const leaderIdKey = "gameUser.leaderId";
+                const newLeaderId = this.getOverrideValue(leaderIdKey);
+                if (typeof newLeaderId === "string") {
+                    respBodyObj.gameUser.leaderId = newLeaderId;
+                    const userCardList = (_d = userdataDump.getUnBrBody(lastDump.httpResp.get, this.pageKeys["page/MyPage"])) === null || _d === void 0 ? void 0 : _d.userCardList;
+                    if (!Array.isArray(userCardList)) {
+                        console.error(`fakeGuidResult apiName=${apiName} cannot read MyPage.userCardList`);
+                    }
+                    else {
+                        const newLeaderUserCard = userCardList.find((card) => (card === null || card === void 0 ? void 0 : card.id) === newLeaderId);
+                        if (newLeaderUserCard == null) {
+                            console.error(`fakeGuidResult apiName=${apiName} cannot find newLeaderUserCard in userCardList`);
+                        }
+                        else {
+                            const charaId = (_e = newLeaderUserCard === null || newLeaderUserCard === void 0 ? void 0 : newLeaderUserCard.card) === null || _e === void 0 ? void 0 : _e.charaNo;
+                            const charaModMap = this.getOverrideValue(`userCharaList`);
+                            const newDisplayCardId = (_f = charaModMap.get(charaId)) === null || _f === void 0 ? void 0 : _f.get("displayCardId");
+                            if (typeof newDisplayCardId === 'number' && !isNaN(newDisplayCardId)) {
+                                newLeaderUserCard.displayCardId = newDisplayCardId;
+                            }
+                            const newCardId = (_g = charaModMap.get(charaId)) === null || _g === void 0 ? void 0 : _g.get("commandVisualId");
+                            if (typeof newCardId === 'number' && !isNaN(newCardId)) {
+                                newLeaderUserCard.cardId = newCardId;
+                            }
+                            respBodyObj.leaderUserCard = JSON.parse(JSON.stringify(newLeaderUserCard));
+                        }
+                    }
+                }
+            }
+        }
         return Buffer.from(JSON.stringify(respBodyObj), 'utf-8');
     }
     fakeArenaResp(apiName, reqBody) {
@@ -1344,6 +1553,15 @@ class fakeMagirecoProdRespHook {
         const myUserId = (_b = (_a = userdataDump.getUnBrBody(lastDump.httpResp.get, this.pageKeys["page/TopPage"])) === null || _a === void 0 ? void 0 : _a.gameUser) === null || _b === void 0 ? void 0 : _b.userId;
         if (typeof myUserId !== 'string' || !myUserId.match(userdataDump.guidRegEx)) {
             return this.fakeErrorResp("错误", "无法读取用户ID");
+        }
+        if (apiName === "quest/start") {
+            apiName = "arena/start"; // FIXME: pretend to be arena/start - apis afterwards NOT WORKING
+            const faked = {
+                arenaBattleType: "SIMULATE",
+                opponentUserId: (0, util_1.getRandomGuid)(),
+                arenaBattleOpponentTeamType: "FAKE",
+            };
+            reqBody = JSON.stringify(faked);
         }
         switch (apiName) {
             case "arena/start":
@@ -1624,11 +1842,10 @@ class fakeMagirecoProdRespHook {
                 if (numberStr.length < 3) {
                     numberStr = Array.from({ length: 3 - numberStr.length }, () => "0").join("") + numberStr;
                 }
-                let item = {
-                    part: part,
-                    number: number,
-                    imagePath: `/part${part}/magirepo_0${part}_${numberStr}.png`
-                };
+                let item = {};
+                item.part = part;
+                item.number = number;
+                item.imagePath = `/part${part}/magirepo_0${part}_${numberStr}.png`;
                 if (part == 2) {
                     if (item.number <= 30)
                         delete item.startAt;

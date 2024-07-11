@@ -14,7 +14,7 @@ var constants;
 (function (constants) {
     constants["DOWNGRADE_TO_HTTP1"] = "DOWNGRADE_TO_HTTP1";
     constants["IS_SELF_IP"] = "IS_SELF_IP";
-})(constants = exports.constants || (exports.constants = {}));
+})(constants || (exports.constants = constants = {}));
 class localServer {
     constructor(params) {
         const certGen = new certGenerator.certGen(params.CACertAndKey);
@@ -63,10 +63,10 @@ class localServer {
                 const reqHttpVer = cliReq.httpVersion;
                 let fakedResponse = false;
                 const reqBodyBufArray = [];
-                let matchedHooks = this.hooks.filter((item) => {
+                let hooksPromises = this.hooks.map(async (item) => {
                     if (fakedResponse)
                         return false;
-                    let nextAction = item.matchRequest(modifiedMethod, new url_1.URL(cliReq.url, `https://${reqHeaders["host"]}`), reqHttpVer, reqHeaders);
+                    let nextAction = await item.matchRequest(modifiedMethod, new url_1.URL(cliReq.url, `https://${reqHeaders["host"]}`), reqHttpVer, reqHeaders);
                     switch (nextAction.nextAction) {
                         case "fakeResponse":
                             fakedResponse = true;
@@ -93,6 +93,8 @@ class localServer {
                     }
                     return fakedResponse ? false : nextAction.interceptResponse;
                 });
+                let all = await Promise.all(hooksPromises);
+                let matchedHooks = this.hooks.filter((item, index) => all[index]);
                 if (this.checkOfflineMode(reqHeaders["host"])) {
                     if (matchedHooks.length == 0 && !fakedResponse)
                         cliReq.destroy();
@@ -298,6 +300,13 @@ class localServer {
             ;
         });
         http2SecureServer.on('stream', async (cliReqStream, reqHeaders, flags) => {
+            if (cliReqStream.session == null) {
+                try {
+                    cliReqStream.destroy(new Error("cliReqStream.session == null"));
+                }
+                catch (e) { }
+                return;
+            }
             const alpn = cliReqStream.session.alpnProtocol;
             const sni = cliReqStream.session.socket.servername;
             cliReqStream.on('error', (err) => {
@@ -336,10 +345,10 @@ class localServer {
                 const reqHttpVer = "2.0"; //FIXME
                 let fakedResponse = false;
                 const reqBodyBufArray = [];
-                let matchedHooks = this.hooks.filter((item) => {
+                let hooksPromises = this.hooks.map(async (item) => {
                     if (fakedResponse)
                         return false;
-                    let nextAction = item.matchRequest(reqHeaders[":method"], reqHeaders[":path"] == null ? undefined : new url_1.URL(reqHeaders[":path"], `https://${reqHeaders[":authority"]}/`), reqHttpVer, reqHeaders);
+                    let nextAction = await item.matchRequest(reqHeaders[":method"], reqHeaders[":path"] == null ? undefined : new url_1.URL(reqHeaders[":path"], `https://${reqHeaders[":authority"]}/`), reqHttpVer, reqHeaders);
                     switch (nextAction.nextAction) {
                         case "fakeResponse":
                             fakedResponse = true;
@@ -371,6 +380,8 @@ class localServer {
                     }
                     return fakedResponse ? false : nextAction.interceptResponse;
                 });
+                let all = await Promise.all(hooksPromises);
+                let matchedHooks = this.hooks.filter((item, index) => all[index]);
                 if (this.checkOfflineMode(reqHeaders[":authority"])) {
                     if (matchedHooks.length == 0 && !fakedResponse)
                         cliReqStream.destroy();

@@ -8,7 +8,7 @@ class saveResponseBodyHook {
         this.paramKey = paramKey;
     }
     // if matched, keep a copy of request/response data in memory
-    matchRequest(method, url, httpVersion, headers) {
+    async matchRequest(method, url, httpVersion, headers) {
         return {
             nextAction: "passOnRequest",
             interceptResponse: (url === null || url === void 0 ? void 0 : url.href.match(this.urlRegEx)) ? true : false,

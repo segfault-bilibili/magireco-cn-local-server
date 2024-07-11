@@ -1,6 +1,3 @@
-import * as parameters from "./parameters";
-import { httpProxy } from "./http_proxy";
-import { localServer } from "./local_server";
 import * as staticResCrawler from "./static_res_crawler";
 export declare class controlInterface {
     private closing;
@@ -13,7 +10,7 @@ export declare class controlInterface {
     readonly crawler: staticResCrawler.crawler;
     static launch(): Promise<void>;
     openWebOnAndroid(): void;
-    constructor(params: parameters.params, serverList: Array<localServer | httpProxy>);
+    private constructor();
     private closeAll;
     shutdown(): Promise<void>;
     restart(): Promise<void>;

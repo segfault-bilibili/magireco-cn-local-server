@@ -1,6 +1,3 @@
-/// <reference types="node" />
-/// <reference types="node" />
-/// <reference types="node" />
 import * as http from "http";
 import * as http2 from "http2";
 import { fakeResponse, hook, passOnRequest, passOnRequestBody } from "../local_server";
@@ -13,9 +10,11 @@ export declare class fakeMagirecoProdRespHook implements hook {
     private readonly userdataDmp;
     private readonly magirecoProdUrlRegEx;
     private readonly magicaMaintenanceConfigRegEx;
+    private readonly magicaMaintenanceViewJsonRegEx;
     private readonly magirecoPatchUrlRegEx;
     private readonly apiPathNameRegEx;
     private readonly slashGuidEndRegEx;
+    private readonly browserDebugUrlRegEx;
     private readonly bsgameSdkLoginRegEx;
     private readonly bsgameSdkCipherRegEx;
     private readonly bsgameSdkOtpSendRegEx;
@@ -33,7 +32,7 @@ export declare class fakeMagirecoProdRespHook implements hook {
     isOverriden(key: string): boolean;
     setOverrideValue(key: string, val: string | number | Map<number, Map<string, string | number>> | undefined, reset?: boolean): void;
     constructor(params: parameters.params, crawler: staticResCrawler.crawler, dmp: userdataDump.userdataDmp);
-    matchRequest(method?: string, url?: URL, httpVersion?: string, headers?: http.IncomingHttpHeaders | http2.IncomingHttpHeaders): fakeResponse | passOnRequest;
+    matchRequest(method?: string, url?: URL, httpVersion?: string, headers?: http.IncomingHttpHeaders | http2.IncomingHttpHeaders): Promise<fakeResponse | passOnRequest>;
     onMatchedRequest(method?: string, url?: URL, httpVersion?: string, headers?: http.IncomingHttpHeaders | http2.IncomingHttpHeaders, reqBody?: string | Buffer): fakeResponse | passOnRequestBody;
     onMatchedResponse(statusCode?: number, statusMessage?: string, httpVersion?: string, headers?: http.IncomingHttpHeaders | (http2.IncomingHttpHeaders & http2.IncomingHttpStatusHeader), body?: string | Buffer): void;
     private fakeBsgamesdkCipherResp;
@@ -48,6 +47,7 @@ export declare class fakeMagirecoProdRespHook implements hook {
     private modifyGameUser;
     private getModifiedGameChara;
     private modifyGameChara;
+    private fakeFriendSearch;
     private parsePageNum;
     private fakePagedResult;
     private fakeGuidResult;

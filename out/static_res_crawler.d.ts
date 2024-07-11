@@ -1,8 +1,9 @@
-/// <reference types="node" />
 import { localServer } from "./local_server";
 import * as parameters from "./parameters";
-declare type fsckStatus = {
+import { zippedAssets } from "./zipped_assets";
+type fsckStatus = {
     passed: number;
+    deleted: number;
     remaining: number;
     notPassed: number;
 };
@@ -28,12 +29,15 @@ export declare class crawler {
     private static readonly staticFileMapPathUncomp;
     private static readonly staticFile404SetPath;
     private static readonly staticFile404SetPathUncomp;
+    private readonly localStagingCNDir;
     private static readonly brotliQuality;
+    private zippedAssets;
     private static readonly prodHost;
     private get httpsProdMagicaNoSlash();
     private static readonly patchHost;
     private get httpsPatchMagicaNoSlash();
     static readonly maintenanceConfigStr: string;
+    static readonly maintenanceViewJsonStr: string;
     stopCrawling: boolean;
     get isCrawling(): boolean;
     private _isCrawling;
@@ -47,11 +51,14 @@ export declare class crawler {
     get lastFsckResult(): string;
     get fsckStatus(): fsckStatus | undefined;
     private _fsckStatus?;
-    constructor(params: parameters.params, localsvr: localServer);
+    private constructor();
+    static init(params: parameters.params, localsvr: localServer, zippedAssets: zippedAssets): Promise<crawler>;
     fetchAllAsync(): Promise<void>;
     getFetchAllPromise(): Promise<void>;
     getContentType(pathInUrl: string): string;
-    readFile(pathInUrl: string, specifiedMd5?: string): Buffer | undefined;
+    private readFile;
+    private deleteFileIfMatch;
+    readFileAsync(pathInUrl: string): Promise<Buffer | undefined>;
     saveFile(pathInUrl: string, content: Buffer, contentType: string | undefined, preCalcMd5?: string): void;
     private checkAlreadyExist;
     private updateFileMeta;

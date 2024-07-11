@@ -1,4 +1,3 @@
-/// <reference types="node" />
 export declare const replacer: (key: any, value: any) => any;
 export declare const reviver: (key: any, value: any) => any;
 export declare const resolveToIP: (hostname: string) => Promise<string>;

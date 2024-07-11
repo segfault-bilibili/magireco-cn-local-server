@@ -1,0 +1,38 @@
+type subDirectory = "cn_official" | "cn_mod" | "cn_output";
+export declare class zippedAssets {
+    private static readonly assetJsonNames;
+    private static readonly FHSigature;
+    private static readonly CDFHSigature;
+    private static readonly EOCDSigature;
+    private static readonly cnOffcialZippedAssetsDir;
+    private readonly assetToZipMap;
+    private readonly fileHandleMap;
+    private static readonly fileExtRegEx;
+    private static readonly contentTypeMap;
+    static readonly defMimeType = "application/octet-stream";
+    private static readonly CNLegacyRootDir;
+    private static readonly CNLegacyPathPrefix;
+    private static readonly CNLegacyAssetVer;
+    private static readonly CNLegacyAssetJsonDir;
+    private static readonly CNLegacy404Set;
+    private static readonly chunkSize;
+    private constructor();
+    static init(): Promise<zippedAssets>;
+    private static convertCNLegacy;
+    checkIntegrity(subDirectory?: subDirectory): Promise<boolean>;
+    private static crc32;
+    private static parseZip;
+    private static readFileHeader;
+    private static newFileHeader;
+    private static modifyFileHeader;
+    private static parseCDFH;
+    private static newCDFH;
+    private static modifyCDFH;
+    private static findEOCD;
+    private static newEOCD;
+    private getPathInZip;
+    readFileAsync(pathInUrl: string, crc32?: boolean | number): Promise<Buffer | undefined>;
+    static getContentType(pathInUrl: string): string;
+    private extract;
+}
+export {};

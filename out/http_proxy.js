@@ -65,7 +65,10 @@ class httpProxy {
                 return;
             }
             let isControlInterface = host.match(/^(|www\.)magireco\.local$/) ? true : false;
-            if (port == 443 || isControlInterface) {
+            // was once auto-upgraded to HTTPS, but chrome changed its behavoir
+            // possibly related: https://developer.chrome.com/blog/private-network-access-update/
+            let isBrowserDebug = host === "10.24.19.50" && port == 9997;
+            if (port == 443 || isControlInterface || isBrowserDebug) {
                 //pass to local server, which will then pass to upstream HTTP CONNECT proxy if possible
                 let key = isControlInterface ? "controlInterface" : "localServer";
                 let localPort = this.params.listenList[key].port;
