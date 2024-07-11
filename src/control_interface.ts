@@ -1342,7 +1342,7 @@ export class controlInterface {
             + `\n  </div>`
             + `\n  <form action=\"/api/fsck\" method=\"post\">`
             + `\n    <div>`
-            + `\n      <input type=\"submit\" id=\"fsck_btn\" ${isFscking ? "" : "disabled"} value=\"开始检查\">`
+            + `\n      <input type=\"submit\" id=\"fsck_btn\" ${isFscking ? "" : "disabled"} value=\"检查并删除重复文件\">`
             + `\n    </div>`
             + `\n  </form>`
             + `\n  </fieldset>`

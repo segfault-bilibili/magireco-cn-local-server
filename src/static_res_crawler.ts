@@ -50,6 +50,7 @@ type assetConfigObj = {
 
 type fsckStatus = {
     passed: number,
+    deleted: number
     remaining: number,
     notPassed: number,
 }
@@ -59,8 +60,8 @@ export class crawler {
     private readonly params: parameters.params;
     private readonly localServer: localServer;
 
-    isWebResCompleted: boolean;
-    isAssetsCompleted: boolean;
+    isWebResCompleted: boolean = false;
+    isAssetsCompleted: boolean = false;
 
     private static readonly htmlRegEx = /^text\/html(?=(\s|;|$))/i;
     private static readonly javaScriptRegEx = /^application\/javascript(?=(\s|;|$))/i;
@@ -101,14 +102,17 @@ export class crawler {
 
     static readonly defMimeType = "application/octet-stream";
 
-    private readonly staticFileMap: staticFileMap; // legacy
+    // legacy
+    private readonly staticFileMap: staticFileMap;
     private readonly staticFile404Set: staticFile404Set;
-    private readonly localRootDir: string;
-    private readonly localConflictDir: string; // actually never used
+    private readonly localRootDir = path.join(".", "static");
+    private readonly localConflictDir = path.join(".", "conflict"); // actually never used
     private static readonly staticFileMapPath = path.join(".", "staticFileMap.json.br");
     private static readonly staticFileMapPathUncomp = this.staticFileMapPath.replace(/\.br$/, "");
     private static readonly staticFile404SetPath = path.join(".", "staticFile404Set.json.br");
     private static readonly staticFile404SetPathUncomp = this.staticFile404SetPath.replace(/\.br$/, "");
+
+    private readonly localStagingCNDir = path.join(".", "static_staging_cn");
     private static readonly brotliQuality = 0;
 
     private zippedAssets: zippedAssets;
@@ -167,7 +171,7 @@ export class crawler {
     get lastFsckResult(): string {
         const fsckStatus = this._fsckStatus;
         if (fsckStatus == null) return "";
-        return `[${fsckStatus.passed}] passed, [${fsckStatus.remaining}] remaining`
+        return `[${fsckStatus.passed}] passed, [${fsckStatus.deleted}] deleted, [${fsckStatus.remaining}] remaining`
             + `, [${fsckStatus.notPassed}] missing/mismatch/error`;
     }
     get fsckStatus(): fsckStatus | undefined {
@@ -206,21 +210,6 @@ export class crawler {
             this.staticFileMap = new Map<string, Array<fileMeta>>();
         }
 
-        // add localized maintenance page (wh, weihu)
-        const whPages = [
-            { fileMeta: { md5: "11f496e6cf3f340734528e6f5dcec379", contentType: "text/html" }, path: "index.html" },
-            { fileMeta: { md5: "ab9f293cfa18f249d6e3ba75faa69ab1", contentType: "text/css" }, path: "css/_common/base.css", },
-            { fileMeta: { md5: "7762eb580b04e09ca93cb29090940ee7", contentType: "application/javascript" }, path: "js/base.js", },
-        ];
-        whPages.forEach((page) => this.staticFileMap.set("/magica/wh/" + page.path, [page.fileMeta]));
-
-        // add missing font for browser (guessed, unofficial)
-        const browserFont = "/magica/fonts/lzs_v_2_1_p.ttf";
-        const browserFontMD5 = "9e4857f74bfbb437665dc168a80c16cb";
-        const zhiheiFromApk = "/apk/assets/fonts/TTZhiHeiGB3-W4.ttf"; // guessed
-        this.staticFileMap.set(browserFont, [{ md5: browserFontMD5, contentType: "font/ttf" }]);
-        this.staticFileMap.delete(zhiheiFromApk);
-
         // remove "virtual" files if they still exist in the map
         this.staticFileMap.delete("/maintenance/magica/config");
         this.staticFileMap.delete("/favicon.ico");
@@ -248,12 +237,10 @@ export class crawler {
             this.staticFile404Set = new Set<string>();
         }
 
-        this.localRootDir = path.join(".", "static");
-        this.localConflictDir = path.join(".", "conflict");
-
-        const { isWebResCompleted, isAssetsCompleted } = this.checkStaticCompleted();
-        this.isWebResCompleted = isWebResCompleted;
-        this.isAssetsCompleted = isAssetsCompleted;
+        this.checkStaticCompleted().then((result) => {
+            this.isWebResCompleted = result.isWebResCompleted;
+            this.isAssetsCompleted = result.isAssetsCompleted;
+        });
     }
 
     static async init(params: parameters.params, localsvr: localServer, zippedAssets: zippedAssets): Promise<crawler> {
@@ -272,14 +259,14 @@ export class crawler {
                         });
                 }).finally(() => {
                     // not changing this._crawlingStatus
-                    try {
-                        const { isWebResCompleted, isAssetsCompleted } = this.checkStaticCompleted();
-                        this.isWebResCompleted = isWebResCompleted;
-                        this.isAssetsCompleted = isAssetsCompleted;
-                    } catch (e) {
+                    this.checkStaticCompleted().then((result) => {
+                        this.isWebResCompleted = result.isWebResCompleted;
+                        this.isAssetsCompleted = result.isAssetsCompleted;
+                    }).catch((e) => {
                         console.error(e);
-                    }
-                    this.saveFileMeta();
+                    }).finally(() => {
+                        this.saveFileMeta();
+                    });
                 })
         );
     }
@@ -329,15 +316,44 @@ export class crawler {
             return fs.readFileSync(readPath);
         }
     }
+    private deleteFileIfMatch(pathInUrl: string, md5: string, deletedSet: Set<string>): void {
+        let filePath = path.join(this.localRootDir, pathInUrl);
+        if (!fs.existsSync(filePath)) return;
+        if (!fs.statSync(filePath).isFile()) return;
+        let data = fs.readFileSync(filePath);
+        if (data == null) return;
+        let calc = crypto.createHash('md5').update(data).digest().toString('hex').toLowerCase();
+        if (calc === md5) {
+            fs.unlinkSync(filePath);
+            deletedSet.add(pathInUrl);
+            console.log(`deleted matched file ${filePath}`);
+        }
+        let dirname = path.dirname(filePath);
+        while (
+            dirname.startsWith(this.localRootDir)
+            && fs.existsSync(dirname) && fs.statSync(dirname).isDirectory()
+            && fs.readdirSync(dirname).length == 0
+        ) {
+            fs.rmdirSync(dirname);
+            console.log(`deleted empty dir [${dirname}]`);
+            let parent = path.dirname(dirname);
+            if (parent === dirname) break;
+            else dirname = parent;
+        }
+    }
     async readFileAsync(pathInUrl: string): Promise<Buffer | undefined> {
         // not checking md5 here
-        // work flow: (1) check ./static/ first; (2) then ./zip/ if not found
-        const readPath = path.join(this.localRootDir, pathInUrl);
-        // (1) check ./static/ first
+        // (1) check ./static_staging/ first
+        let readPath = path.join(this.localStagingCNDir, pathInUrl);
         if (fs.existsSync(readPath) && fs.statSync(readPath).isFile()) {
             return fs.readFileSync(readPath);
         }
-        // (2) then ./static_zip/ if not found
+        // (2) then ./static/
+        readPath = path.join(this.localRootDir, pathInUrl);
+        if (fs.existsSync(readPath) && fs.statSync(readPath).isFile()) {
+            return fs.readFileSync(readPath);
+        }
+        // (3) then ./static_zip/ if not found
         return await this.zippedAssets.readFileAsync(pathInUrl);
     }
     saveFile(pathInUrl: string, content: Buffer, contentType: string | undefined, preCalcMd5?: string): void {
@@ -409,16 +425,19 @@ export class crawler {
             const total = this.staticFileMap.size;
             this._fsckStatus = {
                 passed: 0,
+                deleted: 0,
                 remaining: total,
                 notPassed: 0,
             }
 
             const okaySet = new Set<string>(), notOkaySet = new Set<string>();
+            const deletedSet = new Set<string>();
             const checkNextFile = (it: IterableIterator<[string, Array<fileMeta>]>): void => {
                 const val = it.next();
                 if (val.done) {
                     this._fsckStatus = {
                         passed: okaySet.size,
+                        deleted: deletedSet.size,
                         remaining: total - okaySet.size - notOkaySet.size,
                         notPassed: notOkaySet.size,
                     }
@@ -438,7 +457,12 @@ export class crawler {
                         } else {
                             let md5 = crypto.createHash('md5').update(data).digest().toString('hex').toLowerCase();
                             okay = md5 === fileMetaArray[0].md5;
-                            if (!okay) console.log(`[${pathInUrl}] md5 mismatch, expected ${fileMetaArray[0].md5} actual ${md5}`);
+                            if (okay) {
+                                // remove legacy asset file in ./static/ if it's available in zippedAssets
+                                this.deleteFileIfMatch(pathInUrl, fileMetaArray[0].md5, deletedSet);
+                            } else {
+                                console.log(`[${pathInUrl}] is modified, expected ${fileMetaArray[0].md5} actual ${md5}`);
+                            }
                         }
                         // if (this.checkAlreadyExist(pathInUrl, fileMetaArray[0].md5)) okay = true;
                     } catch (e) {
@@ -451,6 +475,7 @@ export class crawler {
                     }
                     this._fsckStatus = {
                         passed: okaySet.size,
+                        deleted: deletedSet.size,
                         remaining: total - okaySet.size - notOkaySet.size,
                         notPassed: notOkaySet.size,
                     }
@@ -465,11 +490,11 @@ export class crawler {
         return this.staticFile404Set.has(pathInUrl);
     }
 
-    private checkStaticCompleted(): { isWebResCompleted: boolean, isAssetsCompleted: boolean } {
+    private async checkStaticCompleted(): Promise<{ isWebResCompleted: boolean, isAssetsCompleted: boolean }> {
         const unsortedFileExtSet = new Set<string>();
         let isWebResCompleted: boolean | undefined;
         try {
-            const replacementJs = this.readFile("/magica/js/system/replacement.js")?.toString('utf-8');
+            const replacementJs = (await this.zippedAssets.readFileAsync("/magica/js/system/replacement.js"))?.toString('utf-8');
             if (replacementJs != null) {
                 const fileTimeStampObj: Record<string, string> = JSON.parse(
                     replacementJs.replace(/^\s*window\.fileTimeStamp\s*=\s*/, "")
@@ -503,16 +528,16 @@ export class crawler {
                 const assetver = this.readAssetVer(maintenanceConfigStr);
                 const mergedAssetList: Array<assetListEntry> = [];
                 let allAssetListExists = true;
-                crawler.assetListFileNameList.find((fileName) => {
-                    const assetListStr = this.readFile(`/magica/resource/download/asset/master/resource/${assetver}/${fileName}`)
+                for (let fileName of crawler.assetListFileNameList) {
+                    const assetListStr = (await this.zippedAssets.readFileAsync(`/magica/resource/download/asset/master/resource/${assetver}/${fileName}`))
                         ?.toString('utf-8');
                     if (assetListStr == null) {
                         allAssetListExists = false;
-                        return true;
+                        break;
                     }
                     const assetList: Array<assetListEntry> = JSON.parse(assetListStr);
                     assetList.forEach((item) => mergedAssetList.push(item));
-                });
+                }
                 if (allAssetListExists) {
                     mergedAssetList.forEach((item) => {
                         let matched = item.file_list[0].url.match(crawler.fileExtRegEx);
