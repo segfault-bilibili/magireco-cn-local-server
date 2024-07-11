@@ -524,11 +524,14 @@ export class fakeMagirecoProdRespHook implements hook {
                 body = await this.crawler.readFileAsync(pathname);
                 if (body == null) {
                     if (url.pathname.match(this.magicaMaintenanceConfigRegEx) != null) {
+                        contentType = "application/json; charset=utf-8";
                         body = Buffer.from(staticResCrawler.crawler.maintenanceConfigStr, 'utf-8');
                     } else if (url.pathname.match(this.magicaMaintenanceViewJsonRegEx) != null) {
+                        contentType = "application/json; charset=utf-8";
                         body = Buffer.from(staticResCrawler.crawler.maintenanceViewJsonStr, 'utf-8');
                     } else if (url.pathname.match(this.part2Section3RegEx) != null) {
                         // not a workaround: response from offical server was like this
+                        contentType = "application/json; charset=utf-8";
                         body = Buffer.from(JSON.stringify([]), 'utf-8');
                     }
                 }
