@@ -1,6 +1,7 @@
 import { replacer, reviver } from "./util";
 import * as path from "path";
 import * as zlib from "zlib";
+import * as crypto from "crypto";
 import * as fsPromises from "fs/promises";
 import * as stream from "stream";
 import { ReadStream } from "fs";
@@ -17,9 +18,20 @@ type zipFileName = string;
 type compressMethod = number;
 type dataStart = number;
 type compressedSize = number;
-type positionInZip = [zipFileName, compressMethod, dataStart, compressedSize];
+type crc32 = number;
+type positionInZip = [zipFileName, compressMethod, dataStart, compressedSize, crc32];
 
 type subDirectory = "cn_official" | "cn_mod" | "cn_output";
+
+type assetListEntry = {
+    file_list: Array<{
+        size: number,
+        url: string,
+    }>,
+    md5: string,
+    model?: string,
+    path: string,
+}
 
 const toInt = (s: string) => {
     let buf = new Uint8Array(Buffer.from(s, 'ascii'));
@@ -197,7 +209,7 @@ export class zippedAssets {
 
                 process.stdout.write(`\r\x1b[K` + `zippedAssets: [${clampString(joinedZipFileName)}]: written [${clampString(zipFilePath)}]`);
 
-                assetToZipMap.set(zipFilePath, [joinedZipFileName, compressMethod, headerBeforeNestedZip, zipFileSize]);
+                assetToZipMap.set(zipFilePath, [joinedZipFileName, compressMethod, headerBeforeNestedZip, zipFileSize, crc32]);
                 zipParsedMap.forEach((positionInZip, zipEntryName) => {
                     positionInZip[0] = joinedZipFileName;
                     positionInZip[2] += nestedZipFileStart;
@@ -282,7 +294,7 @@ export class zippedAssets {
             CDFHBufs.push(this.newCDFH(pathInUrl, headerBeforeDeflated, compressMethod, deflatedSize, inflatedSize, crc32));
 
             if (assetToZipMap.has(pathInUrl)) throw new Error(`conflicting pathInUrl = [${pathInUrl}]`);
-            assetToZipMap.set(pathInUrl, [webResJoinedZipFileName, compressMethod, deflatedStart, deflatedSize]);
+            assetToZipMap.set(pathInUrl, [webResJoinedZipFileName, compressMethod, deflatedStart, deflatedSize, crc32]);
         }
 
         process.stdout.write("\n");
@@ -305,20 +317,108 @@ export class zippedAssets {
     }
 
     async checkIntegrity(subDirectory: subDirectory = "cn_official"): Promise<boolean> {
-        const md5Map = new Map<string, string>();
+        console.log(`zippedAssets: checkIntegrity for ${subDirectory}...`);
 
-        for (let name of zippedAssets.assetJsonNames) {
+        let checkResult = true;
+
+        const md5Map = new Map<string, string>();
+        const okaySet = new Set<string>();
+        const missingSet = new Set<string>();
+        const md5MismatchSet = new Set<string>();
+        const crc32MismatchSet = new Set<string>();
+
+        // check md5 according to official asset list jsons
+        const prefix = `/${zippedAssets.CNLegacyPathPrefix}/${zippedAssets.CNLegacyAssetVer}/`;
+
+        const assetJsonFileNames: Array<string> = [];
+        zippedAssets.assetJsonNames.forEach((name) => {
+            name = `asset_${name}.json`;
+            assetJsonFileNames.push(name);
+            name = `zip_${name}`;
+            assetJsonFileNames.push(name);
+        });
+
+        for (let fileName of assetJsonFileNames) {
+            let pathInUrl = `${prefix}${fileName}`;
+            let data = await this.readFileAsync(pathInUrl);
+            if (data == null) throw new Error(`cannot read asset list json`);
+
+            let assetList: Array<assetListEntry> = JSON.parse(data.toString('utf-8'));
+
+            for (let entry of assetList) {
+                if (entry.file_list.length != 1) throw new Error(`entry.file_list.length != 1`);
+                let pathInUrl = `/${zippedAssets.CNLegacyPathPrefix}/${entry.file_list[0].url}`;
+                let md5 = entry.md5;
+                md5Map.set(pathInUrl, md5);
+            }
         }
 
-        return false;
+        for (let entry of md5Map) {
+            let pathInUrl = entry[0];
+            let expected = entry[1];
+
+            let data = await this.readFileAsync(pathInUrl);
+            if (data == null) {
+                missingSet.add(pathInUrl);
+                checkResult = false;
+                process.stdout.write(`\r\x1b[K` + `zippedAssets: md5: [MISSING] [${clampString(pathInUrl)}]` + `\n`);
+                continue;
+            }
+
+            let md5 = crypto.createHash("md5").update(data).digest().toString('hex').toLowerCase();
+            let okay = md5 === expected;
+            if (!okay) {
+                md5MismatchSet.add(pathInUrl);
+                checkResult = false;
+            } else {
+                okaySet.add(pathInUrl);
+            }
+
+            process.stdout.write(`\r\x1b[K` + `zippedAssets: md5: [${okay ? "OK" : "FAIL"}] [${clampString(pathInUrl)}]` + `${okay ? "" : "\n"}`);
+        }
+
+        process.stdout.write("\n");
+
+        // convert okaySet to pathInZip
+        const okaySetInZip = new Set<string>();
+        for (let pathInUrl of okaySet) {
+            let pathInZip = this.getPathInZip(pathInUrl);
+            if (pathInZip == null) throw new Error(`pathInZip == null`); // should never happen because this.readFileAsync() calls getPathInZip as well
+            okaySetInZip.add(pathInZip);
+        };
+
+        // check crc32
+        for (let pathInZip of this.assetToZipMap.keys()) {
+            if (okaySetInZip.has(pathInZip)) continue;
+            let data = await this.readFileAsync(pathInZip, true);
+            let okay = data != null;
+            if (!okay) {
+                crc32MismatchSet.add(pathInZip);
+                checkResult = false;
+            } else {
+                okaySetInZip.add(pathInZip);
+            }
+            process.stdout.write(`\r\x1b[K` + `zippedAssets: crc32: [${okay ? "OK" : "FAIL"}] [${clampString(pathInZip)}]` + `${okay ? "" : "\n"}`);
+        }
+
+        process.stdout.write("\n");
+
+        console.log(`zippedAssets: checkIntegrity ${checkResult ? "OK" : "FAIL"}`);
+        console.log(`zippedAssets: ${okaySetInZip.size} ok, ${missingSet.size} missing, ${md5MismatchSet.size} md5 mismatch ${crc32MismatchSet.size} crc32 mismatch`);
+
+        return checkResult;
     }
 
 
-    private static crc32(handle: fsPromises.FileHandle): Promise<number> {
+    private static crc32(data: fsPromises.FileHandle | Uint8Array): Promise<number> {
         return new Promise((resolve, reject) => {
-            let inStream: ReadStream;
+            let inStream: stream.Readable;
             try {
-                inStream = handle.createReadStream({ start: 0, autoClose: false, highWaterMark: this.chunkSize });
+                if (data instanceof Uint8Array) {
+                    inStream = new stream.PassThrough().end(data);
+                } else {
+                    inStream = data.createReadStream({ start: 0, autoClose: false, highWaterMark: this.chunkSize });
+                }
             } catch (e) {
                 reject(e);
                 return;
@@ -362,13 +462,14 @@ export class zippedAssets {
             let signature = dv.getUint32(0, true);
             if (signature != this.FHSigature) throw new Error(`file header signature mismatch`);
             let compressMethod = dv.getUint16(8, true);
+            let crc32 = dv.getUint32(14, true);
             let compressedSize = dv.getUint32(18, true);
             let fileNameLen = dv.getUint16(26, true);
             let extraFieldLen = dv.getUint16(28, true);
             let dataOffset = FHOffset + 30 + fileNameLen + extraFieldLen;
             let dataEnd = dataOffset + compressedSize;
-            if (dataEnd > CDOffset) throw new Error(`[${zipFileName} / ${CDFH.fileName}]end of compressed data exceeds begin of central directory`);
-            tempMap.set(CDFH.fileName, [zipFileName, compressMethod, dataOffset, compressedSize]);
+            if (dataEnd > CDOffset) throw new Error(`[${zipFileName} / ${CDFH.fileName}] end of compressed data exceeds begin of central directory`);
+            tempMap.set(CDFH.fileName, [zipFileName, compressMethod, dataOffset, compressedSize, crc32]);
         }
 
         return tempMap;
@@ -572,37 +673,43 @@ export class zippedAssets {
     }
 
 
-    async readFileAsync(pathInUrl: string): Promise<Buffer | undefined> {
+    private getPathInZip(pathInUrl: string): string | undefined {
         // (1) lookup directly (web_res.zip)
         let pathInZip = pathInUrl.replace(/^\//, "");
-        let val = this.assetToZipMap.get(pathInZip);
+        if (this.assetToZipMap.has(pathInZip)) return pathInZip;
+
         // (2) cn joined zips use stripped paths
-        if (val == null) {
-            pathInZip = pathInZip.replace(/^magica\/resource\/(download\/asset\/master\/resource\/\d+\/|)/, "");
-            val = this.assetToZipMap.get(pathInZip);
-        }
-        if (val == null) {
-            console.error(`zippedAssets: cannot find [${pathInZip}] in any zip file (pathInUrl=[${pathInUrl}])`);
-            return;
-        }
+        pathInZip = pathInZip.replace(/^magica\/resource\/(download\/asset\/master\/resource\/\d+\/|)/, "");
+        if (this.assetToZipMap.has(pathInZip)) return pathInZip;
+
+        console.error(`zippedAssets: cannot find [${pathInZip}] in any zip file (pathInUrl=[${pathInUrl}])`);
+    }
+
+    async readFileAsync(pathInUrl: string, crc32?: boolean | number): Promise<Buffer | undefined> {
+        const pathInZip = this.getPathInZip(pathInUrl);
+        if (pathInZip == null) return;
+        let val = this.assetToZipMap.get(pathInZip);
+        if (val == null) return;
+
         const zipFileName = val[0];
         const method = val[1];
         const dataOffset = val[2];
         const compressedSize = val[3];
+        if (typeof crc32 === 'boolean') crc32 = crc32 ? val[4] : undefined;
 
         let data: Uint8Array | undefined;
 
         for (let retries = 3; retries > 0 && data == null; retries--) {
             try {
-                data = await this.extract(zipFileName, method, dataOffset, compressedSize);
+                data = await this.extract(zipFileName, method, dataOffset, compressedSize, crc32);
             } catch (e) {
-                console.error(`zippedAssets: error extracting[${pathInZip}]from[${zipFileName}], retrying...`, e);
+                console.error(`zippedAssets: error extracting [${pathInZip}] from [${zipFileName}], retrying...`, e);
                 this.fileHandleMap.delete(zipFileName);
             }
         }
 
         if (data == null) {
-            console.error(`zippedAssets: cannot extract[${pathInUrl}]`);
+            console.error(`zippedAssets: cannot extract [${pathInUrl}]`);
             return;
         }
 
@@ -618,7 +725,7 @@ export class zippedAssets {
     }
 
     private async extract(
-        zipFileName: string, method: number, dataOffset: number, compressedSize: number
+        zipFileName: string, method: number, dataOffset: number, compressedSize: number, crc32?: number
     ): Promise<Uint8Array | undefined> {
         let handle = this.fileHandleMap.get(zipFileName);
         if (handle == null) {
@@ -633,6 +740,11 @@ export class zippedAssets {
         if (method == 8) {
             let inflated = zlib.inflateRawSync(buf);
             buf = new Uint8Array(inflated.buffer, inflated.byteOffset, inflated.byteLength); // TODO make this streamed
+        }
+
+        if (crc32 != null) {
+            let calculated = await zippedAssets.crc32(buf);
+            if (crc32 != calculated) return;
         }
 
         return buf;

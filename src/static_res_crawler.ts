@@ -338,7 +338,7 @@ export class crawler {
             return fs.readFileSync(readPath);
         }
         // (2) then ./static_zip/ if not found
-        return await this.zippedAssets?.readFileAsync(pathInUrl);
+        return await this.zippedAssets.readFileAsync(pathInUrl);
     }
     saveFile(pathInUrl: string, content: Buffer, contentType: string | undefined, preCalcMd5?: string): void {
         let logPrefix = `saveFile`;
