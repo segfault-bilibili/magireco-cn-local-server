@@ -4,8 +4,8 @@ import * as zlib from "zlib";
 import * as crypto from "crypto";
 import * as fsPromises from "fs/promises";
 import * as stream from "stream";
-import { ReadStream } from "fs";
 import { cnLegacyAssetJsonList } from "./cn_legacy_asset_json_list";
+import { logNoLF, clampString } from "./log_no_lf";
 
 type CDFH = {
     fileName: string,
@@ -38,8 +38,6 @@ const toInt = (s: string) => {
     let dv = new DataView(buf.slice().buffer);
     return dv.getUint32(0, true);
 }
-
-const clampString = (s: string, max = 16) => s.length > max ? `...${s.substring(s.length - max - 3)}` : s;
 
 export class zippedAssets {
     private static readonly assetJsonNames = [
@@ -207,7 +205,7 @@ export class zippedAssets {
                 });
                 offset += zipFileSize;
 
-                process.stdout.write(`\r\x1b[K` + `zippedAssets: [${clampString(joinedZipFileName)}]: written [${clampString(zipFilePath)}]`);
+                logNoLF(`zippedAssets: [${clampString(joinedZipFileName)}]: written [${clampString(zipFilePath)}]`);
 
                 assetToZipMap.set(zipFilePath, [joinedZipFileName, compressMethod, headerBeforeNestedZip, zipFileSize, crc32]);
                 zipParsedMap.forEach((positionInZip, zipEntryName) => {
@@ -289,7 +287,7 @@ export class zippedAssets {
             await outHandle.write(deflated);
             offset += deflated.byteLength;
 
-            process.stdout.write(`\r\x1b[K` + `zippedAssets: [${clampString(webResJoinedZipFileName)}]: written [${clampString(pathInUrl)}]`);
+            logNoLF(`zippedAssets: [${clampString(webResJoinedZipFileName)}]: written [${clampString(pathInUrl)}]`);
 
             CDFHBufs.push(this.newCDFH(pathInUrl, headerBeforeDeflated, compressMethod, deflatedSize, inflatedSize, crc32));
 
@@ -361,7 +359,7 @@ export class zippedAssets {
             if (data == null) {
                 missingSet.add(pathInUrl);
                 checkResult = false;
-                process.stdout.write(`\r\x1b[K` + `zippedAssets: md5: [MISSING] [${clampString(pathInUrl)}]` + `\n`);
+                logNoLF(`zippedAssets: md5: [MISSING] [${clampString(pathInUrl)}]` + `\n`);
                 continue;
             }
 
@@ -374,7 +372,7 @@ export class zippedAssets {
                 okaySet.add(pathInUrl);
             }
 
-            process.stdout.write(`\r\x1b[K` + `zippedAssets: md5: [${okay ? "OK" : "FAIL"}] [${clampString(pathInUrl)}]` + `${okay ? "" : "\n"}`);
+            logNoLF(`zippedAssets: md5: [${okay ? "OK" : "FAIL"}] [${clampString(pathInUrl)}]` + `${okay ? "" : "\n"}`);
         }
 
         process.stdout.write("\n");
@@ -398,7 +396,7 @@ export class zippedAssets {
             } else {
                 okaySetInZip.add(pathInZip);
             }
-            process.stdout.write(`\r\x1b[K` + `zippedAssets: crc32: [${okay ? "OK" : "FAIL"}] [${clampString(pathInZip)}]` + `${okay ? "" : "\n"}`);
+            logNoLF(`zippedAssets: crc32: [${okay ? "OK" : "FAIL"}] [${clampString(pathInZip)}]` + `${okay ? "" : "\n"}`);
         }
 
         process.stdout.write("\n");
