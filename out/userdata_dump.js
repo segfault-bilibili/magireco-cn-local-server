@@ -37,6 +37,20 @@ const getUnBrBody = (map, key) => {
 exports.getUnBrBody = getUnBrBody;
 exports.guidRegEx = /^[\da-f]{8}-([\da-f]{4}-){3}[\da-f]{12}$/i;
 class userdataDmp {
+    constructor(params, localServer) {
+        this._isDownloading = false;
+        this._fetchStatus = "";
+        this._isImporting = false;
+        this._flag = 1;
+        this.userdataDumpFileNameRegEx = /^\/magireco_cn_dump[^\/\\]*\.json$/;
+        this.oldInternalUserdataDumpFileName = "lastUserdataDump.br";
+        this.internalUserdataDumpFileName = "lastUserdataDumpBr.json";
+        this.tsRegEx = /(?<=timeStamp\=)\d+/;
+        this.params = params;
+        this.localServer = localServer;
+        this.clientSessionId = 100 + Math.floor(Math.random() * 899);
+        this.loadLastDump();
+    }
     get magirecoIDs() { return this.params.magirecoIDs; }
     get lastDump() {
         return this._lastDump;
@@ -135,20 +149,6 @@ class userdataDmp {
         if (lastDump == null)
             return filenameWithoutUid;
         return `magireco_cn_dump_uid_${lastDump.uid}_${dateTimeNumberStr}.json`;
-    }
-    constructor(params, localServer) {
-        this._isDownloading = false;
-        this._fetchStatus = "";
-        this._isImporting = false;
-        this._flag = 1;
-        this.userdataDumpFileNameRegEx = /^\/magireco_cn_dump[^\/\\]*\.json$/;
-        this.oldInternalUserdataDumpFileName = "lastUserdataDump.br";
-        this.internalUserdataDumpFileName = "lastUserdataDumpBr.json";
-        this.tsRegEx = /(?<=timeStamp\=)\d+/;
-        this.params = params;
-        this.localServer = localServer;
-        this.clientSessionId = 100 + Math.floor(Math.random() * 899);
-        this.loadLastDump();
     }
     getDumpAsync() {
         return new Promise((resolve, reject) => this.getDumpPromise()

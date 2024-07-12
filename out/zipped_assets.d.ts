@@ -1,4 +1,5 @@
-type subDirectory = "cn_official" | "cn_mod" | "cn_output";
+/// <reference types="node" />
+declare type subDirectory = "cn_official" | "cn_mod" | "cn_output";
 export declare class zippedAssets {
     private static readonly assetJsonNames;
     private static readonly FHSigature;
@@ -18,7 +19,13 @@ export declare class zippedAssets {
     private static readonly chunkSize;
     private constructor();
     static init(): Promise<zippedAssets>;
+    private static registerZips;
+    private static readonly mapVerMagic;
+    private static serializeTempMap;
+    private static deserializeTempMap;
     private static convertCNLegacy;
+    private static isCNLegacyConversionUnfinished;
+    private static markCNLegacyConversionFinished;
     checkIntegrity(subDirectory?: subDirectory): Promise<boolean>;
     private static crc32;
     private static parseZip;
@@ -30,6 +37,10 @@ export declare class zippedAssets {
     private static modifyCDFH;
     private static findEOCD;
     private static newEOCD;
+    private static checkIsDir;
+    private static checkIsFile;
+    private static checkFileFinished;
+    private static markFileFinished;
     private getPathInZip;
     readFileAsync(pathInUrl: string, crc32?: boolean | number): Promise<Buffer | undefined>;
     static getContentType(pathInUrl: string): string;

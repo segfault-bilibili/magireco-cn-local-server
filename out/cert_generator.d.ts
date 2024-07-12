@@ -1,5 +1,5 @@
 import * as forge from "node-forge";
-export type certAndKey = {
+export declare type certAndKey = {
     cert: string;
     key: string;
 };

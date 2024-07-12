@@ -1,20 +1,21 @@
+/// <reference types="node" />
 import * as parameters from "./parameters";
 import { localServer } from "./local_server";
-export type magirecoIDs = {
+export declare type magirecoIDs = {
     device_id: string;
 };
-export type openIdTicket = {
+export declare type openIdTicket = {
     open_id: string;
     ticket: string;
     uname?: string;
     timestamp?: number;
 };
-export type dumpRespEntry = {
+export declare type dumpRespEntry = {
     ts?: number;
     body?: any;
     brBody: string;
 };
-export type dump = {
+export declare type dump = {
     uid: number;
     timestamp: number;
     isBr: boolean;

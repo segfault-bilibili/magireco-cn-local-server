@@ -8,12 +8,12 @@ const crypto = require("crypto");
 const fsPromises = require("fs/promises");
 const stream = require("stream");
 const cn_legacy_asset_json_list_1 = require("./cn_legacy_asset_json_list");
+const log_no_lf_1 = require("./log_no_lf");
 const toInt = (s) => {
     let buf = new Uint8Array(Buffer.from(s, 'ascii'));
     let dv = new DataView(buf.slice().buffer);
     return dv.getUint32(0, true);
 };
-const clampString = (s, max = 16) => s.length > max ? `...${s.substring(s.length - max - 3)}` : s;
 class zippedAssets {
     constructor(assetToZipMap, fileHandleMap) {
         this.assetToZipMap = assetToZipMap;
@@ -27,35 +27,84 @@ class zippedAssets {
         console.log(`zippedAssets: init...`);
         const assetToZipMap = new Map();
         const fileHandleMap = new Map();
+        const zipDir = this.cnOffcialZippedAssetsDir;
         let zipFiles;
         try {
-            zipFiles = (await fsPromises.readdir(this.cnOffcialZippedAssetsDir)).filter((fileName) => fileName.endsWith('.zip'));
+            zipFiles = (await fsPromises.readdir(zipDir)).filter((fileName) => fileName.endsWith('.zip'));
         }
         catch (e) {
-            console.error(`zippedAssets: cannot open directory [${this.cnOffcialZippedAssetsDir}]`, e);
-            await fsPromises.mkdir(this.cnOffcialZippedAssetsDir);
+            console.error(`zippedAssets: cannot open directory [${zipDir}]`, e);
+            await fsPromises.mkdir(zipDir);
             zipFiles = [];
         }
-        if (zipFiles.length == 0) {
-            return await this.convertCNLegacy();
+        const noZipFileFound = zipFiles.length == 0;
+        if (noZipFileFound || await this.isCNLegacyConversionUnfinished()) {
+            if (noZipFileFound)
+                console.error(`zippedAssets: no zip packages found in [${zipDir}]`);
+            if (await this.checkIsDir(path.join(this.CNLegacyRootDir))) {
+                console.log(`zippedAssets: attempt to convert legacy CN ./static/ to zip packages...`);
+                return await this.convertCNLegacy();
+            }
         }
-        let zipCount = 0;
+        await this.registerZips(zipFiles, assetToZipMap, fileHandleMap);
+        return new zippedAssets(assetToZipMap, fileHandleMap);
+    }
+    static async registerZips(zipFiles, assetToZipMap, fileHandleMap, checkConflict = false) {
+        const zipDir = this.cnOffcialZippedAssetsDir;
+        const CACHED_MAP_IS_STALE = `cached map is stale`;
         for (let zipFileName of zipFiles) {
             try {
-                let zipFilePath = path.join(this.cnOffcialZippedAssetsDir, zipFileName);
+                let startTime = Date.now();
+                let zipFilePath = path.join(zipDir, zipFileName);
+                let cachedMapPath = `${zipFilePath}.map.bin.gz`;
+                let tempMap;
+                if (await this.checkIsFile(cachedMapPath)) {
+                    try {
+                        let zipFileMtimeMs = (await fsPromises.stat(zipFilePath)).mtimeMs;
+                        let cachedMapMtimeMs = (await fsPromises.stat(cachedMapPath)).mtimeMs;
+                        if (zipFileMtimeMs > cachedMapMtimeMs)
+                            throw new Error(CACHED_MAP_IS_STALE);
+                        let compressed = await fsPromises.readFile(cachedMapPath);
+                        let decompressed = zlib.gunzipSync(compressed);
+                        let deserializedMap = this.deserializeTempMap(decompressed);
+                        for (let entry of deserializedMap.entries()) {
+                            let zipEntryName = entry[0];
+                            let positionInZip = entry[1];
+                            if (checkConflict && assetToZipMap.has(zipEntryName))
+                                throw new Error(`conflicting zipEntryName ${zipEntryName}`);
+                            let zipFileNameInTempMap = positionInZip[0];
+                            if (zipFileNameInTempMap !== zipFileName)
+                                throw new Error(`zipFileNameInTempMap !== zipFileName`);
+                        }
+                        ;
+                        tempMap = deserializedMap;
+                        console.log(`zippedAssets: loaded cached map for [${zipFileName}]`);
+                    }
+                    catch (e) {
+                        if (e instanceof Error && e.message === CACHED_MAP_IS_STALE) {
+                            console.warn(`zippedAssets: stale cached map for [${zipFileName}]`);
+                        }
+                        else {
+                            console.error(`zippedAssets: error loading cached map for [${zipFileName}]`, e);
+                        }
+                    }
+                }
                 let handle = await fsPromises.open(zipFilePath, "r");
                 fileHandleMap.set(zipFileName, handle);
-                let startTime = Date.now();
-                let tempMap = await this.parseZip(zipFileName, handle);
-                let lastEntryCount = assetToZipMap.size;
-                for (let entry of tempMap) {
-                    let zipEntryName = entry[0];
-                    let positionInZip = entry[1];
-                    assetToZipMap.set(zipEntryName, positionInZip);
+                if (tempMap == null) {
+                    tempMap = await this.parseZip(zipFileName, handle);
+                    let serialized = this.serializeTempMap(zipFileName, tempMap);
+                    let compressed = zlib.gzipSync(serialized, { level: 1 });
+                    await fsPromises.writeFile(cachedMapPath, compressed);
                 }
+                let lastEntryCount = assetToZipMap.size;
+                tempMap.forEach((positionInZip, zipEntryName) => {
+                    if (checkConflict && assetToZipMap.has(zipEntryName))
+                        throw new Error(`conflicting zipEntryName ${zipEntryName}`);
+                    assetToZipMap.set(zipEntryName, positionInZip);
+                });
                 let increased = assetToZipMap.size - lastEntryCount;
                 let duplicate = tempMap.size - increased;
-                zipCount++;
                 console.log(`zippedAssets: registered [${zipFileName}]: `
                     + `added ${increased}${duplicate > 0 ? `, replaced ${duplicate}` : ""} file entries (${Date.now() - startTime}ms)`);
             }
@@ -63,20 +112,113 @@ class zippedAssets {
                 console.error(`zippedAssets: error parsing [${zipFileName}], skipped this zip`, e);
             }
         }
-        return new _a(assetToZipMap, fileHandleMap);
+    }
+    static serializeTempMap(zipFileName, map) {
+        const SIZE_UINT32 = 4;
+        const zipFileNameBuf = Buffer.from(zipFileName, 'utf-8');
+        if (zipFileNameBuf.byteLength > 0xFF)
+            throw new Error(`zipFileNameBuf.byteLength > 0xFF`);
+        const zipEntryNameBufs = Array.from(map.keys()).map((s) => Buffer.from(s, 'utf-8'));
+        const serializedSize = SIZE_UINT32 // verMagic
+            + SIZE_UINT32 // file size
+            + SIZE_UINT32 // count
+            + (1 + zipFileNameBuf.byteLength + 1) // zipFileName
+            + (1 + 3 * SIZE_UINT32) * map.size // entries, without zipEntryName yet
+            + zipEntryNameBufs.reduce((prev, cur) => prev + (1 + cur.byteLength + 1), 0); // zipEntryName of each entry
+        const buf = new Uint8Array(serializedSize);
+        const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+        let offset = buf.byteOffset;
+        dv.setUint32(offset, this.mapVerMagic, true); // verMagic
+        offset += SIZE_UINT32;
+        dv.setUint32(offset, serializedSize, true); // file size
+        offset += SIZE_UINT32;
+        dv.setUint32(offset, map.size, true); // count
+        offset += SIZE_UINT32;
+        dv.setUint8(offset++, zipFileNameBuf.byteLength);
+        buf.set(zipFileNameBuf, offset);
+        offset += zipFileNameBuf.byteLength;
+        dv.setUint8(offset++, zipFileNameBuf.byteLength);
+        let i = 0;
+        for (let positionInZip of map.values()) {
+            let zipEntryNameBuf = zipEntryNameBufs[i++];
+            if (zipEntryNameBuf.byteLength > 0xFF)
+                throw new Error(`zipEntryNameBuf.byteLength > 0xFF`);
+            dv.setUint8(offset++, zipEntryNameBuf.byteLength);
+            buf.set(zipEntryNameBuf, offset);
+            offset += zipEntryNameBuf.byteLength;
+            dv.setUint8(offset++, zipEntryNameBuf.byteLength);
+            dv.setUint8(offset++, positionInZip[1]); // compressMethod
+            dv.setUint32(offset, positionInZip[2], true);
+            offset += SIZE_UINT32; // dataStart
+            dv.setUint32(offset, positionInZip[3], true);
+            offset += SIZE_UINT32; // compressedSize
+            dv.setUint32(offset, positionInZip[4], true);
+            offset += SIZE_UINT32; // crc32
+        }
+        if (offset != buf.byteLength)
+            throw new Error(`offset != buf.byteLength`);
+        return Buffer.from(buf.buffer, buf.byteOffset, buf.byteLength);
+    }
+    static deserializeTempMap(serialized) {
+        const SIZE_UINT32 = 4;
+        const map = new Map();
+        const buf = new Uint8Array(serialized.buffer, serialized.byteOffset, serialized.byteLength);
+        const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+        let offset = buf.byteOffset;
+        if (dv.getUint32(offset, true) != this.mapVerMagic)
+            throw new Error(`verMagic mismatch`);
+        offset += SIZE_UINT32;
+        const serializedSize = dv.getUint32(offset, true);
+        offset += SIZE_UINT32;
+        if (serializedSize != buf.byteLength)
+            throw new Error(`serializedSize ${serializedSize} != buf.byteLength ${buf.byteLength}`);
+        const end = buf.byteOffset + serializedSize;
+        const count = dv.getUint32(offset, true);
+        offset += SIZE_UINT32;
+        const zipFileNameBufSize = dv.getUint8(offset++);
+        const zipFileName = Buffer.from(buf.buffer, offset, zipFileNameBufSize).toString('utf-8');
+        offset += zipFileNameBufSize;
+        if (dv.getUint8(offset++) != zipFileNameBufSize)
+            throw new Error(`zipFileNameBufSize mismatch`);
+        while (offset < end) {
+            let zipEntryNameBufSize = dv.getUint8(offset++);
+            let zipEntryName = Buffer.from(buf.buffer, offset, zipEntryNameBufSize).toString('utf-8');
+            offset += zipEntryNameBufSize;
+            if (dv.getUint8(offset++) != zipEntryNameBufSize)
+                throw new Error(`zipEntryNameBufSize mismatch`);
+            let compressMethod = dv.getUint8(offset++);
+            let dataStart = dv.getUint32(offset, true);
+            offset += 4;
+            let compressedSize = dv.getUint32(offset, true);
+            offset += 4;
+            let crc32 = dv.getUint32(offset, true);
+            offset += 4;
+            map.set(zipEntryName, [zipFileName, compressMethod, dataStart, compressedSize, crc32]);
+        }
+        if (offset != end)
+            throw new Error(`offset != end`);
+        if (map.size != count)
+            throw new Error(`map.size != count`);
+        return map;
     }
     static async convertCNLegacy() {
+        this.markCNLegacyConversionFinished(false);
         console.log(`zippedAssets: converting CN legacy ./static/ ...`);
         const assetToZipMap = new Map();
         const fileHandleMap = new Map();
-        const compressMethod = 0;
+        const zipDir = this.cnOffcialZippedAssetsDir;
         // (1) downloaded assets
         for (let name of this.assetJsonNames) {
-            console.log(`zippedAssets: converting legacy CN static resource [${name}]...`);
+            console.log(`zippedAssets: converting legacy CN static resource [${name}] ...`);
             let jsonPath = path.join(this.CNLegacyAssetJsonDir, `zip_asset_${name}.json`);
             let assetJSON = JSON.parse(await fsPromises.readFile(jsonPath, 'utf-8'));
             let joinedZipFileName = `cn_official_asset_${name}_joined.zip`;
-            let outPath = path.join(this.cnOffcialZippedAssetsDir, joinedZipFileName);
+            let outPath = path.join(zipDir, joinedZipFileName);
+            if (await this.checkFileFinished(outPath, true)) {
+                console.log(`zippedAssets: already finished: [${joinedZipFileName}]`);
+                await this.registerZips([joinedZipFileName], assetToZipMap, fileHandleMap);
+                continue;
+            }
             let outHandle = await fsPromises.open(outPath, "w+");
             let entryNameSet = new Set();
             let CDFHBufs = [];
@@ -89,7 +231,7 @@ class zippedAssets {
                 let zipFileSize = (await inHandle.stat()).size;
                 let crc32 = await this.crc32(inHandle);
                 let CDFHList = [];
-                let zipParsedMap = await this.parseZip(zipFilePath, inHandle, CDFHList);
+                await this.parseZip(zipFilePath, inHandle, CDFHList);
                 let fileHeader = await this.readFileHeader(inHandle, CDFHList[0].FHOffset);
                 fileHeader = this.modifyFileHeader(fileHeader, zipFilePath, zipFileSize, crc32);
                 await outHandle.write(fileHeader);
@@ -113,21 +255,16 @@ class zippedAssets {
                     stream.pipeline(inStream, outStream, (err) => { reject(err); });
                 });
                 offset += zipFileSize;
-                process.stdout.write(`\r\x1b[K` + `zippedAssets: [${clampString(joinedZipFileName)}]: written [${clampString(zipFilePath)}]`);
-                assetToZipMap.set(zipFilePath, [joinedZipFileName, compressMethod, headerBeforeNestedZip, zipFileSize, crc32]);
-                zipParsedMap.forEach((positionInZip, zipEntryName) => {
-                    positionInZip[0] = joinedZipFileName;
-                    positionInZip[2] += nestedZipFileStart;
-                    assetToZipMap.set(zipEntryName, positionInZip);
-                });
+                (0, log_no_lf_1.logNoLF)(`zippedAssets: [${(0, log_no_lf_1.clampString)(joinedZipFileName)}]: written [${(0, log_no_lf_1.clampString)(zipFilePath)}]`);
             }
             process.stdout.write("\n");
             let newEOCD = this.newEOCD(CDFHBufs.length, CDFHBufs.reduce((prev, cur) => prev + cur.byteLength, 0), offset);
             await outHandle.writev(CDFHBufs);
             await outHandle.write(newEOCD);
+            await outHandle.sync();
             await outHandle.close();
-            let newHandle = await fsPromises.open(outPath, "r");
-            fileHandleMap.set(joinedZipFileName, newHandle);
+            await this.markFileFinished(outPath);
+            await this.registerZips([joinedZipFileName], assetToZipMap, fileHandleMap);
             console.log(`zippedAssets: packed ${entryNameSet.size} files into [${joinedZipFileName}], ${assetToZipMap.size} packed files in total`);
         }
         // web resources
@@ -139,9 +276,15 @@ class zippedAssets {
         webResFileList.push("js/_common/baseConfig.js");
         webResFileList.push("index.html");
         let CDFHBufs = [];
-        const webResJoinedZipFileName = "cn_official_web_res.zip";
-        const webResJoinedZipPath = path.join(this.cnOffcialZippedAssetsDir, webResJoinedZipFileName);
-        let outHandle = await fsPromises.open(webResJoinedZipPath, "w+");
+        const webResZipFileName = "cn_official_web_res.zip";
+        const webResZipPath = path.join(zipDir, webResZipFileName);
+        if (await this.checkFileFinished(webResZipPath, true)) {
+            console.log(`zippedAssets: already finished: [${webResZipFileName}]`);
+            await this.registerZips([webResZipFileName], assetToZipMap, fileHandleMap, true);
+            this.markCNLegacyConversionFinished(true);
+            return new zippedAssets(assetToZipMap, fileHandleMap);
+        }
+        let outHandle = await fsPromises.open(webResZipPath, "w+");
         let offset = 0;
         let skippedCount = 0;
         for (let webResFileName of webResFileList) {
@@ -173,22 +316,31 @@ class zippedAssets {
             let deflatedStart = offset;
             await outHandle.write(deflated);
             offset += deflated.byteLength;
-            process.stdout.write(`\r\x1b[K` + `zippedAssets: [${clampString(webResJoinedZipFileName)}]: written [${clampString(pathInUrl)}]`);
+            (0, log_no_lf_1.logNoLF)(`zippedAssets: [${(0, log_no_lf_1.clampString)(webResZipFileName)}]: written [${(0, log_no_lf_1.clampString)(pathInUrl)}]`);
             CDFHBufs.push(this.newCDFH(pathInUrl, headerBeforeDeflated, compressMethod, deflatedSize, inflatedSize, crc32));
-            if (assetToZipMap.has(pathInUrl))
-                throw new Error(`conflicting pathInUrl = [${pathInUrl}]`);
-            assetToZipMap.set(pathInUrl, [webResJoinedZipFileName, compressMethod, deflatedStart, deflatedSize, crc32]);
         }
         process.stdout.write("\n");
         let newEOCD = this.newEOCD(CDFHBufs.length, CDFHBufs.reduce((prev, cur) => prev + cur.byteLength, 0), offset);
         await outHandle.writev(CDFHBufs);
         await outHandle.write(newEOCD);
+        await outHandle.sync();
         await outHandle.close();
-        let newHandle = await fsPromises.open(webResJoinedZipPath, "r");
-        fileHandleMap.set(webResJoinedZipFileName, newHandle);
-        console.log(`zippedAssets: packed ${webResFileList.length - skippedCount} files into [${webResJoinedZipFileName}], ${assetToZipMap.size} packed files in total`);
+        await this.markFileFinished(webResZipPath);
+        await this.registerZips([webResZipFileName], assetToZipMap, fileHandleMap, true);
+        console.log(`zippedAssets: packed ${webResFileList.length - skippedCount} files into [${webResZipFileName}], ${assetToZipMap.size} packed files in total`);
         console.log(`zippedAssets: packed ${assetToZipMap.size} files into ${fileHandleMap.size} zip archives in total`);
-        return new _a(assetToZipMap, fileHandleMap);
+        this.markCNLegacyConversionFinished(true);
+        return new zippedAssets(assetToZipMap, fileHandleMap);
+    }
+    static async isCNLegacyConversionUnfinished() {
+        const markerPath = path.join(this.cnOffcialZippedAssetsDir, "conversion_is_unfinished");
+        return await this.checkIsDir(markerPath);
+    }
+    static async markCNLegacyConversionFinished(finished) {
+        const markerPath = path.join(this.cnOffcialZippedAssetsDir, "conversion_is_unfinished");
+        if (await this.checkIsDir(markerPath) == !finished)
+            return;
+        await fsPromises[finished ? "rmdir" : "mkdir"](markerPath);
     }
     async checkIntegrity(subDirectory = "cn_official") {
         console.log(`zippedAssets: checkIntegrity for ${subDirectory}...`);
@@ -199,9 +351,9 @@ class zippedAssets {
         const md5MismatchSet = new Set();
         const crc32MismatchSet = new Set();
         // check md5 according to official asset list jsons
-        const prefix = `/${_a.CNLegacyPathPrefix}/${_a.CNLegacyAssetVer}/`;
+        const prefix = `/${zippedAssets.CNLegacyPathPrefix}/${zippedAssets.CNLegacyAssetVer}/`;
         const assetJsonFileNames = [];
-        _a.assetJsonNames.forEach((name) => {
+        zippedAssets.assetJsonNames.forEach((name) => {
             name = `asset_${name}.json`;
             assetJsonFileNames.push(name);
             name = `zip_${name}`;
@@ -216,7 +368,7 @@ class zippedAssets {
             for (let entry of assetList) {
                 if (entry.file_list.length != 1)
                     throw new Error(`entry.file_list.length != 1`);
-                let pathInUrl = `/${_a.CNLegacyPathPrefix}/${entry.file_list[0].url}`;
+                let pathInUrl = `/${zippedAssets.CNLegacyPathPrefix}/${entry.file_list[0].url}`;
                 let md5 = entry.md5;
                 md5Map.set(pathInUrl, md5);
             }
@@ -228,7 +380,7 @@ class zippedAssets {
             if (data == null) {
                 missingSet.add(pathInUrl);
                 checkResult = false;
-                process.stdout.write(`\r\x1b[K` + `zippedAssets: md5: [MISSING] [${clampString(pathInUrl)}]` + `\n`);
+                (0, log_no_lf_1.logNoLF)(`zippedAssets: md5: [MISSING] [${(0, log_no_lf_1.clampString)(pathInUrl)}]` + `\n`);
                 continue;
             }
             let md5 = crypto.createHash("md5").update(data).digest().toString('hex').toLowerCase();
@@ -240,7 +392,7 @@ class zippedAssets {
             else {
                 okaySet.add(pathInUrl);
             }
-            process.stdout.write(`\r\x1b[K` + `zippedAssets: md5: [${okay ? "OK" : "FAIL"}] [${clampString(pathInUrl)}]` + `${okay ? "" : "\n"}`);
+            (0, log_no_lf_1.logNoLF)(`zippedAssets: md5: [${okay ? "OK" : "FAIL"}] [${(0, log_no_lf_1.clampString)(pathInUrl)}]` + `${okay ? "" : "\n"}`);
         }
         process.stdout.write("\n");
         // convert okaySet to pathInZip
@@ -265,7 +417,7 @@ class zippedAssets {
             else {
                 okaySetInZip.add(pathInZip);
             }
-            process.stdout.write(`\r\x1b[K` + `zippedAssets: crc32: [${okay ? "OK" : "FAIL"}] [${clampString(pathInZip)}]` + `${okay ? "" : "\n"}`);
+            (0, log_no_lf_1.logNoLF)(`zippedAssets: crc32: [${okay ? "OK" : "FAIL"}] [${(0, log_no_lf_1.clampString)(pathInZip)}]` + `${okay ? "" : "\n"}`);
         }
         process.stdout.write("\n");
         console.log(`zippedAssets: checkIntegrity ${checkResult ? "OK" : "FAIL"}`);
@@ -519,6 +671,37 @@ class zippedAssets {
         dv.setUint32(16, CDOffset, true);
         return buf;
     }
+    static async checkIsDir(dirPath) {
+        try {
+            return (await fsPromises.stat(dirPath)).isDirectory();
+        }
+        catch (e) {
+            return false;
+        }
+    }
+    static async checkIsFile(filePath) {
+        try {
+            return (await fsPromises.stat(filePath)).isFile();
+        }
+        catch (e) {
+            return false;
+        }
+    }
+    static async checkFileFinished(filePath, markIfUnfinished = false) {
+        let markerPath = `${filePath}.unfinished`;
+        if (await this.checkIsFile(filePath) && !await this.checkIsDir(markerPath))
+            return true;
+        if (markIfUnfinished && !await this.checkIsDir(markerPath))
+            await fsPromises.mkdir(markerPath);
+        return false;
+    }
+    static async markFileFinished(filePath) {
+        let markerPath = `${filePath}.unfinished`;
+        try {
+            await fsPromises.rmdir(markerPath);
+        }
+        catch (e) { }
+    }
     getPathInZip(pathInUrl) {
         // (1) lookup directly (web_res.zip)
         let pathInZip = pathInUrl.replace(/^\//, "");
@@ -572,7 +755,7 @@ class zippedAssets {
     async extract(zipFileName, method, dataOffset, compressedSize, crc32) {
         let handle = this.fileHandleMap.get(zipFileName);
         if (handle == null) {
-            const zipFilePath = path.join(_a.cnOffcialZippedAssetsDir, zipFileName);
+            const zipFilePath = path.join(zippedAssets.cnOffcialZippedAssetsDir, zipFileName);
             handle = await fsPromises.open(zipFilePath, "r");
             this.fileHandleMap.set(zipFileName, handle);
         }
@@ -583,7 +766,7 @@ class zippedAssets {
             buf = new Uint8Array(inflated.buffer, inflated.byteOffset, inflated.byteLength); // TODO make this streamed
         }
         if (crc32 != null) {
-            let calculated = await _a.crc32(buf);
+            let calculated = await zippedAssets.crc32(buf);
             if (crc32 != calculated)
                 return;
         }
@@ -630,3 +813,4 @@ zippedAssets.CNLegacy404Set = new Set([
     "/magica/resource/download/asset/master/resource/2207081501/asset_section_campaign_1063.json",
 ]);
 zippedAssets.chunkSize = 1048576;
+zippedAssets.mapVerMagic = toInt("map\x01");

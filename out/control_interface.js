@@ -24,62 +24,6 @@ const save_open_id_ticket_hook_1 = require("./hooks/save_open_id_ticket_hook");
 const favicon = require("./favicon");
 const zipped_assets_1 = require("./zipped_assets");
 class controlInterface {
-    static async launch() {
-        const params = await parameters.params.load();
-        if (params.checkModified())
-            await params.save();
-        let zippedassets = await zipped_assets_1.zippedAssets.init();
-        let localserver = new local_server_1.localServer(params);
-        let httpproxy = new http_proxy_1.httpProxy(params);
-        let crawler = await staticResCrawler.crawler.init(params, localserver, zippedassets);
-        let control_interface = new controlInterface(params, [localserver, httpproxy], crawler);
-        control_interface.openWebOnAndroid();
-    }
-    openWebOnAndroid() {
-        var _a;
-        try {
-            const addr = this.params.listenList.controlInterface;
-            const webUrl = `http://${addr.host}:${addr.port}/`;
-            let shellCmd;
-            const androidSpecificFileList = [
-                "/system/build.prop",
-                "/sdcard",
-                "/storage/emulated",
-            ];
-            let found = androidSpecificFileList.filter((path) => fs.existsSync(path));
-            if (found.length > 0) {
-                shellCmd = `am start -a \"android.intent.action.VIEW\" -d \"${webUrl}\"`;
-            }
-            else if ((_a = process.env["windir"]) === null || _a === void 0 ? void 0 : _a.match(/^[A-Z]\:\\WINDOWS/i)) {
-                shellCmd = `start ${webUrl}`;
-            }
-            if (shellCmd == null || !this.params.autoOpenWeb) {
-                console.log(`请手动在浏览器中打开Web控制界面\nOpen Web control interface in your browser manually\n  ${webUrl}`);
-                return;
-            }
-            ChildProcess.exec(shellCmd, (error, stdout, stderr) => {
-                try {
-                    if (error == null) {
-                        console.log(`    即将从浏览器打开Web控制界面...\n  ${webUrl}`);
-                        console.log(`  如果没成功自动打开浏览器，请手动复制上述网址粘贴到浏览器地址栏`);
-                        console.log(`  Please manually copy the URL above to the address bar of your browser, in case it did not pop up automatically`);
-                    }
-                    else {
-                        console.error("error", error);
-                        console.error("stdout", stdout);
-                        console.error("stderr", stderr);
-                    }
-                }
-                catch (e) {
-                    console.error(e);
-                }
-            });
-        }
-        catch (e) {
-            console.error(e);
-        }
-        console.log("（按CTRL+C即可中断程序运行）");
-    }
     constructor(params, serverList, crawler) {
         this.closing = false;
         this.isTogglingLoopbackListen = false;
@@ -634,6 +578,62 @@ class controlInterface {
         this.bsgamesdkPwdAuth = bsgamesdkPwdAuth;
         this.userdataDmp = userdataDmp;
         this.crawler = crawler;
+    }
+    static async launch() {
+        const params = await parameters.params.load();
+        if (params.checkModified())
+            await params.save();
+        let zippedassets = await zipped_assets_1.zippedAssets.init();
+        let localserver = new local_server_1.localServer(params);
+        let httpproxy = new http_proxy_1.httpProxy(params);
+        let crawler = await staticResCrawler.crawler.init(params, localserver, zippedassets);
+        let control_interface = new controlInterface(params, [localserver, httpproxy], crawler);
+        control_interface.openWebOnAndroid();
+    }
+    openWebOnAndroid() {
+        var _a;
+        try {
+            const addr = this.params.listenList.controlInterface;
+            const webUrl = `http://${addr.host}:${addr.port}/`;
+            let shellCmd;
+            const androidSpecificFileList = [
+                "/system/build.prop",
+                "/sdcard",
+                "/storage/emulated",
+            ];
+            let found = androidSpecificFileList.filter((path) => fs.existsSync(path));
+            if (found.length > 0) {
+                shellCmd = `am start -a \"android.intent.action.VIEW\" -d \"${webUrl}\"`;
+            }
+            else if ((_a = process.env["windir"]) === null || _a === void 0 ? void 0 : _a.match(/^[A-Z]\:\\WINDOWS/i)) {
+                shellCmd = `start ${webUrl}`;
+            }
+            if (shellCmd == null || !this.params.autoOpenWeb) {
+                console.log(`请手动在浏览器中打开Web控制界面\nOpen Web control interface in your browser manually\n  ${webUrl}`);
+                return;
+            }
+            ChildProcess.exec(shellCmd, (error, stdout, stderr) => {
+                try {
+                    if (error == null) {
+                        console.log(`    即将从浏览器打开Web控制界面...\n  ${webUrl}`);
+                        console.log(`  如果没成功自动打开浏览器，请手动复制上述网址粘贴到浏览器地址栏`);
+                        console.log(`  Please manually copy the URL above to the address bar of your browser, in case it did not pop up automatically`);
+                    }
+                    else {
+                        console.error("error", error);
+                        console.error("stdout", stdout);
+                        console.error("stderr", stderr);
+                    }
+                }
+                catch (e) {
+                    console.error(e);
+                }
+            });
+        }
+        catch (e) {
+            console.error(e);
+        }
+        console.log("（按CTRL+C即可中断程序运行）");
     }
     async closeAll() {
         let promises = this.serverList.map((server) => server.close());

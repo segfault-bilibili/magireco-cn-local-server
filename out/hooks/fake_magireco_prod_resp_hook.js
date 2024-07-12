@@ -11,70 +11,6 @@ const bsgamesdk_pwd_authenticate_1 = require("../bsgamesdk-pwd-authenticate");
 const missing_data_1 = require("./etc/missing_data");
 const favicon = require("../favicon");
 class fakeMagirecoProdRespHook {
-    get stringifiedOverrideDB() {
-        return JSON.stringify(this.params.overridesDB, util_1.replacer);
-    }
-    get overrides() {
-        const lastDump = this.userdataDmp.lastDump;
-        if (lastDump == null)
-            return;
-        const uid = lastDump.uid;
-        if (typeof uid !== 'number' || isNaN(uid))
-            return;
-        let overrides = this.params.overridesDB.get(uid);
-        if (overrides == null) {
-            overrides = {};
-            this.params.overridesDB.set(uid, overrides);
-        }
-        return overrides;
-    }
-    getOverrideValue(key) {
-        return key.split(".").reduce((prev, curr) => {
-            if (prev == null)
-                return;
-            if (!(curr in prev))
-                return;
-            return prev[curr];
-        }, this.overrides);
-    }
-    isOverriden(key) {
-        const keysPopped = key.split(".");
-        const lastKey = keysPopped.pop();
-        const obj = keysPopped.reduce((prev, curr) => {
-            if (prev == null)
-                return;
-            if (!(curr in prev))
-                return;
-            return prev[curr];
-        }, this.overrides);
-        if (obj == null)
-            return false; // avoid crash
-        if (lastKey == null) {
-            console.error(`isOverriden key=[${key}] lastKey == null`);
-            throw new Error(`lastKey == null`);
-        }
-        return lastKey in obj;
-    }
-    setOverrideValue(key, val, reset = false) {
-        console.log(`setOverrideValue ... key=[${key}] val`, val);
-        const keysPopped = key.split(".");
-        const lastKey = keysPopped.pop();
-        if (lastKey == null)
-            return;
-        const obj = keysPopped.reduce((prev, curr) => {
-            if (prev == null)
-                return;
-            if (prev[curr] == null)
-                prev[curr] = {};
-            return prev[curr];
-        }, this.overrides);
-        if (val == null && reset)
-            delete obj[lastKey];
-        else
-            obj[lastKey] = val;
-        console.log(`setOverrideValue done key=[${key}] val`, val);
-        this.params.saveOverrideDB();
-    }
     constructor(params, crawler, dmp) {
         this.pageKeys = {
             //登录页
@@ -402,6 +338,70 @@ class fakeMagirecoProdRespHook {
         this.bilibiliGameRealnameAuthRegEx = /^(http|https):\/\/game\.bilibili\.com\/sdk\/authentication?.+$/;
         this.part2Section3RegEx = /^\/magica\/resource\/download\/asset\/master\/resource\/2207081501\/asset_section_10230(1|2|3)\.json$/;
         this.arenaSimulateMap = new Map();
+    }
+    get stringifiedOverrideDB() {
+        return JSON.stringify(this.params.overridesDB, util_1.replacer);
+    }
+    get overrides() {
+        const lastDump = this.userdataDmp.lastDump;
+        if (lastDump == null)
+            return;
+        const uid = lastDump.uid;
+        if (typeof uid !== 'number' || isNaN(uid))
+            return;
+        let overrides = this.params.overridesDB.get(uid);
+        if (overrides == null) {
+            overrides = {};
+            this.params.overridesDB.set(uid, overrides);
+        }
+        return overrides;
+    }
+    getOverrideValue(key) {
+        return key.split(".").reduce((prev, curr) => {
+            if (prev == null)
+                return;
+            if (!(curr in prev))
+                return;
+            return prev[curr];
+        }, this.overrides);
+    }
+    isOverriden(key) {
+        const keysPopped = key.split(".");
+        const lastKey = keysPopped.pop();
+        const obj = keysPopped.reduce((prev, curr) => {
+            if (prev == null)
+                return;
+            if (!(curr in prev))
+                return;
+            return prev[curr];
+        }, this.overrides);
+        if (obj == null)
+            return false; // avoid crash
+        if (lastKey == null) {
+            console.error(`isOverriden key=[${key}] lastKey == null`);
+            throw new Error(`lastKey == null`);
+        }
+        return lastKey in obj;
+    }
+    setOverrideValue(key, val, reset = false) {
+        console.log(`setOverrideValue ... key=[${key}] val`, val);
+        const keysPopped = key.split(".");
+        const lastKey = keysPopped.pop();
+        if (lastKey == null)
+            return;
+        const obj = keysPopped.reduce((prev, curr) => {
+            if (prev == null)
+                return;
+            if (prev[curr] == null)
+                prev[curr] = {};
+            return prev[curr];
+        }, this.overrides);
+        if (val == null && reset)
+            delete obj[lastKey];
+        else
+            obj[lastKey] = val;
+        console.log(`setOverrideValue done key=[${key}] val`, val);
+        this.params.saveOverrideDB();
     }
     // if matched, keep a copy of request/response data in memory
     async matchRequest(method, url, httpVersion, headers) {
@@ -979,7 +979,7 @@ class fakeMagirecoProdRespHook {
             requestId: `${(0, util_1.getRandomHex)(32)}`,
             timestamp: `${new Date().getTime()}`,
             code: 0,
-            hash: `${(0, util_1.getRandomHex)(16)}`, // fake one
+            hash: `${(0, util_1.getRandomHex)(16)}`,
             cipher_key: "-----BEGIN PUBLIC KEY-----\nMIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDjb4V7EidX/ym28t2ybo0U6t0n\n6p4ej8VjqKHg100va6jkNbNTrLQqMCQCAYtXMXXp2Fwkk6WR+12N9zknLjf+C9sx\n/+l48mjUU8RqahiFD1XT/u2e0m2EN029OhCgkHx3Fc/KlFSIbak93EH/XlYis0w+\nXl69GV6klzgxW6d2xQIDAQAB\n-----END PUBLIC KEY-----",
             server_message: "",
         };

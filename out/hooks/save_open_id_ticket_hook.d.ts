@@ -1,3 +1,6 @@
+/// <reference types="node" />
+/// <reference types="node" />
+/// <reference types="node" />
 import * as http from "http";
 import * as http2 from "http2";
 import { passOnRequest } from "../local_server";

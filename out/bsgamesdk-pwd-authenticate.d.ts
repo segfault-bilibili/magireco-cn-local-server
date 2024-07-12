@@ -1,11 +1,11 @@
 import * as parameters from "./parameters";
 import { localServer } from "./local_server";
-export type bsgamesdkIDs = {
+export declare type bsgamesdkIDs = {
     buvid: string;
     udid: string;
     bd_id: string;
 };
-export type bsgamesdkResponse = {
+export declare type bsgamesdkResponse = {
     requestId: string;
     timestamp: string;
     code: number;

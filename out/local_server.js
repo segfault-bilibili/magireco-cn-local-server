@@ -14,7 +14,7 @@ var constants;
 (function (constants) {
     constants["DOWNGRADE_TO_HTTP1"] = "DOWNGRADE_TO_HTTP1";
     constants["IS_SELF_IP"] = "IS_SELF_IP";
-})(constants || (exports.constants = constants = {}));
+})(constants = exports.constants || (exports.constants = {}));
 class localServer {
     constructor(params) {
         const certGen = new certGenerator.certGen(params.CACertAndKey);
