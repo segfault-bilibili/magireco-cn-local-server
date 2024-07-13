@@ -82,6 +82,9 @@ export class zippedAssets {
         "/magica/resource/download/asset/master/resource/2112291809/movie/char/low/movie_1117_3.usm",
         "/magica/resource/download/asset/master/resource/2207081501/asset_section_campaign_1063.json",
     ]);
+    static CNLegacyIsKnown404(pathInUrl: string): boolean {
+        return this.CNLegacy404Set.has(pathInUrl);
+    }
 
     private static readonly chunkSize = 1048576;
 
@@ -945,7 +948,7 @@ export class zippedAssets {
     }
 
 
-    private getPathInZip(pathInUrl: string): string | undefined {
+    getPathInZip(pathInUrl: string): string | undefined {
         // (1) lookup directly (web_res.zip)
         let pathInZip = pathInUrl.replace(/^\//, "");
         if (this.assetToZipMap.has(pathInZip)) return pathInZip;

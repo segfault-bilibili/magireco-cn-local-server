@@ -493,7 +493,7 @@ export class crawler {
     }
 
     isKnown404(pathInUrl: string): boolean {
-        return this.staticFile404Set.has(pathInUrl);
+        return zippedAssets.CNLegacyIsKnown404(pathInUrl);
     }
 
     private async checkStaticCompleted(): Promise<{ isWebResCompleted: boolean, isAssetsCompleted: boolean }> {
@@ -512,7 +512,7 @@ export class crawler {
                 let completed = true;
                 for (let subPath in fileTimeStampObj) {
                     let key = `/magica/${subPath}`.split("/").map((s) => encodeURIComponent(s)).join("/");
-                    if (!this.staticFileMap.has(key) && !this.staticFile404Set.has(key)) {
+                    if (!zippedAssets.CNLegacyIsKnown404(key) && this.zippedAssets.getPathInZip(key) == null) {
                         console.log(`[${key}] is still missing`);
                         completed = false;
                         break;
@@ -553,7 +553,7 @@ export class crawler {
                     mergedAssetList.find((item) => {
                         const fileName = item.file_list[0].url;
                         const key = `/magica/resource/download/asset/master/resource/${fileName}`;
-                        if (!this.staticFileMap.has(key) && !this.staticFile404Set.has(key)) {
+                        if (!zippedAssets.CNLegacyIsKnown404(key) && this.zippedAssets.getPathInZip(key) == null) {
                             console.log(`[${key}] is still missing`);
                             completed = false;
                             return true;
