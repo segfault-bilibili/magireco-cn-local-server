@@ -1,4 +1,5 @@
 /// <reference types="node" />
+declare type zipEntryName = string;
 declare type subDirectory = "cn_official" | "cn_mod" | "cn_output";
 export declare class zippedAssets {
     private static readonly assetJsonNames;
@@ -16,6 +17,7 @@ export declare class zippedAssets {
     private static readonly CNLegacyAssetVer;
     private static readonly CNLegacyAssetJsonDir;
     private static readonly CNLegacy404Set;
+    static CNLegacyIsKnown404(pathInUrl: string): boolean;
     private static readonly chunkSize;
     private constructor();
     static init(): Promise<zippedAssets>;
@@ -26,7 +28,9 @@ export declare class zippedAssets {
     private static convertCNLegacy;
     private static isCNLegacyConversionUnfinished;
     private static markCNLegacyConversionFinished;
+    readonly integrityCheckStatus: integrityCheckStatus;
     checkIntegrity(subDirectory?: subDirectory): Promise<boolean>;
+    private _checkIntegrity;
     private static crc32;
     private static parseZip;
     private static readFileHeader;
@@ -41,9 +45,44 @@ export declare class zippedAssets {
     private static checkIsFile;
     private static checkFileFinished;
     private static markFileFinished;
-    private getPathInZip;
+    getPathInZip(pathInUrl: string): string | undefined;
     readFileAsync(pathInUrl: string, crc32?: boolean | number): Promise<Buffer | undefined>;
     static getContentType(pathInUrl: string): string;
     private extract;
+}
+declare class integrityCheckStatus {
+    private md5Map;
+    private webResFileSet;
+    private extraSet;
+    private _totalCount?;
+    get totalCount(): number;
+    private readonly okaySet;
+    private readonly missingSet;
+    private readonly md5MismatchSet;
+    private readonly crc32MismatchSet;
+    addPassed(pathInZip: zipEntryName): void;
+    addMissing(pathInZip: zipEntryName): void;
+    addMismatch(pathInZip: zipEntryName, checksumType: "md5" | "crc32"): void;
+    private _passedCount?;
+    get passedCount(): number;
+    private _missingCount?;
+    get missingCount(): number;
+    private _md5MismatchCount?;
+    get md5MismatchCount(): number;
+    private _crc32MismatchCount?;
+    get crc32MismatchCount(): number;
+    get failedCount(): number;
+    get doneCount(): number;
+    get remainingCount(): number;
+    get isAllPassed(): boolean;
+    isFilePassed(pathInZip: zipEntryName): boolean;
+    get statusString(): string;
+    clear(keepCounts?: boolean): void;
+    init(md5Map: Map<zipEntryName, string>, webResFileSet: Set<zipEntryName>, extraSet: Set<zipEntryName>): void;
+    private readonly pendingRequestSet;
+    get isRunning(): boolean;
+    getPendingResult(): Promise<boolean>;
+    notifyDone(): void;
+    notifyError(e?: any): void;
 }
 export {};

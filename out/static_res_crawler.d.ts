@@ -32,7 +32,7 @@ export declare class crawler {
     private static readonly staticFile404SetPathUncomp;
     private readonly localStagingCNDir;
     private static readonly brotliQuality;
-    private zippedAssets;
+    readonly zippedAssets: zippedAssets;
     private static readonly prodHost;
     private get httpsProdMagicaNoSlash();
     private static readonly patchHost;

@@ -16,9 +16,14 @@ const toInt = (s) => {
 };
 class zippedAssets {
     constructor(assetToZipMap, fileHandleMap) {
+        // integrity check
+        this.integrityCheckStatus = new integrityCheckStatus();
         this.assetToZipMap = assetToZipMap;
         this.fileHandleMap = fileHandleMap;
         console.log(`zippedAssets: initialized, registered ${this.assetToZipMap.size} entries stored in ${this.fileHandleMap.size} zip archives`);
+    }
+    static CNLegacyIsKnown404(pathInUrl) {
+        return this.CNLegacy404Set.has(pathInUrl);
     }
     static async init() {
         // 1. if ./static_zip/ does not exist, try convert legacy ./static/
@@ -269,10 +274,12 @@ class zippedAssets {
         }
         // web resources
         console.log(`zippedAssets: converting web resources...`);
-        const replacementJsPath = path.join(this.CNLegacyRootDir, "magica/js/system/replacement.js");
+        const replacementJs = "js/system/replacement.js";
+        const replacementJsPath = path.join(this.CNLegacyRootDir, `magica/${replacementJs}`);
         const webResFileList = Object.keys(JSON.parse((await fsPromises.readFile(replacementJsPath, 'utf-8')).replace("window.fileTimeStamp=", "")));
+        // supplements to replacement.js
         cn_legacy_asset_json_list_1.cnLegacyAssetJsonList.forEach((json) => webResFileList.push(`${this.CNLegacyPathPrefix.replace(/^magica\//, "")}/${this.CNLegacyAssetVer}/${json}`));
-        webResFileList.push("js/system/replacement.js");
+        webResFileList.push(replacementJs);
         webResFileList.push("js/_common/baseConfig.js");
         webResFileList.push("index.html");
         let CDFHBufs = [];
@@ -288,12 +295,12 @@ class zippedAssets {
         let offset = 0;
         let skippedCount = 0;
         for (let webResFileName of webResFileList) {
-            let pathInUrl = `magica/${webResFileName}`.split("/").map((s) => encodeURIComponent(s)).join("/");
-            if (this.CNLegacy404Set.has(`/${pathInUrl}`)) {
+            let pathInZip = `magica/${webResFileName}`.split("/").map((s) => encodeURIComponent(s)).join("/");
+            if (this.CNLegacy404Set.has(`/${pathInZip}`)) {
                 skippedCount++;
                 continue;
             }
-            let webResFilePath = path.join(this.CNLegacyRootDir, pathInUrl);
+            let webResFilePath = path.join(this.CNLegacyRootDir, pathInZip);
             let inHandle = await fsPromises.open(webResFilePath, "r");
             let inflatedSize = (await inHandle.stat()).size;
             let inflated = new Uint8Array(inflatedSize);
@@ -309,15 +316,15 @@ class zippedAssets {
                 deflated = inflated;
                 deflatedSize = inflatedSize;
             }
-            let fileHeader = this.newFileHeader(pathInUrl, compressMethod, deflatedSize, inflatedSize, crc32);
+            let fileHeader = this.newFileHeader(pathInZip, compressMethod, deflatedSize, inflatedSize, crc32);
             await outHandle.write(fileHeader);
             let headerBeforeDeflated = offset;
             offset += fileHeader.byteLength;
             let deflatedStart = offset;
             await outHandle.write(deflated);
             offset += deflated.byteLength;
-            (0, log_no_lf_1.logNoLF)(`zippedAssets: [${(0, log_no_lf_1.clampString)(webResZipFileName)}]: written [${(0, log_no_lf_1.clampString)(pathInUrl)}]`);
-            CDFHBufs.push(this.newCDFH(pathInUrl, headerBeforeDeflated, compressMethod, deflatedSize, inflatedSize, crc32));
+            (0, log_no_lf_1.logNoLF)(`zippedAssets: [${(0, log_no_lf_1.clampString)(webResZipFileName)}]: written [${(0, log_no_lf_1.clampString)(pathInZip)}]`);
+            CDFHBufs.push(this.newCDFH(pathInZip, headerBeforeDeflated, compressMethod, deflatedSize, inflatedSize, crc32));
         }
         process.stdout.write("\n");
         let newEOCD = this.newEOCD(CDFHBufs.length, CDFHBufs.reduce((prev, cur) => prev + cur.byteLength, 0), offset);
@@ -342,15 +349,26 @@ class zippedAssets {
             return;
         await fsPromises[finished ? "rmdir" : "mkdir"](markerPath);
     }
-    async checkIntegrity(subDirectory = "cn_official") {
+    checkIntegrity(subDirectory = "cn_official") {
+        return new Promise((resolve, reject) => {
+            const status = this.integrityCheckStatus;
+            const isAlreadyRunning = status.isRunning;
+            if (isAlreadyRunning)
+                console.warn(`zippedAssets: checkIntegrity is already running`);
+            const resultPromise = status.getPendingResult();
+            resultPromise.then((result) => resolve(result)).catch((e) => reject(e));
+            if (!isAlreadyRunning)
+                this._checkIntegrity(subDirectory).then(() => status.notifyDone()).catch((e) => status.notifyError(e));
+        });
+    }
+    async _checkIntegrity(subDirectory = "cn_official") {
+        var _b;
         console.log(`zippedAssets: checkIntegrity for ${subDirectory}...`);
-        let checkResult = true;
         const md5Map = new Map();
-        const okaySet = new Set();
-        const missingSet = new Set();
-        const md5MismatchSet = new Set();
-        const crc32MismatchSet = new Set();
-        // check md5 according to official asset list jsons
+        const webResFileSet = new Set();
+        const extraSet = new Set();
+        const status = this.integrityCheckStatus;
+        // fill md5Map, according to official asset list jsons
         const prefix = `/${zippedAssets.CNLegacyPathPrefix}/${zippedAssets.CNLegacyAssetVer}/`;
         const assetJsonFileNames = [];
         zippedAssets.assetJsonNames.forEach((name) => {
@@ -369,60 +387,102 @@ class zippedAssets {
                 if (entry.file_list.length != 1)
                     throw new Error(`entry.file_list.length != 1`);
                 let pathInUrl = `/${zippedAssets.CNLegacyPathPrefix}/${entry.file_list[0].url}`;
+                if (zippedAssets.CNLegacy404Set.has(pathInUrl))
+                    continue;
+                let pathInZip = this.getPathInZip(pathInUrl);
+                if (pathInZip == null) {
+                    status.addMissing(pathInUrl);
+                    (0, log_no_lf_1.logNoLF)(`zippedAssets: md5: [MISSING] [${(0, log_no_lf_1.clampString)(pathInUrl)}]` + `\n`);
+                    continue;
+                }
                 let md5 = entry.md5;
-                md5Map.set(pathInUrl, md5);
+                md5Map.set(pathInZip, md5);
             }
         }
+        // fill webResFileSet, according to replacement.js
+        const replacementJs = "js/system/replacement.js";
+        const replacementJsPathInUrl = `/magica/${replacementJs}`;
+        const webResFileListData = (_b = (await this.readFileAsync(replacementJsPathInUrl))) === null || _b === void 0 ? void 0 : _b.toString('utf-8');
+        if (webResFileListData == null)
+            throw new Error(`cannot read replacement.js`);
+        Object.keys(JSON.parse(webResFileListData.replace("window.fileTimeStamp=", ""))).forEach((partialPath) => {
+            let pathInZip = `magica/${partialPath}`.split("/").map((s) => encodeURIComponent(s)).join("/");
+            let pathInUrl = `/${pathInZip}`;
+            if (!zippedAssets.CNLegacy404Set.has(pathInUrl))
+                webResFileSet.add(pathInZip);
+        });
+        // supplements to replacement.js
+        cn_legacy_asset_json_list_1.cnLegacyAssetJsonList.forEach((json) => webResFileSet.add(`${zippedAssets.CNLegacyPathPrefix}/${zippedAssets.CNLegacyAssetVer}/${json}`));
+        [
+            replacementJs,
+            "js/_common/baseConfig.js",
+            "index.html",
+        ].forEach((partialPath) => webResFileSet.add(`magica/${partialPath}`));
+        // fill extraSet, contains files outside asset list jsons and replacement.js
+        for (let zipEntryName of this.assetToZipMap.keys()) {
+            if (!md5Map.has(zipEntryName) && !webResFileSet.has(zipEntryName)) {
+                extraSet.add(zipEntryName);
+            }
+        }
+        status.init(md5Map, webResFileSet, extraSet);
+        // check against md5Map
         for (let entry of md5Map) {
-            let pathInUrl = entry[0];
+            let pathInZip = entry[0];
             let expected = entry[1];
-            let data = await this.readFileAsync(pathInUrl);
+            let data = await this.readFileAsync(pathInZip);
             if (data == null) {
-                missingSet.add(pathInUrl);
-                checkResult = false;
-                (0, log_no_lf_1.logNoLF)(`zippedAssets: md5: [MISSING] [${(0, log_no_lf_1.clampString)(pathInUrl)}]` + `\n`);
+                status.addMissing(pathInZip);
+                (0, log_no_lf_1.logNoLF)(`zippedAssets: md5: [MISSING] [${(0, log_no_lf_1.clampString)(pathInZip)}]` + `\n`);
                 continue;
             }
             let md5 = crypto.createHash("md5").update(data).digest().toString('hex').toLowerCase();
             let okay = md5 === expected;
             if (!okay) {
-                md5MismatchSet.add(pathInUrl);
-                checkResult = false;
+                status.addMismatch(pathInZip, "md5");
             }
             else {
-                okaySet.add(pathInUrl);
+                status.addPassed(pathInZip);
             }
-            (0, log_no_lf_1.logNoLF)(`zippedAssets: md5: [${okay ? "OK" : "FAIL"}] [${(0, log_no_lf_1.clampString)(pathInUrl)}]` + `${okay ? "" : "\n"}`);
+            (0, log_no_lf_1.logNoLF)(`zippedAssets: md5: [${okay ? "OK" : "FAIL"}] [${(0, log_no_lf_1.clampString)(pathInZip)}]` + `${okay ? "" : "\n"}`);
         }
         process.stdout.write("\n");
-        // convert okaySet to pathInZip
-        const okaySetInZip = new Set();
-        for (let pathInUrl of okaySet) {
-            let pathInZip = this.getPathInZip(pathInUrl);
-            if (pathInZip == null)
-                throw new Error(`pathInZip == null`); // should never happen because this.readFileAsync() calls getPathInZip as well
-            okaySetInZip.add(pathInZip);
-        }
-        ;
-        // check crc32
-        for (let pathInZip of this.assetToZipMap.keys()) {
-            if (okaySetInZip.has(pathInZip))
+        // check against webResFileSet
+        for (let pathInZip of webResFileSet.keys()) {
+            let found = this.getPathInZip(pathInZip);
+            if (found == null) {
+                status.addMissing(pathInZip);
+                (0, log_no_lf_1.logNoLF)(`zippedAssets: webRes: [MISSING] [${(0, log_no_lf_1.clampString)(pathInZip)}]` + `\n`);
                 continue;
+            }
             let data = await this.readFileAsync(pathInZip, true);
             let okay = data != null;
             if (!okay) {
-                crc32MismatchSet.add(pathInZip);
-                checkResult = false;
+                status.addMismatch(pathInZip, "crc32");
             }
             else {
-                okaySetInZip.add(pathInZip);
+                status.addPassed(pathInZip);
             }
-            (0, log_no_lf_1.logNoLF)(`zippedAssets: crc32: [${okay ? "OK" : "FAIL"}] [${(0, log_no_lf_1.clampString)(pathInZip)}]` + `${okay ? "" : "\n"}`);
+            (0, log_no_lf_1.logNoLF)(`zippedAssets: webRes: [${okay ? "OK" : "FAIL"}] [${(0, log_no_lf_1.clampString)(pathInZip)}]` + `${okay ? "" : "\n"}`);
         }
         process.stdout.write("\n");
-        console.log(`zippedAssets: checkIntegrity ${checkResult ? "OK" : "FAIL"}`);
-        console.log(`zippedAssets: ${okaySetInZip.size} ok, ${missingSet.size} missing, ${md5MismatchSet.size} md5 mismatch ${crc32MismatchSet.size} crc32 mismatch`);
-        return checkResult;
+        // check against extraSet
+        for (let pathInZip of extraSet.keys()) {
+            let data = await this.readFileAsync(pathInZip, true);
+            let okay = data != null;
+            if (!okay) {
+                status.addMismatch(pathInZip, "crc32");
+            }
+            else {
+                status.addPassed(pathInZip);
+            }
+            (0, log_no_lf_1.logNoLF)(`zippedAssets: extra: [${okay ? "OK" : "FAIL"}] [${(0, log_no_lf_1.clampString)(pathInZip)}]` + `${okay ? "" : "\n"}`);
+        }
+        process.stdout.write("\n");
+        const isAllPassed = status.isAllPassed;
+        console.log(`zippedAssets: checkIntegrity ${isAllPassed ? "OK" : "FAIL"}`);
+        console.log(`zippedAssets: ${status.totalCount} total, ${status.passedCount} ok, ${status.failedCount} failed`);
+        if (!isAllPassed)
+            console.log(`zippedAssets: ${status.missingCount} missing, ${status.md5MismatchCount} md5 mismatch, ${status.crc32MismatchCount} crc32 mismatch`);
     }
     static crc32(data) {
         return new Promise((resolve, reject) => {
@@ -814,3 +874,119 @@ zippedAssets.CNLegacy404Set = new Set([
 ]);
 zippedAssets.chunkSize = 1048576;
 zippedAssets.mapVerMagic = toInt("map\x01");
+class integrityCheckStatus {
+    constructor() {
+        this.md5Map = new Map();
+        this.webResFileSet = new Set();
+        this.extraSet = new Set();
+        this.okaySet = new Set();
+        this.missingSet = new Set();
+        this.md5MismatchSet = new Set();
+        this.crc32MismatchSet = new Set();
+        this.pendingRequestSet = new Set();
+    }
+    get totalCount() {
+        const size = this.md5Map.size + this.webResFileSet.size + this.extraSet.size;
+        if (size == 0 && this._totalCount != null)
+            return this._totalCount;
+        return size;
+    }
+    addPassed(pathInZip) {
+        this.okaySet.add(pathInZip);
+    }
+    addMissing(pathInZip) {
+        this.missingSet.add(pathInZip);
+    }
+    addMismatch(pathInZip, checksumType) {
+        switch (checksumType) {
+            case "md5":
+                this.md5MismatchSet.add(pathInZip);
+                return;
+            case "crc32":
+                this.crc32MismatchSet.add(pathInZip);
+                return;
+            default: throw new Error(`unknown checksum type [${checksumType}]`);
+        }
+    }
+    get passedCount() {
+        const size = this.okaySet.size;
+        if (size == 0 && this._passedCount != null)
+            return this._passedCount;
+        return size;
+    }
+    get missingCount() {
+        const size = this.missingSet.size;
+        if (size == 0 && this._missingCount != null)
+            return this._missingCount;
+        return size;
+    }
+    get md5MismatchCount() {
+        const size = this.md5MismatchSet.size;
+        if (size == 0 && this._md5MismatchCount != null)
+            return this._md5MismatchCount;
+        return size;
+    }
+    get crc32MismatchCount() {
+        const size = this.crc32MismatchSet.size;
+        if (size == 0 && this._crc32MismatchCount != null)
+            return this._crc32MismatchCount;
+        return size;
+    }
+    get failedCount() {
+        return this.missingCount + this.md5MismatchCount + this.crc32MismatchCount;
+    }
+    get doneCount() {
+        return this.passedCount + this.failedCount;
+    }
+    get remainingCount() {
+        return this.totalCount - this.doneCount;
+    }
+    get isAllPassed() {
+        return this.totalCount == this.passedCount;
+    }
+    isFilePassed(pathInZip) {
+        return this.okaySet.has(pathInZip);
+    }
+    get statusString() {
+        return `[${this.passedCount}] passed, [${this.remainingCount}] remaining`
+            + `, [${this.failedCount}] missing/mismatch/error`;
+    }
+    clear(keepCounts = false) {
+        if (keepCounts) {
+            this._totalCount = this.totalCount;
+            this._passedCount = this.passedCount;
+            this._missingCount = this.missingCount;
+            this._md5MismatchCount = this.md5MismatchCount;
+            this._crc32MismatchCount = this.crc32MismatchCount;
+        }
+        const excludeIndex = Object.keys(this).findIndex((name) => name === "pendingRequestSet");
+        const values = Object.values(this);
+        values.splice(excludeIndex, 1);
+        values.filter((val) => val instanceof Set || val instanceof Map).forEach((val) => val.clear());
+    }
+    init(md5Map, webResFileSet, extraSet) {
+        this.clear();
+        this.md5Map = md5Map;
+        this.webResFileSet = webResFileSet;
+        this.extraSet = extraSet;
+    }
+    get isRunning() {
+        return this.pendingRequestSet.size > 0;
+    }
+    getPendingResult() {
+        return new Promise((resolve, reject) => this.pendingRequestSet.add({ resolve: resolve, reject: reject }));
+    }
+    notifyDone() {
+        const result = this.passedCount == this.totalCount;
+        this.clear(true);
+        for (let r of this.pendingRequestSet)
+            r.resolve(result);
+        this.pendingRequestSet.clear();
+    }
+    notifyError(e) {
+        this.clear();
+        for (let r of this.pendingRequestSet)
+            r.reject(e);
+        this.pendingRequestSet.clear();
+    }
+}
