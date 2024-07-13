@@ -432,6 +432,8 @@ export class controlInterface {
                             this.sendResultAsync(res, 429, "crawling not yet finished");
                         } else if (this.crawler.isFscking) {
                             this.sendResultAsync(res, 429, "is still fscking");
+                        } else if (this.crawler.zippedAssets.integrityCheckStatus.isRunning) {
+                            this.sendResultAsync(res, 429, "is checking integrity");
                         } else {
                             try {
                                 let crawlingParams = await this.getParsedPostData(req);
@@ -467,16 +469,36 @@ export class controlInterface {
                         }
                         return;
                     case "fsck":
+                        // repurposed to cleanup ./static/
                         try {
                             await this.getParsedPostData(req);
                             if (this.crawler.isCrawling) {
                                 this.sendResultAsync(res, 429, "is still crawling");
                             } else if (this.crawler.isFscking) {
                                 this.sendResultAsync(res, 429, "is already fscking");
+                            } else if (this.crawler.zippedAssets.integrityCheckStatus.isRunning) {
+                                this.sendResultAsync(res, 429, "is checking integrity");
                             } else {
                                 this.crawler.fsck()
                                     .catch((e) => console.error(`${apiName} error`, e)); // prevent crash
                                 this.sendResultAsync(res, 200, "started fsck");
+                            }
+                        } catch (e) {
+                            console.error(`${apiName} error`, e);
+                            this.sendResultAsync(res, 500, e instanceof Error ? e.message : `${apiName} error`);
+                        }
+                        return;
+                    case "check_integrity":
+                        try {
+                            await this.getParsedPostData(req);
+                            if (this.crawler.zippedAssets.integrityCheckStatus.isRunning) {
+                                this.sendResultAsync(res, 429, "is already checking integrity");
+                            } else if (this.crawler.isFscking) {
+                                this.sendResultAsync(res, 429, "is fscking");
+                            } else {
+                                this.crawler.zippedAssets.checkIntegrity()
+                                    .catch((e) => console.error(`${apiName} error`, e)); // prevent crash
+                                this.sendResultAsync(res, 200, "started checking integrity");
                             }
                         } catch (e) {
                             console.error(`${apiName} error`, e);
@@ -818,6 +840,9 @@ export class controlInterface {
         const isCrawling = status.isCrawling;
         const crawlingStatus = status.crawlingStatus;
         const crawlingStatusStyle = status.crawlingStatusStyle;
+        const integrityCheckResult = status.integrityCheckResult;
+        const integrityCheckResultStyle = status.integrityCheckResultStyle;
+        const isCheckingIntegrity = status.isCheckingIntegrity;
         const fsckResult = status.fsckResult;
         const fsckResultStyle = status.fsckResultStyle;
         const isFscking = status.isFscking;
@@ -863,9 +888,9 @@ export class controlInterface {
             + `\n      swapVerboseDesc();`
             + `\n      document.getElementById(\"loginstatus\").textContent = \"${loginStatus}\";`
             + `\n      document.getElementById(\"openidticketstatus\").textContent = \"${openIdTicketStatus}\";`
-            + `\n      let initialCountdown = ${isDownloading || isImporting || isCrawling || isFscking ? "20" : "0"};`
+            + `\n      let initialCountdown = ${isDownloading || isImporting || isCrawling || isCheckingIntegrity || isFscking ? "20" : "0"};`
             + `\n      async function autoRefresh(countdown) {`
-            + `\n          let status = {isDownloading: true, isImporting: false, isCrawling: true, isFscking: true};`
+            + `\n          let status = {isDownloading: true, isImporting: false, isCrawling: true, isCheckingIntegrity: true, isFscking: true};`
             + `\n          try {`
             + `\n              status = await (await fetch(new URL(\"/api/get_status\", document.baseURI))).json();`
             + `\n              countdown = initialCountdown;`
@@ -890,8 +915,11 @@ export class controlInterface {
             + `\n          document.getElementById(\"import_btn\").disabled = status.isDownloading || status.isImporting;`
             + `\n          el = document.getElementById(\"fsckresult\");`
             + `\n          el.textContent = status.fsckResult; el.style = status.fsckResultStyle;`
-            + `\n          document.getElementById(\"fsck_btn\").disabled = status.isFscking;`
-            + `\n          if (countdown > 0 && (status.isDownloading || status.isImporting || status.isCrawling || status.isFscking)) setTimeout(() => autoRefresh(--countdown), 500);`
+            + `\n          document.getElementById(\"fsck_btn\").disabled = status.isFscking || status.isCheckingIntegrity;`
+            + `\n          el = document.getElementById(\"integritycheckresult\");`
+            + `\n          el.textContent = status.integrityCheckResult; el.style = status.integrityCheckResultStyle;`
+            + `\n          document.getElementById(\"integrity_check_btn\").disabled = status.isFscking || status.isCheckingIntegrity;`
+            + `\n          if (countdown > 0 && (status.isDownloading || status.isImporting || status.isCrawling || status.isCheckingIntegrity || status.isFscking)) setTimeout(() => autoRefresh(--countdown), 500);`
             + `\n      }`
             + `\n      autoRefresh(initialCountdown);`
             + `\n    });`
@@ -1338,11 +1366,25 @@ export class controlInterface {
             + `\n  <legend>检查文件完整性</legend>`
             + `\n  <div>`
             + `\n    <button id=\"refreshbtn6\" onclick=\"window.location.reload(true);\">刷新</button>`
-            + `\n    <label id=\"fsckresult\" style=\"${fsckResultStyle}\" for=\"refreshbtn6\">TO_BE_FILLED_BY_JAVASCRIPT</label>`
+            + `\n    <label id=\"integritycheckresult\" style=\"${integrityCheckResultStyle}\" for=\"refreshbtn6\">TO_BE_FILLED_BY_JAVASCRIPT</label>`
+            + `\n  </div>`
+            + `\n  <form action=\"/api/check_integrity\" method=\"post\">`
+            + `\n    <div>`
+            + `\n      <input type=\"submit\" id=\"integrity_check_btn\" ${isFscking || isCheckingIntegrity ? "" : "disabled"} value=\"检查文件完整性\">`
+            + `\n      <br>检查资源包的内容是否有缺失或损坏。`
+            + `\n    </div>`
+            + `\n  </form>`
+            + `\n  </fieldset>`
+            + `\n  <fieldset>`
+            + `\n  <legend>清理</legend>`
+            + `\n  <div>`
+            + `\n    <button id=\"refreshbtn7\" onclick=\"window.location.reload(true);\">刷新</button>`
+            + `\n    <label id=\"fsckresult\" style=\"${fsckResultStyle}\" for=\"refreshbtn7\">TO_BE_FILLED_BY_JAVASCRIPT</label>`
             + `\n  </div>`
             + `\n  <form action=\"/api/fsck\" method=\"post\">`
             + `\n    <div>`
-            + `\n      <input type=\"submit\" id=\"fsck_btn\" ${isFscking ? "" : "disabled"} value=\"检查并删除重复文件\">`
+            + `\n      <input type=\"submit\" id=\"fsck_btn\" ${isFscking || isCheckingIntegrity ? "" : "disabled"} value=\"删除已被打包的文件\">`
+            + `\n      <br>自1.6.9版开始，在升级后会自动将静态资源文件重新打包，以节约存储空间。已被打包的文件已不再需要，但不会在打包过程中自动删除，请手动点击上面的按钮扫描并删除。`
             + `\n    </div>`
             + `\n  </form>`
             + `\n  </fieldset>`
@@ -1376,6 +1418,9 @@ export class controlInterface {
         isCrawling: boolean,
         crawlingStatus: string,
         crawlingStatusStyle: string,
+        isCheckingIntegrity: boolean,
+        integrityCheckResult: string,
+        integrityCheckResultStyle: string,
         isFscking: boolean,
         fsckResult: string,
         fsckResultStyle: string,
@@ -1426,6 +1471,17 @@ export class controlInterface {
             if (this.crawler.lastError != null) crawlingStatusStyle = "color: red";
         }
 
+        const integrityCheckStatus = this.crawler.zippedAssets.integrityCheckStatus;
+        const isCheckingIntegrity = integrityCheckStatus.isRunning;
+        const integrityCheckResult = integrityCheckStatus.statusString;
+        const integrityCheckResultStyle = isCheckingIntegrity
+            ? "color: blue"
+            : integrityCheckStatus.totalCount == 0
+                ? "color: grey"
+                : integrityCheckStatus.isAllPassed
+                    ? "color: green"
+                    : "color: red";
+
         const isFscking = this.crawler.isFscking;
         const fsckResult = this.crawler.lastFsckResult;
         const fsckStatus = this.crawler.fsckStatus;
@@ -1463,6 +1519,9 @@ export class controlInterface {
             isCrawling: isCrawling,
             crawlingStatus: crawlingStatus,
             crawlingStatusStyle: crawlingStatusStyle,
+            isCheckingIntegrity: isCheckingIntegrity,
+            integrityCheckResult: integrityCheckResult,
+            integrityCheckResultStyle: integrityCheckResultStyle,
             isFscking: isFscking,
             fsckResult: fsckResult,
             fsckResultStyle: fsckResultStyle,

@@ -115,7 +115,7 @@ export class crawler {
     private readonly localStagingCNDir = path.join(".", "static_staging_cn");
     private static readonly brotliQuality = 0;
 
-    private zippedAssets: zippedAssets;
+    readonly zippedAssets: zippedAssets;
 
     private static readonly prodHost = "l3-prod-all-gs-mfsn2.bilibiligame.net";
     private get httpsProdMagicaNoSlash(): string { return `https://${crawler.prodHost}/magica`; }
@@ -318,8 +318,10 @@ export class crawler {
     }
     private deleteFileIfMatch(pathInUrl: string, md5: string, deletedSet: Set<string>): void {
         let filePath = path.join(this.localRootDir, pathInUrl);
-        if (!fs.existsSync(filePath)) return;
-        if (!fs.statSync(filePath).isFile()) return;
+        if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+            deletedSet.add(pathInUrl);
+            return;
+        }
         let data = fs.readFileSync(filePath);
         if (data == null) return;
         let calc = crypto.createHash('md5').update(data).digest().toString('hex').toLowerCase();
@@ -412,6 +414,7 @@ export class crawler {
         console.log(`saved stringified404Set`);
     }
     fsck(): Promise<boolean> {
+        // repurposed to cleanup ./static/
         return new Promise<boolean>((resolve, reject) => {
             if (this._isCrawling) {
                 reject(new Error(`is still crawling, cannot perform fsck`));
@@ -442,7 +445,10 @@ export class crawler {
                         notPassed: notOkaySet.size,
                     }
                     console.log(this.lastFsckResult);
-                    notOkaySet.forEach((pathInUrl) => this.staticFileMap.delete(pathInUrl));
+                    if (deletedSet.size > 0) {
+                        deletedSet.forEach((pathInUrl) => this.staticFileMap.delete(pathInUrl));
+                        this.saveFileMeta();
+                    }
                     resolve(notOkaySet.size == 0);
                     return;
                 }
