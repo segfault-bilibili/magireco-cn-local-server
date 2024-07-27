@@ -1,3 +1,5 @@
+import * as crypto from "crypto";
+
 export const index404 = Buffer.from(`PGh0bWwgbGFuZz0iamEiIHN0eWxlPSJoZWlnaHQ6IDU3NnB4OyI+Cgo8aGVhZD4KICAgIDxtZXRh`
     + `IGNoYXJzZXQ9IlVURi04Ij4KICAgIDx0aXRsZT5tYWdpY2E8L3RpdGxlPgogICAgPG1ldGEgaWQ9`
     + `InZpZXdwb3J0IiBuYW1lPSJ2aWV3cG9ydCIgY29udGVudD0id2lkdGg9MTAyNCwgdXNlci1zY2Fs`
@@ -110,3 +112,5 @@ export const index404 = Buffer.from(`PGh0bWwgbGFuZz0iamEiIHN0eWxlPSJoZWlnaHQ6IDU
     + `PC9kaXY+CiAgICAgICAgICAgICAgICAgICAgICAgIDwvZGl2PgogICAgICAgICAgICAgICAgICAg`
     + `IDwvZGl2PgogICAgICAgICAgICAgICAgPC9kaXY+CiAgICAgICAgICAgIDwvZGl2PgogICAgICAg`
     + `IDwvZGl2Pgo8L2JvZHk+Cgo8L2h0bWw+`, 'base64');
+
+export const index404md5 = crypto.createHash('md5').update(index404).digest().toString('hex');

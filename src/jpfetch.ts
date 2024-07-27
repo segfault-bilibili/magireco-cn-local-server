@@ -6,7 +6,7 @@ import * as path from "path";
 import * as zlib from "zlib";
 import * as crypto from "crypto";
 import * as replacementCn from "./replacement_cn";
-import { index404 } from "./index404";
+import { index404, index404md5 } from "./index404";
 import { filterStats } from "./filter_stats";
 
 const parseBurpXml = (xml: string) => {
@@ -221,7 +221,13 @@ export const jpfetch = async (): Promise<number> => {
         let respHeaders = await getRespHeaders(req);
 
         let status = respHeaders[":status"];
-        if (status == 304) {
+        if (status == 200) {
+            let etag = respHeaders.etag;
+            if (etag?.includes(index404md5)) {
+                console.error(`${method} ${fullPath} failed Etag=[${etag}]`);
+                throw new Error(FAKE_INDEX_PAGE_RETURNED);
+            }
+        } else if (status == 304) {
             console.log(`${method} ${fullPath} ${status} Not Modified`);
             if (existing == null) throw new Error(`existing == null`);
             if (!isFragment) webResSet.add(fullPath);
