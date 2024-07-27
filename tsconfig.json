@@ -5,7 +5,7 @@
     "declaration": true,
     "outDir": "./out",
     "strict": true,
-    "lib": ["ES2017", "DOM"]
+    "lib": ["ES2021", "DOM"]
   },
   "include": ["src"],
   "exclude": ["node_modules", "**/__tests__/*"]
