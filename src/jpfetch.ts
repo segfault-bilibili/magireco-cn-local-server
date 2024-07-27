@@ -172,6 +172,7 @@ export const jpfetch = async (): Promise<number> => {
             }
         }
     }
+    const xmlHead = new Uint8Array(Buffer.from("<?xml "));
     const get = async (subPath: string, fileType: "fragment" | "asset" | "webRes" | "story"): Promise<Buffer> => {
         const method = http2.constants.HTTP2_METHOD_GET;
         const host = domain;
@@ -280,6 +281,16 @@ export const jpfetch = async (): Promise<number> => {
         req.destroy();
 
         let data = Buffer.concat(chunks);
+        if (data.byteLength <= 4096) {
+            if (Buffer.compare(data.subarray(0, 6), xmlHead) == 0) {
+                let str = data.toString('utf-8');
+                if (str.includes('<Error><Code>')) {
+                    console.error(`[${fullPath}] xml error`, str);
+                    fs.writeFileSync('error.xml', str);
+                    throw new Error(`xml error`);
+                }
+            }
+        }
 
         const compression = respHeaders[http2.constants.HTTP2_HEADER_CONTENT_ENCODING];
         if (typeof compression === 'string') switch (compression) {
