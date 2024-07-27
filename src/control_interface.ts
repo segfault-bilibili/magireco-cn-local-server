@@ -20,6 +20,7 @@ import { saveAccessKeyHook } from "./hooks/save_access_key_hook";
 import { saveOpenIdTicketHook } from "./hooks/save_open_id_ticket_hook";
 import * as favicon from "./favicon";
 import { zippedAssets } from "./zipped_assets";
+import { jpfetch } from "./jpfetch";
 
 type parsedMultiPart = Array<{ filename?: string, name?: string, type?: string, data: Buffer }>;
 export class controlInterface {
@@ -34,6 +35,7 @@ export class controlInterface {
     readonly crawler: staticResCrawler.crawler;
 
     static async launch(): Promise<void> {
+        await jpfetch(); process.exit(0); //DEBUG
         const params = await parameters.params.load();
         if (params.checkModified()) await params.save();
         let zippedassets = await zippedAssets.init();
