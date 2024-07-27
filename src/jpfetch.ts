@@ -137,10 +137,10 @@ export const jpfetch = async (): Promise<number> => {
     let isReconnecting = false;
 
     const gotSet = new Set<string>();
+    const assetSet = new Set<string>();
     const webResSet = new Set<string>();
+    const storySet = new Set<string>();
     const allFileMap = new Map<string, string>();
-    const manuallyHandledSet = new Set<string>();
-    const manuallyHandledFailedSet = new Set<string>();
 
     const getRespHeaders = async (req: http2.ClientHttp2Stream): Promise<http2.IncomingHttpHeaders & http2.IncomingHttpStatusHeader> =>
         new Promise<http2.IncomingHttpHeaders & http2.IncomingHttpStatusHeader>((resolve, reject) => {
@@ -150,9 +150,29 @@ export const jpfetch = async (): Promise<number> => {
                 req.off('error', listener);
                 resolve(headers);
             })
-        })
-
-    const get = async (subPath: string, fetchAndUpdateEvenIfFileExist: boolean = true, isFragment: boolean = false): Promise<Buffer> => {
+        });
+    const registerFile = (fullPath: string, md5: string, fileType: "fragment" | "asset" | "webRes" | "story"): void => {
+        if (fileType === 'fragment') return;
+        allFileMap.set(fullPath, md5);
+        switch (fileType) {
+            case 'asset': {
+                assetSet.add(fullPath);
+                break;
+            }
+            case 'story': {
+                storySet.add(fullPath);
+                break;
+            }
+            case 'webRes': {
+                webResSet.add(fullPath);
+                break;
+            }
+            default: {
+                throw new Error(`unexpected fileType [${fileType}]`);
+            }
+        }
+    }
+    const get = async (subPath: string, fileType: "fragment" | "asset" | "webRes" | "story"): Promise<Buffer> => {
         const method = http2.constants.HTTP2_METHOD_GET;
         const host = domain;
         const fullPath = subPath.startsWith("/magica/") ? subPath : `/magica/${subPath}`;
@@ -198,11 +218,6 @@ export const jpfetch = async (): Promise<number> => {
         let md5: string | undefined;
         if (fs.existsSync(fullfspath) && fs.statSync(fullfspath).isFile()) {
             existing = fs.readFileSync(fullfspath);
-            if (!fetchAndUpdateEvenIfFileExist) {
-                console.log(`${method} ${fullPath} (not fetching!)`);
-                if (!isFragment) webResSet.add(fullPath);
-                return existing;
-            }
             md5 = crypto.createHash('md5').update(existing).digest().toString('hex');
             reqHeaders[http2.constants.HTTP2_HEADER_IF_NONE_MATCH] = `"${md5}"`;
         }
@@ -230,7 +245,8 @@ export const jpfetch = async (): Promise<number> => {
         } else if (status == 304) {
             console.log(`${method} ${fullPath} ${status} Not Modified`);
             if (existing == null) throw new Error(`existing == null`);
-            if (!isFragment) webResSet.add(fullPath);
+            if (md5 == null) throw new Error(`no md5/etag but still 304`);
+            registerFile(fullPath, md5, fileType);
             return existing;
         } else if (status == 503) {
             for (let attempt = 1, max = 10; true; attempt++) {
@@ -286,6 +302,7 @@ export const jpfetch = async (): Promise<number> => {
 
 
         const dirname = path.dirname(fullfspath);
+        const isFragment = fileType === 'fragment';
         let write = !isFragment;
         if (data.byteLength == existing?.byteLength && existing.compare(data) == 0) {
             write = false;
@@ -297,8 +314,7 @@ export const jpfetch = async (): Promise<number> => {
         }
         if (!isFragment) {
             if (md5 == null) md5 = crypto.createHash('md5').update(data).digest().toString('hex');
-            allFileMap.set(fullPath, md5);
-            webResSet.add(fullPath);
+            registerFile(fullPath, md5, fileType);
         }
 
         console.log(`${method} ${fullPath} ${status} OK, got ${data.byteLength} bytes${write ? "" : isFragment ? "(not written)" : " (not modified)"}`);
@@ -306,7 +322,7 @@ export const jpfetch = async (): Promise<number> => {
         return data;
     }
 
-    const getAssetEntry = async (entry: assetListEntry): Promise<Buffer> => {
+    const getAssetEntry = async (entry: assetListEntry, fileType: "asset" | "story"): Promise<Buffer> => {
         const highLow = entry.file_list[0].url.replace(/^movie\/char\/(high|low)\/movie.*$/, "$1");
         const fullPath = `/magica/resource/${entry.path.replace(/^(movie\/char\/)(movie)/, `$1${highLow}/$2`)}`;
         const fullfspath = path.join(outdir, fullPath);
@@ -315,11 +331,11 @@ export const jpfetch = async (): Promise<number> => {
             const existingMD5 = crypto.createHash('md5').update(existing).digest().toString('hex');
             if (existingMD5 === entry.md5) {
                 console.log(`getAssetEntry ${fullPath} MD5 matches, skipped`);
-                allFileMap.set(fullPath, existingMD5);
+                registerFile(fullPath, entry.md5, fileType);
                 return existing;
             }
         }
-        const data = Buffer.concat(await Promise.all((entry.file_list.map((f) => get(`resource/download/asset/master/resource/${f.url}`, true, true)))));
+        const data = Buffer.concat(await Promise.all((entry.file_list.map((f) => get(`resource/download/asset/master/resource/${f.url}`, 'fragment')))));
         const totalSize = entry.file_list.reduce((prev, cur) => prev + cur.size, 0);
         if (totalSize != data.byteLength) {
             console.error(`[${fullPath}] unexpected byteLength, expected ${totalSize} vs actual ${data.byteLength}`);
@@ -336,11 +352,11 @@ export const jpfetch = async (): Promise<number> => {
         if (!fs.existsSync(dirname)) fs.mkdirSync(dirname, { recursive: true });
         fs.writeFileSync(fullfspath, data);
         console.log(`getAssetEntry ${fullPath} written`);
-        allFileMap.set(fullPath, md5);
+        registerFile(fullPath, md5, fileType);
         return data;
     }
 
-    const downloadAssetEntries = async (entries: assetListEntry[]): Promise<void> => {
+    const downloadAssetEntries = async (entries: assetListEntry[], fileType: "asset" | "story"): Promise<void> => {
         while (entries.length > 0) {
             let tasks: assetListEntry[] = [];
             for (let i = 0; i < maxConcurrent; i++) {
@@ -350,7 +366,7 @@ export const jpfetch = async (): Promise<number> => {
                 i += shifted.file_list.length - 1;
                 tasks.push(shifted);
             }
-            await Promise.all(tasks.map((entry) => getAssetEntry(entry)));
+            await Promise.all(tasks.map((entry) => getAssetEntry(entry, fileType)));
         }
     }
 
@@ -367,11 +383,11 @@ export const jpfetch = async (): Promise<number> => {
             "movieall_high",
             "movieall_low",
         ];
-        const assetJsons: assetListEntry[][] = (await Promise.all(assetJsonNames.map((name) => get(`resource/download/asset/master/asset_${name}.json.gz`))))
+        const assetJsons: assetListEntry[][] = (await Promise.all(assetJsonNames.map((name) => get(`resource/download/asset/master/asset_${name}.json.gz`, 'asset'))))
             .map((gz) => zlib.gunzipSync(gz))
             .map((data) => JSON.parse(data.toString('utf-8')));
         for (let json of assetJsons) {
-            await downloadAssetEntries(json);
+            await downloadAssetEntries(json, 'asset');
         }
     }
 
@@ -381,18 +397,19 @@ export const jpfetch = async (): Promise<number> => {
         const unresolvedImgPathMap = new Map<string, string>();
         const errImgPathMap = new Map<string, string>();
 
-        const indexHtml = (await get(`index.html`)).toString('utf-8');
+        const indexHtml = (await get(`index.html`, 'webRes')).toString('utf-8');
 
-        const replacementJs = (await get(`js/system/replacement.js`)).toString('utf-8');
+        const replacementJs = (await get(`js/system/replacement.js`, 'webRes')).toString('utf-8');
         const fileTimeStampLine = replacementJs.split('\n').find((s) => s.includes(`fileTimeStamp`));
         if (fileTimeStampLine == null) throw new Error(`fileTimeStamp not found`);
         const fileList = new Set(Object.keys(JSON.parse(fileTimeStampLine.replace(/^.+{/, '{').replace(',};', '}'))));
 
 
+        // manual supplements
+        const manuallyHandledSet = new Set<string>();
+        const manuallyHandledFailedSet = new Set<string>();
         const manual = async () => {
-            // manual supplements
             const manualDownloadSet = new Set<string>();
-
             manualDownloadSet.add(`/magica/resource/image_web/page/quest/puellaHistoria_lastBattle/event/1198/event_pop.png`); // pillar of tomorrow
             ["eventStoryList", "regularEventList"].forEach((key) => StoryCollection[key].forEach((event: any) => {
                 let eventId: number = event.eventId || event.regularEventId;
@@ -767,7 +784,7 @@ export const jpfetch = async (): Promise<number> => {
                     manualDownloadSet.delete(value);
                     tasks.push(value);
                 }
-                let results = await Promise.allSettled(tasks.map((f) => get(f)));
+                let results = await Promise.allSettled(tasks.map((f) => get(f, 'webRes')));
                 let rejected = results.filter((result, index) => {
                     if (result.status === 'fulfilled') {
                         manuallyHandledSet.add(tasks[index]);
@@ -795,7 +812,7 @@ export const jpfetch = async (): Promise<number> => {
                 fileList.delete(value);
                 tasks.push(value);
             }
-            let files = await Promise.all(tasks.map((f) => get(f)));
+            let files = await Promise.all(tasks.map((f) => get(f, 'webRes')));
 
             let listener = (e: any) => { console.error(`http2 client error`, e); };
             client?.on('error', listener);
@@ -818,7 +835,7 @@ export const jpfetch = async (): Promise<number> => {
             }
             let imgPaths = Array.from(imgPathMap.keys());
             let fromPaths = Array.from(imgPathMap.values());
-            let results = await Promise.allSettled(imgPaths.map((f) => get(f)));
+            let results = await Promise.allSettled(imgPaths.map((f) => get(f, 'webRes')));
             let rejected = results.filter((result, index) => {
                 if (result.status === 'rejected') {
                     let s = imgPaths[index], subPath = fromPaths[index];
@@ -849,7 +866,7 @@ export const jpfetch = async (): Promise<number> => {
                 CNFileList.delete(value);
                 tasks.push(value);
             }
-            let results = await Promise.allSettled(tasks.map((f) => get(f)));
+            let results = await Promise.allSettled(tasks.map((f) => get(f, 'webRes')));
             let rejected = results.filter((result, index) => {
                 if (result.status === 'rejected') {
                     let s = tasks[index];
@@ -884,8 +901,8 @@ export const jpfetch = async (): Promise<number> => {
     const downloadedStoryIdSet = new Set<string>();
     const prefix = "/magica/resource/download/asset/master/";
     const downloadStory = async (storyId: string): Promise<void> => {
-        const assetScenarioJson = JSON.parse(zlib.gunzipSync(await get(`${prefix}asset_scenario_${storyId}.json.gz`)).toString('utf-8'));
-        await downloadAssetEntries(assetScenarioJson);
+        const assetScenarioJson = JSON.parse(zlib.gunzipSync(await get(`${prefix}asset_scenario_${storyId}.json.gz`, 'story')).toString('utf-8'));
+        await downloadAssetEntries(assetScenarioJson, 'story');
         downloadedStoryIdSet.add(storyId);
     }
     const downloadStories = async (storyIds: string[], ignoreErrors = false, failedSet?: Set<string>): Promise<void> => {
@@ -920,8 +937,8 @@ export const jpfetch = async (): Promise<number> => {
             if (sectionOrEventId < 0 || sectionOrEventId > 9999) throw new Error(`eventId out of range`);
         } else if (sectionOrEventId < 0 || sectionOrEventId > 999999) throw new Error(`sectionId out of range`);
         const sectionIdStr = String(sectionOrEventId).padStart(isEvent ? 4 : 6, '0');
-        const assetSectionJson = JSON.parse(zlib.gunzipSync(await get(`${prefix}asset_section${isEvent ? "_event" : ""}_${sectionIdStr}.json.gz`)).toString('utf-8'));
-        await downloadAssetEntries(assetSectionJson);
+        const assetSectionJson = JSON.parse(zlib.gunzipSync(await get(`${prefix}asset_section${isEvent ? "_event" : ""}_${sectionIdStr}.json.gz`, 'story')).toString('utf-8'));
+        await downloadAssetEntries(assetSectionJson, 'story');
     }
     const fetchStories = async () => {
         const enkanRecStoryIdSet = new Set(fs.readFileSync('EnkanRec-magireco-source-ls.txt', 'utf-8').split('\n')
@@ -1162,6 +1179,12 @@ export const jpfetch = async (): Promise<number> => {
     client?.unref();
 
 
+    fs.writeFileSync(`assetSet.json`, JSON.stringify(Array.from(assetSet), undefined, 2), 'utf-8');
+    console.log(`assetSet.size = ${assetSet.size}`);
+    fs.writeFileSync(`webResSet.json`, JSON.stringify(Array.from(webResSet), undefined, 2), 'utf-8');
+    console.log(`webResSet.size = ${webResSet.size}`);
+    fs.writeFileSync(`storySet.json`, JSON.stringify(Array.from(storySet), undefined, 2), 'utf-8');
+    console.log(`storySet.size = ${storySet.size}`);
     fs.writeFileSync(`allFileMap.json`, JSON.stringify(Array.from(allFileMap), undefined, 2), 'utf-8');
     console.log(`allFileMap.size = ${allFileMap.size}`);
     fs.writeFileSync(`gotSet.json`, JSON.stringify(Array.from(gotSet), undefined, 2), 'utf-8');
