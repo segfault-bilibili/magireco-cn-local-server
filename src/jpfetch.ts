@@ -1147,9 +1147,9 @@ export const jpfetch = async (): Promise<number> => {
     }
 
 
-    await fetchStories();
-    await fetchWebRes();
     await fetchAssets();
+    await fetchWebRes();
+    await fetchStories();
 
 
     client?.destroy();
