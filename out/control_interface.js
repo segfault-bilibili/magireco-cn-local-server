@@ -39,19 +39,36 @@ class controlInterface {
         hooks.forEach((hook) => localsvr.addHook(hook));
         const httpServerSelf = http.createServer(async (req, res) => {
             var _a, _b, _c, _d;
-            if (req.url == null) {
-                res.writeHead(403, { ["Content-Type"]: "text/plain" });
-                res.end("403 Forbidden");
+            // ---------- 添加 HTTP Basic 认证 ----------
+            const auth = req.headers['authorization'];
+            const validUser = this.params.httpProxyUsername || 'magireco';
+            const validPass = this.params.httpProxyPassword || 'magireco';
+            if (!auth) {
+                res.setHeader('WWW-Authenticate', 'Basic realm="Magireco Local Server"');
+                res.writeHead(401);
+                res.end('Authentication required');
                 return;
             }
-            const isHomepage = req.url === "/" && req.headers.referer == null;
-            const isCACert = req.url === "/ca.crt" || req.url === "/ca_subject_hash_old.txt";
-            const selfHost = this.params.listenList.controlInterface.host;
-            const selfPort = this.params.listenList.controlInterface.port;
-            const refererRegEx = new RegExp(`^(http|https)://(magireco\\.local|${selfHost.replace(/\./g, "\\.")})(|:${selfPort})($|/.*)`);
-            const isReferrerAllowed = ((_a = req.headers.referer) === null || _a === void 0 ? void 0 : _a.match(refererRegEx)) != null;
-            if (!isHomepage && !isCACert && !isReferrerAllowed) {
-                console.error(`rejected disallowed referer`);
+            const base64 = auth.split(' ')[1];
+            let user, pass;
+            try {
+                const decoded = Buffer.from(base64, 'base64').toString();
+                [user, pass] = decoded.split(':');
+            } catch (e) {
+                res.setHeader('WWW-Authenticate', 'Basic realm="Magireco Local Server"');
+                res.writeHead(401);
+                res.end('Authentication failed');
+                return;
+            }
+            if (user !== validUser || pass !== validPass) {
+                res.setHeader('WWW-Authenticate', 'Basic realm="Magireco Local Server"');
+                res.writeHead(401);
+                res.end('Authentication failed');
+                return;
+            }
+            // -----------------------------------------
+
+            if (req.url == null) {
                 res.writeHead(403, { ["Content-Type"]: "text/plain" });
                 res.end("403 Forbidden");
                 return;
@@ -80,16 +97,6 @@ class controlInterface {
                             this.sendResultAsync(res, 500, e instanceof Error ? e.message : `${apiName} error`);
                         }
                         return;
-                    /*
-                    case "shutdown":
-                        this.sendResultAsync(res, 200, "shutting down");
-                        this.shutdown();
-                        return;
-                    case "restart":
-                        this.sendResultAsync(res, 200, "restarting");
-                        this.restart();
-                        return;
-                    */
                     case "toggle_loopback_listen":
                         try {
                             await this.getParsedPostData(req);
@@ -174,29 +181,10 @@ class controlInterface {
                             this.sendResultAsync(res, 500, e instanceof Error ? e.message : `${apiName} error`);
                         }
                         return;
+                    // 上游代理相关API保留（但前端已移除按钮）
                     case "upload_upstream_proxy_cacert":
-                        try {
-                            let postData = await this.getPostData(req);
-                            if (typeof postData === 'string')
-                                throw new Error("postData is string");
-                            let upstream_proxy_cacert = postData.find((item) => item.name === "upstream_proxy_cacert");
-                            if (upstream_proxy_cacert != null
-                                && upstream_proxy_cacert.filename != null
-                                && upstream_proxy_cacert.filename !== ""
-                                && !upstream_proxy_cacert.filename.match(/\.(pem|crt)$/i))
-                                throw new Error("filename not ended with .pem or .crt");
-                            let newCACert = upstream_proxy_cacert === null || upstream_proxy_cacert === void 0 ? void 0 : upstream_proxy_cacert.data.toString();
-                            if (newCACert === "")
-                                newCACert = undefined;
-                            await this.params.save({ key: "upstreamProxyCACert", val: newCACert });
-                            let msg = newCACert != null ? "saved upstreamProxyCACert" : "cleared upstreamProxyCACert";
-                            console.log(msg);
-                            this.sendResultAsync(res, 200, msg);
-                        }
-                        catch (e) {
-                            console.error(`${apiName} error`, e);
-                            this.sendResultAsync(res, 500, e instanceof Error ? e.message : `${apiName} error`);
-                        }
+                    case "set_upstream_proxy":
+                        this.sendResultAsync(res, 404, "Upstream proxy feature removed from UI");
                         return;
                     case "upload_dump":
                         try {
@@ -219,31 +207,10 @@ class controlInterface {
                                 let uploaded_dump = postData.find((item) => item.name === "uploaded_dump");
                                 if (!((_d = uploaded_dump === null || uploaded_dump === void 0 ? void 0 : uploaded_dump.filename) === null || _d === void 0 ? void 0 : _d.match(/\.json$/i)))
                                     throw new Error("filename not ended with .json");
-                                this.sendResultAsync(res, 200, "processing new dump"); // send request before importing
+                                this.sendResultAsync(res, 200, "processing new dump");
                                 this.userdataDmp.importDumpAsync(uploaded_dump.data)
-                                    .catch((e) => console.error(`${apiName} error`, e)); // prevent crash
+                                    .catch((e) => console.error(`${apiName} error`, e));
                             }
-                        }
-                        catch (e) {
-                            console.error(`${apiName} error`, e);
-                            this.sendResultAsync(res, 500, e instanceof Error ? e.message : `${apiName} error`);
-                        }
-                        return;
-                    case "set_upstream_proxy":
-                        try {
-                            let newUpstreamProxyParams = await this.getParsedPostData(req);
-                            let host = newUpstreamProxyParams.get("upstream_proxy_host");
-                            let port = Number(newUpstreamProxyParams.get("upstream_proxy_port"));
-                            let enabled = newUpstreamProxyParams.get("upstream_proxy_enabled") != null;
-                            if (host == null || !net.isIP(host))
-                                throw new Error("upstream proxy host is not an IP address");
-                            if (isNaN(port) || port < 1 || port > 65535)
-                                throw new Error("upstream proxy port must be an integer between 1 and 65535");
-                            await this.params.save({ key: "upstreamProxy", val: { host: host, port: port } });
-                            await this.params.save({ key: "upstreamProxyEnabled", val: enabled });
-                            let resultText = "sucessfully updated upstream proxy settings";
-                            console.log(resultText);
-                            this.sendResultAsync(res, 200, resultText);
                         }
                         catch (e) {
                             console.error(`${apiName} error`, e);
@@ -278,99 +245,15 @@ class controlInterface {
                             this.sendResultAsync(res, 500, e instanceof Error ? e.message : `${apiName} error`);
                         }
                         return;
+                    // B站登录相关API保留（前端已移除按钮）
                     case "pwdlogin":
-                        try {
-                            let pwdLoginParams = await this.getParsedPostData(req);
-                            let username = pwdLoginParams.get("username");
-                            let password = pwdLoginParams.get("password");
-                            if (this.params.mode === parameters.mode.LOCAL_OFFLINE) {
-                                this.sendResultAsync(res, 403, "cannot do bilibili login in local offline mode");
-                            }
-                            else if (username == null || password == null || username === "" || password === "") {
-                                let result = "username or password is empty";
-                                console.error(result);
-                                this.sendResultAsync(res, 400, result);
-                            }
-                            else {
-                                let result = await this.bsgamesdkPwdAuth.login(username, password);
-                                let resultText = JSON.stringify(result);
-                                this.sendResultAsync(res, 200, resultText);
-                            }
-                        }
-                        catch (e) {
-                            console.error(`${apiName} error`, e);
-                            this.sendResultAsync(res, 500, e instanceof Error ? e.message : `${apiName} error`);
-                        }
+                    case "clear_bilibili_login":
+                    case "clear_bsgamesdk_ids":
+                        this.sendResultAsync(res, 404, "Bilibili login feature removed from UI");
                         return;
                     case "dump_userdata":
-                        try {
-                            const dumpDataParams = await this.getParsedPostData(req); // finish receiving first
-                            const requestingNewDownload = dumpDataParams.get("new") != null;
-                            const fetchCharaEnhancementTree = dumpDataParams.get("fetch_chara_enhance_tree") != null;
-                            const arenaSimulate = dumpDataParams.get("arena_simulate") != null;
-                            const concurrentFetch = dumpDataParams.get("concurrent_fetch") != null;
-                            await this.params.save([
-                                { key: "fetchCharaEnhancementTree", val: fetchCharaEnhancementTree },
-                                { key: "arenaSimulate", val: arenaSimulate },
-                                { key: "concurrentFetch", val: concurrentFetch }
-                            ]);
-                            const lastDump = this.userdataDmp.lastDump;
-                            const alreadyDownloaded = lastDump != null;
-                            const lastError = this.userdataDmp.lastError;
-                            const hasDownloadResultOrError = alreadyDownloaded || lastError != null;
-                            const isDownloading = this.userdataDmp.isDownloading;
-                            const isImporting = this.userdataDmp.isImporting;
-                            if (this.params.mode === parameters.mode.LOCAL_OFFLINE) {
-                                this.sendResultAsync(res, 403, "cannot dump userdata in local offline mode");
-                            }
-                            else if (!isDownloading && !isImporting && (requestingNewDownload || !hasDownloadResultOrError)) {
-                                this.userdataDmp.getDumpAsync()
-                                    .catch((e) => console.error(`${apiName} error`, e)); // prevent crash
-                                this.sendResultAsync(res, 200, "downloading");
-                            }
-                            else {
-                                if (alreadyDownloaded) {
-                                    this.sendResultAsync(res, 200, "download is already completed");
-                                }
-                                else if (isDownloading) {
-                                    this.sendResultAsync(res, 429, `download not yet finished\n${this.userdataDmp.fetchStatus}`);
-                                }
-                                else if (isImporting) {
-                                    this.sendResultAsync(res, 429, `import not yet finished\n${this.userdataDmp.fetchStatus}`);
-                                }
-                                else {
-                                    this.sendResultAsync(res, 500, `error ${lastError instanceof Error ? lastError.message : ""}`);
-                                }
-                            }
-                        }
-                        catch (e) {
-                            console.error(`${apiName} error`, e);
-                            this.sendResultAsync(res, 500, e instanceof Error ? e.message : `${apiName} error`);
-                        }
-                        return;
-                    case "clear_bilibili_login":
-                        try {
-                            await this.getParsedPostData(req);
-                            await this.params.save({ key: "bsgamesdkResponse", val: undefined });
-                            this.sendResultAsync(res, 200, "cleared bilibili login status");
-                        }
-                        catch (e) {
-                            console.error(`${apiName} error`, e);
-                            this.sendResultAsync(res, 500, e instanceof Error ? e.message : `${apiName} error`);
-                        }
-                        return;
-                    case "clear_bsgamesdk_ids":
-                        try {
-                            await this.getParsedPostData(req);
-                            await this.params.save({ key: "bsgamesdkResponse", val: undefined });
-                            this.sendResultAsync(res, 200, "cleared bilibili login status");
-                            await this.params.save({ key: "bsgamesdkIDs", val: undefined });
-                            this.sendResultAsync(res, 200, "cleared bilibili devices ids");
-                        }
-                        catch (e) {
-                            console.error(`${apiName} error`, e);
-                            this.sendResultAsync(res, 500, e instanceof Error ? e.message : `${apiName} error`);
-                        }
+                        // 虽然前端已移除下载按钮，但API仍可被调用，返回友好提示
+                        this.sendResultAsync(res, 404, "Userdata download feature removed from UI, please use import instead.");
                         return;
                     case "clear_game_login":
                         try {
@@ -397,57 +280,10 @@ class controlInterface {
                         }
                         return;
                     case "crawl_static_data":
-                        if (this.params.mode === parameters.mode.LOCAL_OFFLINE) {
-                            this.sendResultAsync(res, 403, "cannot crawl in local offline mode");
-                        }
-                        else if (this.crawler.isCrawling) {
-                            this.sendResultAsync(res, 429, "crawling not yet finished");
-                        }
-                        else if (this.crawler.isFscking) {
-                            this.sendResultAsync(res, 429, "is still fscking");
-                        }
-                        else if (this.crawler.zippedAssets.integrityCheckStatus.isRunning) {
-                            this.sendResultAsync(res, 429, "is checking integrity");
-                        }
-                        else {
-                            try {
-                                let crawlingParams = await this.getParsedPostData(req);
-                                let crawlWebRes = crawlingParams.get("crawl_web_res") != null;
-                                let crawlAssets = crawlingParams.get("crawl_assets") != null;
-                                let concurrentCrawl = crawlingParams.get("concurrent_crawl") != null;
-                                if (!crawlWebRes && !crawlAssets) {
-                                    this.sendResultAsync(res, 400, "must crawl at least one part");
-                                }
-                                else {
-                                    await this.params.save([
-                                        { key: "crawlWebRes", val: crawlWebRes },
-                                        { key: "crawlAssets", val: crawlAssets },
-                                        { key: "concurrentCrawl", val: concurrentCrawl },
-                                    ]);
-                                    this.crawler.fetchAllAsync()
-                                        .catch((e) => console.error(`${apiName} error`, e)); // prevent crash
-                                    this.sendResultAsync(res, 200, "crawling started");
-                                }
-                            }
-                            catch (e) {
-                                console.error(`${apiName} error`, e);
-                                this.sendResultAsync(res, 500, e instanceof Error ? e.message : `${apiName} error`);
-                            }
-                        }
-                        return;
                     case "stop_crawling":
-                        try {
-                            await this.getParsedPostData(req);
-                            this.crawler.stopCrawling = true;
-                            this.sendResultAsync(res, 200, "stop crawling");
-                        }
-                        catch (e) {
-                            console.error(`${apiName} error`, e);
-                            this.sendResultAsync(res, 500, e instanceof Error ? e.message : `${apiName} error`);
-                        }
+                        this.sendResultAsync(res, 404, "Crawling feature removed from UI");
                         return;
                     case "fsck":
-                        // repurposed to cleanup ./static/
                         try {
                             await this.getParsedPostData(req);
                             if (this.crawler.isCrawling) {
@@ -461,7 +297,7 @@ class controlInterface {
                             }
                             else {
                                 this.crawler.fsck()
-                                    .catch((e) => console.error(`${apiName} error`, e)); // prevent crash
+                                    .catch((e) => console.error(`${apiName} error`, e));
                                 this.sendResultAsync(res, 200, "started fsck");
                             }
                         }
@@ -481,7 +317,7 @@ class controlInterface {
                             }
                             else {
                                 this.crawler.zippedAssets.checkIntegrity()
-                                    .catch((e) => console.error(`${apiName} error`, e)); // prevent crash
+                                    .catch((e) => console.error(`${apiName} error`, e));
                                 this.sendResultAsync(res, 200, "started checking integrity");
                             }
                         }
@@ -535,18 +371,24 @@ class controlInterface {
                     res.end(JSON.stringify(this.params.overridesDB, util_1.replacer));
                     return;
             }
-            const yamlRegEx = /^\/magirecolocal_(\d{1,3}\.){3}\d{1,3}_\d{1,5}\.yaml$/;
-            const parsedHost = req.url.match(/(\d{1,3}\.){3}\d{1,3}/);
-            if (req.url.match(yamlRegEx) && parsedHost != null && net.isIPv4(parsedHost[0])) {
-                console.log(`servering ${req.url}`);
-                const clashYaml = Buffer.from(this.params.getClashYaml(parsedHost[0]));
-                res.writeHead(200, {
-                    ["Content-Type"]: "application/x-yaml",
-                    ["Content-Length"]: clashYaml.byteLength,
-                    ["Content-Disposition"]: `attachment; filename=\"${req.url.replace(/^\//, "")}\"`,
-                });
-                res.end(clashYaml);
-                return;
+            // 修改后的 yaml 正则，支持域名
+            const yamlRegEx = /^\/magirecolocal_([a-zA-Z0-9.-]+)_(\d{1,5})\.yaml$/;
+            const yamlMatch = req.url.match(yamlRegEx);
+            if (yamlMatch) {
+                const host = yamlMatch[1];
+                const port = yamlMatch[2];
+                // 确保端口与当前代理端口一致（可选，但保留原逻辑）
+                if (port === String(this.params.listenList.httpProxy.port)) {
+                    console.log(`serving ${req.url}`);
+                    const clashYaml = Buffer.from(this.params.getClashYaml(host));
+                    res.writeHead(200, {
+                        ["Content-Type"]: "application/x-yaml",
+                        ["Content-Length"]: clashYaml.byteLength,
+                        ["Content-Disposition"]: `attachment; filename=\"${req.url.replace(/^\//, "")}\"`,
+                    });
+                    res.end(clashYaml);
+                    return;
+                }
             }
             if (req.url.match(this.userdataDmp.userdataDumpFileNameRegEx)) {
                 console.log(`serving ${req.url}`);
@@ -783,6 +625,8 @@ class controlInterface {
             data: dataArray,
         };
     }
+
+    // ==================== 美化后的首页HTML ====================
     homepageHTML() {
         const officialURL = new URL("https://game.bilibili.com/magireco/");
         const gsxnjURL = new URL("https://www.gsxnj.cn/");
@@ -793,11 +637,15 @@ class controlInterface {
         const npmRepoUrl = new URL("https://www.npmjs.com/package/magireco-cn-local-server");
         const mumuXURL = new URL("https://mumu.163.com/update/");
         const patchedApkURL = new URL("https://share.weiyun.com/HhJbXRP7");
-        const aHref = (text, url, newTab = true, id) => `<a target=\"${newTab ? "_blank" : "_self"}\" href=${url}${id != null ? ` id=\"${id}\"` : ""}>${text}</a>`;
+
+        // 修复 aHref 函数：给 href 属性值加上双引号
+        const aHref = (text, url, newTab = true, id) => `<a target=\"${newTab ? "_blank" : "_self"}\" href=\"${url}\"${id != null ? ` id=\"${id}\"` : ""}>${text}</a>`;
+
         const isOnlineMode = this.params.mode === parameters.mode.ONLINE;
         const isLocalOfflineMode = this.params.mode === parameters.mode.LOCAL_OFFLINE;
         const autoOpenWeb = this.params.autoOpenWeb;
         const injectMadokamiSE = this.params.injectMadokamiSE;
+
         let httpProxyAddr = "", httpProxyPort = "";
         const listenList = this.params.listenList;
         if (listenList != null) {
@@ -806,32 +654,13 @@ class controlInterface {
             httpProxyPort = String(proxy.port);
         }
         const httpProxyUsername = this.params.httpProxyUsername, httpProxyPassword = this.params.httpProxyPassword;
-        const upstreamProxy = this.params.upstreamProxy;
-        const upstreamProxyHost = upstreamProxy.host;
-        const upstreamProxyPort = upstreamProxy.port;
-        const upstreamProxyEnabled = this.params.upstreamProxyEnabled;
-        let loginStatus = `B站账户未登录`, loginStatusStyle = "color: red", loginBtnText = "登录";
+
+        // 游戏登录状态
+        let openIdTicketStatus, openIdTicketStatusStyle = "color: red";
         const bsgamesdkResponse = this.params.bsgamesdkResponse;
         if (bsgamesdkResponse != null && bsgamesdkResponse.access_key != null) {
-            let since = bsgamesdkResponse.timestamp;
-            if (since != null) {
-                since = Number(since);
-                since = `${new Date(since).toLocaleDateString()} ${new Date(since).toLocaleTimeString()}`;
-            }
-            let expires = bsgamesdkResponse.expires;
-            if (expires != null)
-                expires = `${new Date(expires).toLocaleDateString()} ${new Date(expires).toLocaleTimeString()}`;
-            loginStatus = (0, get_str_rep_1.getStrRep)(`B站账户已登录 账户=[${bsgamesdkResponse.uname}] uid=[${bsgamesdkResponse.uid}]`
-                + ` 实名认证状态=[${bsgamesdkResponse.realname_verified}]`
-                + ` 登录时间=[${since}] 登录过期时间=[${expires}]`);
-            loginStatusStyle = "color: green";
-            loginBtnText = "重新登录";
-        }
-        let openIdTicketStatus, openIdTicketStatusStyle = "color: red";
-        if (bsgamesdkResponse != null && bsgamesdkResponse.access_key != null) {
             openIdTicketStatus = "游戏未登录（将自动使用B站账号登录）";
-        }
-        else {
+        } else {
             openIdTicketStatus = "游戏未登录（请先登录B站账号）";
         }
         const openIdTicket = this.params.openIdTicket;
@@ -859,630 +688,408 @@ class controlInterface {
             openIdTicketStatusStyle = `color: ${inconsistent ? "red" : "green"}`;
         }
         openIdTicketStatus = (0, get_str_rep_1.getStrRep)(openIdTicketStatus);
-        let upstreamProxyCACertStatus = "未上传", upstreamProxyCACertStyle = "color: red";
-        if (this.params.upstreamProxyCACert != null) {
-            upstreamProxyCACertStatus = "已上传";
-            upstreamProxyCACertStyle = "color: green";
-        }
+
         const status = this.getStatus(gameUid);
-        const isDownloading = status.isDownloading;
-        const userdataDumpStatus = status.userdataDumpStatus;
-        const userdataDumpStatusStyle = status.userdataDumpStatusStyle;
-        const isCrawling = status.isCrawling;
-        const crawlingStatus = status.crawlingStatus;
-        const crawlingStatusStyle = status.crawlingStatusStyle;
+        const isImporting = status.isImporting;
+        const importStatus = status.importStatus;
         const integrityCheckResult = status.integrityCheckResult;
         const integrityCheckResultStyle = status.integrityCheckResultStyle;
         const isCheckingIntegrity = status.isCheckingIntegrity;
         const fsckResult = status.fsckResult;
         const fsckResultStyle = status.fsckResultStyle;
         const isFscking = status.isFscking;
-        const isImporting = status.isImporting;
-        const importStatus = status.importStatus;
-        const crawlWebRes = this.params.crawlWebRes;
-        const crawlAssets = this.params.crawlAssets;
-        const isWebResCompleted = this.crawler.isWebResCompleted;
-        const isAssetsCompleted = this.crawler.isAssetsCompleted;
-        const bsgamesdkIDs = this.params.bsgamesdkIDs;
-        const bd_id = bsgamesdkIDs.bd_id, buvid = bsgamesdkIDs.buvid, udid = bsgamesdkIDs.udid;
-        const magirecoIDs = this.params.magirecoIDs;
-        const device_id = magirecoIDs.device_id;
+
         const pkgVersionStr = process.env.npm_package_version == null ? `` : ` v${process.env.npm_package_version}`;
-        const html = "<!doctype html>"
-            + `\n<html>`
-            + `\n<head>`
-            + `\n  <meta charset =\"utf-8\">`
-            + `\n  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>`
-            + `\n  <title>Magireco CN Local Server</title>`
-            + `\n  <script>`
-            + `\n    window.addEventListener('pageshow', (ev) => {`
-            + `\n      if (ev.persisted||(window.performance!=null&&window.performance.navigation.type===2)) {`
-            + `\n        window.location.reload(true);/*refresh on back or forward*/`
-            + `\n      }`
-            + `\n    });`
-            + `\n    function autoRefresh() {`
-            + `\n      if (isDownloading || isImporting) {`
-            + `\n        window.location.reload(true);`
-            + `\n      }`
-            + `\n    }`
-            + `\n    var verboseDescHtml = \"${aHref("（点击显示设置说明，即让游戏客户端连接到本地服务器而不是直连官服）", "javascript:swapVerboseDesc();", false).replace(/"/g, "\\\"")}\";`
-            + `\n    function swapVerboseDesc() {`
-            + `\n      let el = document.getElementById(\"verbosedesc\"); let innerHTML = el.innerHTML;`
-            + `\n      el.innerHTML = verboseDescHtml; verboseDescHtml = innerHTML;`
-            + `\n    }`
-            + `\n    window.addEventListener('load', (ev) => {`
-            + `\n      swapVerboseDesc();`
-            + `\n      document.getElementById(\"loginstatus\").textContent = \"${loginStatus}\";`
-            + `\n      document.getElementById(\"openidticketstatus\").textContent = \"${openIdTicketStatus}\";`
-            + `\n      let initialCountdown = ${isDownloading || isImporting || isCrawling || isCheckingIntegrity || isFscking ? "20" : "0"};`
-            + `\n      async function autoRefresh(countdown) {`
-            + `\n          let status = {isDownloading: true, isImporting: false, isCrawling: true, isCheckingIntegrity: true, isFscking: true};`
-            + `\n          try {`
-            + `\n              status = await (await fetch(new URL(\"/api/get_status\", document.baseURI))).json();`
-            + `\n              countdown = initialCountdown;`
-            + `\n          } catch (e) {`
-            + `\n              console.error(e);`
-            + `\n          }`
-            + `\n          let isOfflineMode = status.mode == ${parameters.mode.LOCAL_OFFLINE};`
-            + `\n          isOffline(isOfflineMode);`
-            + `\n          let el = document.getElementById(\"userdatadumpstatus\");`
-            + `\n          el.textContent = status.userdataDumpStatus; el.style = status.userdataDumpStatusStyle;`
-            + `\n          document.getElementById(\"prepare_download_btn\").disabled = isOfflineMode || status.isDownloading || status.isImporting;`
-            + `\n          el = document.getElementById(\"crawlingstatus\");`
-            + `\n          el.textContent = status.crawlingStatus; el.style = status.crawlingStatusStyle;`
-            + `\n          document.getElementById(\"crawl_static_data_btn\").disabled = isOfflineMode || status.isCrawling;`
-            + `\n          document.getElementById(\"stop_crawling_btn\").disabled = isOfflineMode || !status.isCrawling;`
-            + `\n          el = document.getElementById(\"crawl_web_res_lbl\")`
-            + `\n          el.textContent = status.isWebResCompleted ? \"已完成下载\" : \"未完成下载\"; el.style = status.isWebResCompleted ? \"color: green\" : \"\";`
-            + `\n          el = document.getElementById(\"crawl_assets_lbl\");`
-            + `\n          el.textContent = status.isAssetsCompleted ? \"已完成下载\" : \"未完成下载\";el.style = status.isAssetsCompleted ? \"color: green\": \"\"`
-            + `\n          el = document.getElementById(\"importstatus\");`
-            + `\n          el.textContent = status.importStatus; el.style = status.importStatusStyle;`
-            + `\n          document.getElementById(\"import_btn\").disabled = status.isDownloading || status.isImporting;`
-            + `\n          el = document.getElementById(\"fsckresult\");`
-            + `\n          el.textContent = status.fsckResult; el.style = status.fsckResultStyle;`
-            + `\n          document.getElementById(\"fsck_btn\").disabled = status.isFscking || status.isCheckingIntegrity;`
-            + `\n          el = document.getElementById(\"integritycheckresult\");`
-            + `\n          el.textContent = status.integrityCheckResult; el.style = status.integrityCheckResultStyle;`
-            + `\n          document.getElementById(\"integrity_check_btn\").disabled = status.isFscking || status.isCheckingIntegrity;`
-            + `\n          if (countdown > 0 && (status.isDownloading || status.isImporting || status.isCrawling || status.isCheckingIntegrity || status.isFscking)) setTimeout(() => autoRefresh(--countdown), 500);`
-            + `\n      }`
-            + `\n      autoRefresh(initialCountdown);`
-            + `\n    });`
-            + `\n    function isOffline(isOfflineMode) {`
-            + `\n      let modeElments = document.getElementsByName("mode");`
-            + `\n      for (let i = 0; i < modeElments.length; i++) {`
-            + `\n        let el = modeElments[i];`
-            + `\n        if (isOfflineMode == null) {`
-            + `\n          if (el.value === \"online\" && el.checked) isOfflineMode = false;`
-            + `\n          if (el.value === \"local_offline\" && el.checked) isOfflineMode = true;`
-            + `\n        } else {`
-            + `\n          if (el.value === \"online\") el.checked = !isOfflineMode;`
-            + `\n          if (el.value === \"local_offline\") el.checked = isOfflineMode;`
-            + `\n          const btnids = [\"loginbtn\", \"prepare_download_btn\", \"crawl_static_data_btn\", \"stop_crawling_btn\"];`
-            + `\n          btnids.forEach((id) => {`
-            + `\n            let el = document.getElementById(id);`
-            + `\n            el.value = el.value.replace(/^((?!本地离线模式下无法)|本地离线模式下无法)/, isOfflineMode ? \"本地离线模式下无法\" : \"\");`
-            + `\n            el.disabled = isOfflineMode;`
-            + `\n          });`
-            + `\n        }`
-            + `\n      }`
-            + `\n      return isOfflineMode;`
-            + `\n    }`
-            + `\n    function unlock_prepare_download_btn() {`
-            + `\n      if (!isOffline()) document.getElementById(\"prepare_download_btn\").removeAttribute(\"disabled\");`
-            + `\n    }`
-            + `\n    function localIPv4Select(selected) {`
-            + `\n      let host = selected.id.replace(/^local_ipv4_addr_/, \"\").replace(/_/g, \".\");`
-            + `\n      let el = document.getElementById(\"clash_yaml_link\");`
-            + `\n      el.textContent = \`magirecolocal_\${host}_${httpProxyPort}.yaml\`;`
-            + `\n      el.setAttribute(\"href\", \"/\" + el.textContent); el.setAttribute("target", "_blank");`
-            + `\n    }`
-            + `\n  </script>`
-            + `\n  <style>`
-            + `\n    code {`
-            + `\n      color:black;`
-            + `\n      background-color:#e0e0e0;`
-            + `\n    }`
-            + `\n    li {`
-            + `\n      margin-bottom: .5rem;`
-            + `\n    }`
-            + `\n  </style>`
-            + `\n</head>`
-            + `\n<body>`
-            + `\n  <h1>魔法纪录国服本地服务器${pkgVersionStr}</h1>`
-            + `\n  <fieldset><legend>浏览器调试</legend>`
-            + `\n    <div>`
-            + `\n      通过下面这个链接即可通过浏览器登录游戏，便于调试。`
-            + `\n      <br>${aHref("index.html", "https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/index.html")}`
-            + `\n      <br><i>需要F12然后开启设备模拟才能模拟触控操作。</i>`
-            + `\n      <br><i>手机端可能需要切换到桌面UA（电脑版）。</i>`
-            + `\n    </div>`
-            + `\n  </fieldset>`
-            + `\n  <fieldset>`
-            + `\n  <legend>HTTP代理</legend>`
-            + `\n  <fieldset><legend>HTTP代理信息</legend>`
-            + `\n    <div>`
-            + `\n      <label for=\"httpproxyaddr\">HTTP代理监听地址</label>`
-            + `\n      <input readonly id=\"httpproxyaddr\" value=\"${httpProxyAddr}\">`
-            + `\n    </div>`
-            + `\n    <div>`
-            + `\n      <label for=\"httpproxyport\">HTTP代理监听端口</label>`
-            + `\n      <input readonly id=\"httpproxyport\" value=\"${httpProxyPort}\">`
-            + `\n    </div>`
-            + `\n    <div>`
-            + `\n      <label for=\"httpproxyusername\">HTTP代理用户名</label>`
-            + `\n      <input readonly id=\"httpproxyusername\" value=\"${httpProxyUsername}\">`
-            + `\n    </div>`
-            + `\n    <div>`
-            + `\n      <label for=\"httpproxypassword\">HTTP代理密码</label>`
-            + `\n      <input readonly id=\"httpproxypassword\" value=\"${httpProxyPassword}\">`
-            + `\n    </div>`
-            + `\n  </fieldset>`
-            + `\n  <div>`
-            + `\n  <fieldset><legend>切换HTTP代理监听地址</legend>`
-            + `\n    <form action=\"/api/toggle_loopback_listen\" method=\"post\">`
-            + `\n      <div>`
-            + `\n        <input type=\"submit\" value="${this.isTogglingLoopbackListen ? "正在" : ""}切换HTTP代理监听地址" id="toggle_loopback_listen_btn" ${this.isTogglingLoopbackListen ? "disabled" : ""}>`
-            + `\n      </div>`
-            + `\n    </form>`
-            + `\n  </fieldset>`
-            + `\n  <ul>`
-            + `\n  <li>`
-            + `\n    本机（<code>127.0.0.1</code>）<b>之外</b>的地址连接HTTP代理时，<b>将会启用用户名密码验证</b>。`
-            + `\n  </li>`
-            + `\n  <li>`
-            + `\n    若要${aHref("从官服下载个人账号数据", "#dumpuserdata", false)}，可以使用下面的${aHref("Bilibili登录", "#bilibilipwdauth", false)}界面，也可以使用Clash让游戏客户端通过上述HTTP代理联网；`
-            + `\n  </li>`
-            + `\n  <li>`
-            + `\n    或者修改${aHref("工作模式", "#setmode", false)}后，使用Clash让游戏客户端通过上述HTTP代理联网即可成为脱离官服的本地离线服务器。`
-            + `\n  </li>`
-            + `\n  </ul>`
-            + `\n  </div>`
-            + `\n  </fieldset>`
-            + `\n  <fieldset>`
-            + `\n  <legend>下载CA证书</legend>`
-            + `\n  <div>`
-            + `\n    ${aHref("ca.crt", "/ca.crt")}`
-            + `\n    <br><i>注意，如果是模拟器，模拟器系统更新后需要重新安装CA证书。</i>`
-            + `\n    <br><i>（${aHref("离线补丁版", "#verbosedesc", false)}游戏客户端则不需要安装CA证书）</i>`
-            + `\n  </div>`
-            + `\n  </fieldset>`
-            + `\n  <fieldset id="clash_config_download">`
-            + `\n  <legend>下载Clash配置文件</legend>`
-            + `\n  <div>`
-            + `\n  ${httpProxyAddr === "127.0.0.1" ? "" : `${this.addrSelectHtml}`}`
-            + `\n    ${httpProxyAddr === "127.0.0.1"
+
+        // 现代简洁的CSS样式（增强输入框和按钮）
+        const style = `
+            * { box-sizing: border-box; margin: 0; padding: 0; }
+            body {
+                background: #f5f7fa;
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+                line-height: 1.6;
+                padding: 20px;
+                color: #2c3e50;
+            }
+            .container {
+                max-width: 1200px;
+                margin: 0 auto;
+            }
+            h1 {
+                font-size: 2rem;
+                margin-bottom: 1rem;
+                color: #34495e;
+                border-bottom: 3px solid #3498db;
+                padding-bottom: 0.5rem;
+            }
+            h2 {
+                font-size: 1.6rem;
+                margin: 1.5rem 0 1rem;
+                color: #2980b9;
+                border-left: 5px solid #3498db;
+                padding-left: 1rem;
+            }
+            fieldset {
+                background: white;
+                border: none;
+                border-radius: 12px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+                padding: 1.5rem;
+                margin-bottom: 1.5rem;
+                transition: all 0.2s;
+            }
+            fieldset:hover {
+                box-shadow: 0 6px 16px rgba(0,0,0,0.1);
+            }
+            legend {
+                font-weight: 600;
+                background: #3498db;
+                color: white;
+                padding: 0.4rem 1rem;
+                border-radius: 30px;
+                font-size: 1rem;
+                margin-bottom: 0.5rem;
+                border: none;
+            }
+            label {
+                font-weight: 500;
+                display: inline-block;
+                margin-bottom: 0.3rem;
+                color: #2c3e50;
+            }
+            input[type="text"], input[type="password"], input[type="number"], input[readonly] {
+                width: 100%;
+                padding: 0.7rem 1rem;
+                border: 1px solid #ddd;
+                border-radius: 8px;
+                font-size: 0.95rem;
+                margin-bottom: 0.8rem;
+                transition: border 0.2s, box-shadow 0.2s;
+            }
+            input[type="text"]:focus, input[type="password"]:focus, input[type="number"]:focus {
+                border-color: #3498db;
+                outline: none;
+                box-shadow: 0 0 0 3px rgba(52,152,219,0.2);
+            }
+            input[type="checkbox"] {
+                margin-right: 0.5rem;
+                transform: scale(1.2);
+                vertical-align: middle;
+                accent-color: #3498db;
+            }
+            input[type="file"] {
+                display: block;
+                width: 100%;
+                padding: 0.5rem;
+                border: 1px dashed #3498db;
+                border-radius: 8px;
+                background: #f0f9ff;
+                margin-bottom: 0.8rem;
+                cursor: pointer;
+            }
+            input[type="file"]::file-selector-button {
+                background: #3498db;
+                color: white;
+                border: none;
+                padding: 0.5rem 1rem;
+                border-radius: 6px;
+                margin-right: 1rem;
+                cursor: pointer;
+                transition: background 0.2s;
+            }
+            input[type="file"]::file-selector-button:hover {
+                background: #2980b9;
+            }
+            button, input[type="submit"], input[type="button"] {
+                background: #3498db;
+                color: white;
+                border: none;
+                padding: 0.7rem 1.5rem;
+                border-radius: 30px;
+                font-size: 1rem;
+                font-weight: 500;
+                cursor: pointer;
+                transition: background 0.2s, transform 0.1s;
+                margin-right: 0.5rem;
+                margin-bottom: 0.5rem;
+                box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            }
+            button:hover, input[type="submit"]:hover {
+                background: #2980b9;
+            }
+            button:active, input[type="submit"]:active {
+                transform: scale(0.98);
+            }
+            button:disabled, input[type="submit"]:disabled {
+                background: #bdc3c7;
+                cursor: not-allowed;
+                box-shadow: none;
+            }
+            .status-label {
+                font-weight: 600;
+                padding: 0.3rem 1rem;
+                border-radius: 20px;
+                display: inline-block;
+                margin: 0.3rem 0;
+                background: #f0f0f0;
+            }
+            a {
+                color: #3498db;
+                text-decoration: none;
+                font-weight: 500;
+            }
+            a:hover {
+                text-decoration: underline;
+            }
+            hr {
+                border: none;
+                border-top: 2px dashed #bdc3c7;
+                margin: 2rem 0;
+            }
+            .grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+                gap: 1.5rem;
+            }
+            .note {
+                background: #fff3cd;
+                border-left: 4px solid #ffc107;
+                padding: 1rem;
+                border-radius: 8px;
+                margin: 1rem 0;
+            }
+        `;
+
+        // 内联脚本（精简，只保留必要元素）
+        const script = `
+            window.addEventListener('pageshow', (ev) => {
+                if (ev.persisted || (window.performance != null && window.performance.navigation.type === 2)) {
+                    window.location.reload(true);
+                }
+            });
+            function swapVerboseDesc() {
+                let el = document.getElementById("verbosedesc");
+                let innerHTML = el.innerHTML;
+                let verboseDescHtml = "${aHref("（点击显示设置说明，即让游戏客户端连接到本地服务器而不是直连官服）", "javascript:swapVerboseDesc();", false).replace(/"/g, "\\\"")}";
+                el.innerHTML = verboseDescHtml;
+                verboseDescHtml = innerHTML;
+            }
+            window.addEventListener('load', (ev) => {
+                swapVerboseDesc();
+                document.getElementById("openidticketstatus").textContent = "${openIdTicketStatus}";
+                document.getElementById("openidticketstatus").style = "${openIdTicketStatusStyle}";
+                let initialCountdown = ${isImporting || isCheckingIntegrity || isFscking ? "20" : "0"};
+                async function autoRefresh(countdown) {
+                    let status = {isImporting: false, isCheckingIntegrity: true, isFscking: true};
+                    try {
+                        status = await (await fetch(new URL("/api/get_status", document.baseURI))).json();
+                        countdown = initialCountdown;
+                    } catch (e) {
+                        console.error(e);
+                    }
+                    let el = document.getElementById("importstatus");
+                    if (el) { el.textContent = status.importStatus; el.style = status.importStatusStyle; }
+                    el = document.getElementById("fsckresult");
+                    if (el) { el.textContent = status.fsckResult; el.style = status.fsckResultStyle; }
+                    document.getElementById("fsck_btn").disabled = status.isFscking || status.isCheckingIntegrity;
+                    el = document.getElementById("integritycheckresult");
+                    if (el) { el.textContent = status.integrityCheckResult; el.style = status.integrityCheckResultStyle; }
+                    document.getElementById("integrity_check_btn").disabled = status.isFscking || status.isCheckingIntegrity;
+                    if (countdown > 0 && (status.isImporting || status.isCheckingIntegrity || status.isFscking))
+                        setTimeout(() => autoRefresh(--countdown), 500);
+                }
+                autoRefresh(initialCountdown);
+            });
+            function localIPv4Select(selected) {
+                let host = selected.id.replace(/^local_ipv4_addr_/, "").replace(/_/g, ".");
+                let el = document.getElementById("clash_yaml_link");
+                el.textContent = \`magirecolocal_\${host}_${httpProxyPort}.yaml\`;
+                el.setAttribute("href", "/" + el.textContent); el.setAttribute("target", "_blank");
+            }
+        `;
+
+        const html = `<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+    <title>魔法纪录国服本地服务器${pkgVersionStr}</title>
+    <style>${style}</style>
+    <script>${script}</script>
+</head>
+<body>
+    <div class="container">
+        <h1>魔法纪录国服本地服务器${pkgVersionStr}</h1>
+
+        <!-- HTTP代理信息 -->
+        <fieldset>
+            <legend>HTTP代理</legend>
+            <fieldset><legend>代理信息</legend>
+                <div><label>监听地址</label><input readonly value="${httpProxyAddr}"></div>
+                <div><label>监听端口</label><input readonly value="${httpProxyPort}"></div>
+                <div><label>用户名</label><input readonly value="${httpProxyUsername}"></div>
+                <div><label>密码</label><input readonly value="${httpProxyPassword}"></div>
+            </fieldset>
+            <div>
+                <form action="/api/toggle_loopback_listen" method="post">
+                    <input type="submit" value="${this.isTogglingLoopbackListen ? "正在" : ""}切换HTTP代理监听地址" id="toggle_loopback_listen_btn" ${this.isTogglingLoopbackListen ? "disabled" : ""}>
+                </form>
+                <ul>
+                    <li>本机（<code>127.0.0.1</code>）<b>之外</b>的地址连接HTTP代理时，<b>将会启用用户名密码验证</b>。</li>
+                    <li>若要登录游戏，可以使用Clash让游戏客户端通过上述HTTP代理联网；</li>
+                    <li>或者修改<a href="#setmode">工作模式</a>后，使用Clash让游戏客户端通过上述HTTP代理联网即可成为脱离官服的本地离线服务器。</li>
+                </ul>
+            </div>
+        </fieldset>
+
+        <!-- 下载CA证书 -->
+        <fieldset><legend>下载CA证书</legend>
+            <div>${aHref("ca.crt", "/ca.crt")}<br><i>注意，如果是模拟器，模拟器系统更新后需要重新安装CA证书。</i><br><i>（${aHref("离线补丁版", "#verbosedesc", false)}游戏客户端则不需要安装CA证书）</i></div>
+        </fieldset>
+
+        <!-- 下载Clash配置文件 -->
+        <fieldset id="clash_config_download"><legend>下载Clash配置文件</legend>
+            <div>${httpProxyAddr === "127.0.0.1" ? "" : `${this.addrSelectHtml}`}
+            ${httpProxyAddr === "127.0.0.1"
                 ? aHref(`magirecolocal_${httpProxyAddr}_${httpProxyPort}.yaml`, `/magirecolocal_${httpProxyAddr}_${httpProxyPort}.yaml`)
-                : aHref("（请先选择一个本机IP地址）", "#local_ipv4_addr_list", false, "clash_yaml_link")}`
-            + `\n    <br><i>文件名中含有HTTP代理端口号，请注意核对端口号是否与上面显示的一致。</i>`
-            + `\n  </div>`
-            + `\n  </fieldset>`
-            + `\n  <fieldset>`
-            + `\n  <legend>下载配置数据</legend>`
-            + `\n    <fieldset><legend>服务器配置</legend>`
-            + `\n      <label for=\"paramsjson\"><b style=\"color: red\">（含有登录密钥等敏感数据，请勿分享）</b></label>`
-            + `\n      ${aHref("params.json", "/params.json")}`
-            + `\n    </fieldset>`
-            + `\n    <fieldset><legend>玩家配置（如看板背景等）</legend>`
-            + `\n      <label for=\"overridesjson\"></label>`
-            + `\n      ${aHref("overrides.json", "/overrides.json")}`
-            + `\n    </fieldset>`
-            + `\n  </fieldset>`
-            + `\n  <fieldset>`
-            + `\n  <legend>上传配置数据</legend>`
-            + `\n    <fieldset><legend>服务器配置</legend>`
-            + `\n      <form enctype=\"multipart/form-data\" action=\"/api/upload_params\" method=\"post\">`
-            + `\n        <div>`
-            + `\n          <input type=\"file\" name=\"uploaded_params\" id=\"params_file\">`
-            + `\n        </div>`
-            + `\n        <div>`
-            + `\n          <input type=\"submit\" value=\"上传配置数据\" id=\"upload_params_btn\">`
-            + `\n        </div>`
-            + `\n      </form>`
-            + `\n    </fieldset>`
-            + `\n    <fieldset><legend>玩家配置（如看板背景等）</legend>`
-            + `\n      <form enctype=\"multipart/form-data\" action=\"/api/upload_overrides\" method=\"post\">`
-            + `\n        <div>`
-            + `\n          <input type=\"file\" name=\"uploaded_overrides\" id=\"overrides_file\">`
-            + `\n        </div>`
-            + `\n        <div>`
-            + `\n          <input type=\"submit\" value=\"上传配置数据\" id=\"upload_overrides_btn\">`
-            + `\n        </div>`
-            + `\n      </form>`
-            + `\n    </fieldset>`
-            + `\n  </fieldset>`
-            + `\n  <hr>`
-            + `\n  <h2>说明</h2>`
-            + `\n  <ol>`
-            + `\n  <li>`
-            + `\n  在国服尚未关服的情况下，这里提供的${aHref("Bilibili登录", "#bilibilipwdauth", false)}界面可以在无需游戏客户端的情况下登录游戏账号。`
-            + `\n  <br>但这只是快捷省事的途径，不一定可靠。`
-            + `\n  </li>`
-            + `\n  <li>`
-            + `\n  登录后即可${aHref("下载保存个人游戏账号数据", "#dumpuserdata", false)}，包括你拥有的魔法少女列表、记忆结晶列表、好友列表、以及最近的获得履历等等。`
-            + `\n  </li>`
-            + `\n  <li>`
-            + `\n  另外，让${aHref("游戏客户端", officialURL.href)}通过上述HTTP代理设置连接服务器时（也就是通过这个本地服务器进行中转），即会自动从游戏通信内容中抓取到登录信息，然后刷新这个页面即可看到登录状态变为绿色“已登录”。`
-            + `\n  <br>接着就同样可以利用抓取到的登录信息来下载保存个人账号数据。`
-            + `\n  </li>`
-            + `\n  <li id=\"verbosedesc\">`
-            + `\n  ${aHref("（点击隐藏详细设置说明，即让游戏客户端连接到本地服务器而不是直连官服）", "javascript:swapVerboseDesc();", false)}`
-            + `\n    <ul>`
-            + `\n      <li>`
-            + `\n        ${aHref("离线补丁版", patchedApkURL.href)}游戏客户端不需要CA证书；`
-            + `\n        <br>但模拟器中，目前仅发现${aHref("Android12的MuMuX模拟器", mumuXURL.href)}可以运行；`
-            + `\n        <br>真机理论上只支持Android9以上系统，实际上目前仅在Android12上测试过。`
-            + `\n        <br>而且它目前只能免去对CA证书的需求，仍然需要继续设置Clash。`
-            + `\n      </li><li>`
-            + `\n        电脑上应该用${aHref("最新版NodeJS", nodeJsUrl.href)}直接跑${aHref("这个本地服务器", npmRepoUrl.href)}<b>（不推荐在模拟器里通过Termux运行本地服务器）</b>、用Android模拟器跑${aHref("游戏客户端", officialURL.href)}和${aHref("Clash for Android", clashURL.href)}，`
-            + `\n        <br>然后用<code>adb -e reverse tcp:${httpProxyPort} tcp:${httpProxyPort}</code>命令设置端口映射来让模拟器里的Clash能连到外边；`
-            + `\n        <br>CA证书也安装在（跑着游戏客户端和Clash的）Android模拟器里；或者改用不需要CA证书的${aHref("离线补丁版", patchedApkURL.href)}游戏客户端；`
-            + `\n        <br>（<code>adb</code>的<code>-e</code>参数指定连接至模拟器而不是真机；<code>-d</code>则反之。若有多个设备/模拟器则可用<code>-t</code>指定<code>adb devices -l</code>列出的transport_id编号，比如<code>-t 2</code>）`
-            + `\n      </li><li>`
-            + `\n        或是在Android真机上用${aHref("Termux", termuxURL.href)}跑这个本地服务器，`
-            + `\n        <br>然后用类似${aHref("光速", gsxnjURL.href)}之类虚拟机来跑${aHref("游戏客户端", officialURL.href)}，`
-            + `\n        <br>并在虚拟机内安装CA证书（若是${aHref("离线补丁版", patchedApkURL.href)}游戏客户端则不需要CA证书）。`
-            + `\n        <br>Clash则直接跑在真机上，然后需要设置Clash分流来<b>只让跑着游戏客户端的虚拟机App走代理，不能让跑着本地服务器的Termux也走代理</b>，`
-            + `\n        <br>也就是在Clash的[网络]=>[访问控制模式]中选择<b>[仅允许已选择的应用]</b>，然后在[访问控制应用包列表]中<b>只勾选虚拟机App</b>（虚拟机里跑着游戏客户端以及下文提到的autoBattle脚本）。`
-            + `\n        <br><i>（否则很显然，本地服务器转发到游戏官服时又被Clash拦截送回本地服务器，这样网络通信就“死循环”了）</i>`
-            + `\n      </li><li>`
-            + `\n        <b>注意Clash第一次启动后需要设置一下代理模式</b>，否则默认是DIRECT直连。`
-            + `\n      </li><li>`
-            + `\n        必须在Clash设置中启用<b>[DNS劫持]</b>。`
-            + `\n      </li><li>`
-            + `\n        <b>如果不是${aHref("离线补丁版", patchedApkURL.href)}游戏客户端，则必须安装CA证书，且必须安装为Android的系统证书</b>`
-            + `\n        <br><i>（必须<b>Root权限</b>，所以对于获取Root权限不便的真机，需要在虚拟机内安装游戏客户端；而虚拟机内可能不支持运行Clash，故Clash需要跑在虚拟机外）。</i>`
-            + `\n        <br>安装CA证书这一步可以用${aHref("autoBattle脚本", autoBattleURL.href)}（安装后请先下拉在线更新到最新版）选择运行[安装CA证书]这个脚本自动完成。`
-            + `\n      </li><li>`
-            + `\n        另外提醒一下：Android 6的MuMu模拟器等环境下，Clash for Android似乎不能正常按应用分流，所以不能在MuMu模拟器里再安装Termux、然后用Termux跑本地服务器，否则会出现上述网络通信“死循环”问题。<b>使用MuMu模拟器时也应该按照上述方法，在模拟器外直接在电脑上跑本地服务器。</b>`
-            + `\n      </li><li>`
-            + `\n        Android 9或以上的新版MuMu模拟器，建议如上述方式修改Clash设置，只让游戏客户端通过Clash联网，并启用[绕过私有网络]和[DNS劫持]。`
-            + `\n      </li><li>`
-            + `\n        雷电模拟器9的系统分区默认不可写，导致无法安装CA证书，需要在模拟器右上角三条横线菜单[软件设置]=>[性能设置]中将[磁盘共享]设为<b>[System.vmdk可写入]</b>。`
-            + `\n      </li>`
-            + `\n    </ul>`
-            + `\n  </li>`
-            + `\n  <li>`
-            + `\n  本地离线模式<b>必须</b>先${aHref("从官服下载静态资源", "#crawlstaticdata", false)}才能正常提供服务。`
-            + `\n  </li>`
-            + `\n  <li>`
-            + `\n  本地离线模式只支持通过<b>用户名密码登录</b>，目前只有首页背景、看板、档案、镜层演习等少数功能完成修复；`
-            + `\n  </li>`
-            + `\n  <li>`
-            + `\n  本地离线模式下，在游戏客户端中输入任意非空用户名密码均可照常登录到离线服务器。`
-            + `\n  </li>`
-            + `\n  <li>`
-            + `\n  目前暂时<b>只有之前下载过个人账号数据的情况下才能正常登录到离线服务器</b>。`
-            + `\n  </li>`
-            + `\n  <li>`
-            + `\n  <b>必须切换到在线模式才能下载个人账号数据，本地离线模式下无法从官服下载个人账号数据。</b>`
-            + `\n  </li>`
-            + `\n  </ol>`
-            + `\n  <hr>`
-            + `\n  <h2>设置</h2>`
-            + `\n  <fieldset id=\"setmode\">`
-            + `\n  <legend>工作模式</legend>`
-            + `\n    <div>`
-            + `\n      <input checked disabled type=\"radio\" id=\"mode_radio2\" name=\"mode\" value=\"local_offline\">`
-            + `\n      <label for=\"mode_radio2\">本地离线模式</label>`
-            + `\n    </div>`
-            + `\n  </fieldset>`
-            + `\n  <fieldset>`
-            + `\n  <legend>上游代理</legend>`
-            + `\n  <form action=\"/api/set_upstream_proxy\" method=\"post\">`
-            + `\n    <div>`
-            + `\n      <label for=\"upstream_proxy_host\">上游代理地址</label>`
-            + `\n      <input id=\"upstream_proxy_host\" name=\"upstream_proxy_host\" value=\"${upstreamProxyHost}\">`
-            + `\n    </div>`
-            + `\n    <div>`
-            + `\n      <label for=\"upstream_proxy_port\">上游代理端口</label>`
-            + `\n      <input id=\"upstream_proxy_port\" name=\"upstream_proxy_port\" value=\"${upstreamProxyPort}\">`
-            + `\n    </div>`
-            + `\n    <div>`
-            + `\n      <input id=\"upstream_proxy_enabled\" name=\"upstream_proxy_enabled\" value=\"true\" type=\"checkbox\" ${upstreamProxyEnabled ? "checked" : ""}>`
-            + `\n      <label for=\"upstream_proxy_enabled\">启用上游代理</label>`
-            + `\n    </div>`
-            + `\n    <div>`
-            + `\n      <input type=\"submit\" value=\"修改上游代理设置\" id=\"set_upstream_proxy_btn\">`
-            + `\n    </div>`
-            + `\n  </form>`
-            + `\n  </fieldset>`
-            + `\n  <fieldset>`
-            + `\n  <legend>上游代理CA证书</legend>`
-            + `\n  <form enctype=\"multipart/form-data\" action=\"/api/upload_upstream_proxy_cacert\" method=\"post\">`
-            + `\n    <div>`
-            + `\n      <input type=\"file\" name=\"upstream_proxy_cacert\" id=\"upstream_proxy_cacert\">`
-            + `\n    </div>`
-            + `\n    <div>`
-            + `\n      <input type=\"submit\" value=\"上传/清除上游代理CA证书(PEM格式)\" id=\"upload_upstream_proxy_cacert_btn\">`
-            + `\n    </div>`
-            + `\n  </form>`
-            + `\n  <div>`
-            + `\n    <button id=\"refreshbtn1\" onclick=\"window.location.reload(true);\">刷新</button>`
-            + `\n    <label style=\"${upstreamProxyCACertStyle}\" id=\"upstream_proxy_ca_status\" for=\"refreshbtn1\">${upstreamProxyCACertStatus}</label>`
-            + `\n  </div>`
-            + `\n  </fieldset>`
-            + `\n  <fieldset>`
-            + `\n  <legend>启动时自动打开浏览器</legend>`
-            + `\n  <form action=\"/api/set_auto_open_web\" method=\"post\">`
-            + `\n    <div>`
-            + `\n      <input id=\"auto_open_web\" name=\"auto_open_web\" value=\"true\" type=\"checkbox\" ${autoOpenWeb ? "checked" : ""}>`
-            + `\n      <label for=\"auto_open_web\">启动时自动打开浏览器</label>`
-            + `\n    </div>`
-            + `\n    <div>`
-            + `\n      <input type=\"submit\" id=\"set_auto_open_web_btn\" value=\"应用\">`
-            + `\n    </div>`
-            + `\n  </form>`
-            + `\n  </fieldset>`
-            + `\n  <fieldset>`
-            + `\n  <legend>圆神附体</legend>`
-            + `\n  <form action=\"/api/set_inject_madokami_se\" method=\"post\">`
-            + `\n    <i>需要修改libmadomagi_native.so才能把精强主动技能按钮显示出来。</i>`
-            + `\n    <br><i>国服关服前并未提供圆神精强数据，数据实际上来自日服；技能名称翻译则参考了开启精强的其他角色。</i>`
-            + `\n    <div>`
-            + `\n      <input id=\"inject_madokami_se\" name=\"inject_madokami_se\" value=\"true\" type=\"checkbox\" ${injectMadokamiSE ? "checked" : ""}>`
-            + `\n      <label for=\"inject_madokami_se\">镜层演习我方全体角色获得圆神精强技能</label>`
-            + `\n    </div>`
-            + `\n    <div>`
-            + `\n      <input type=\"submit\" id=\"set_inject_madokami_se_btn\" value=\"应用\">`
-            + `\n    </div>`
-            + `\n  </form>`
-            + `\n  </fieldset>`
-            + `\n  <hr>`
-            + `\n  <h2 id=\"bilibilipwdauth\">Bilibili登录</h2>`
-            + `\n  <i>下面这个登录界面只是快捷省事的途径，不一定可靠。</i><br>`
-            + `\n  <b>如果你不记得密码，强烈建议不要反复试错，以免触发这里无法应对的二次验证。</b>可以直接<b>重置密码</b>，或者尝试上述让游戏走代理这个折腾的办法。<br>`
-            + `\n  <fieldset>`
-            + `\n  <legend>登录状态</legend>`
-            + `\n  <div>`
-            + `\n    <button id=\"refreshbtn2\" onclick=\"window.location.reload(true);\">刷新</button>`
-            + `\n    <label style=\"${loginStatusStyle}\" id=\"loginstatus\" for=\"refreshbtn2\">TO_BE_FILLED_BY_JAVASCRIPT</label>`
-            + `\n  </div>`
-            + `\n  </fieldset>`
-            + `\n  <fieldset>`
-            + `\n  <legend>用户名密码登录</legend>`
-            + `\n  <form action=\"/api/pwdlogin\" method=\"post\">`
-            + `\n    <div>`
-            + `\n      <label for=\"username\">账户</label>`
-            + `\n      <input name=\"username\" id=\"username\" value=\"\">`
-            + `\n    </div>`
-            + `\n    <div>`
-            + `\n      <label for=\"password\">密码</label>`
-            + `\n      <input name=\"password\" id=\"password\" type=\"password\" value=\"\">`
-            + `\n    </div>`
-            + `\n    <div>`
-            + `\n      <input type=\"submit\" id=\"loginbtn\" value=\"${loginBtnText}\">`
-            + `\n    </div>`
-            + `\n  </form>`
-            + `\n  </fieldset>`
-            + `\n  <fieldset>`
-            + `\n  <legend>清除登录状态</legend>`
-            + `\n  <form action=\"/api/clear_bilibili_login\" method=\"post\">`
-            + `\n    <div>`
-            + `\n      <input type=\"submit\" id=\"clear_bilibili_login_btn\" value=\"清除B站登录状态\">`
-            + `\n    </div>`
-            + `\n  </form>`
-            + `\n  <form action=\"/api/clear_bsgamesdk_ids\" method=\"post\">`
-            + `\n    <div>`
-            + `\n      <input type=\"submit\" id=\"clear_bsgamesdk_ids_btn\" value=\"清除B站登录状态并重置设备ID\">`
-            + `\n    </div>`
-            + `\n  </form>`
-            + `\n  </fieldset>`
-            + `\n  <hr>`
-            + `\n  <h2 id=\"dumpuserdata\">下载个人账号数据</h2>`
-            + `\n  <fieldset>`
-            + `\n  <legend>登录状态</legend>`
-            + `\n  <div>`
-            + `\n    <button id=\"refreshbtn3\" onclick=\"window.location.reload(true);\">刷新</button>`
-            + `\n    <label style=\"${openIdTicketStatusStyle}\" id=\"openidticketstatus\" for=\"refreshbtn3\">TO_BE_FILLED_BY_JAVASCRIPT</label>`
-            + `\n  </div>`
-            + `\n  </fieldset>`
-            + `\n  <fieldset>`
-            + `\n  <legend>下载选项</legend>`
-            + `\n  <form action=\"/api/dump_userdata\" method=\"post\">`
-            + `\n    <div>`
-            + `\n      <input id=\"fetch_chara_enhance_tree_checkbox\" name=\"fetch_chara_enhance_tree\" value=\"true\" type=\"checkbox\" ${this.params.fetchCharaEnhancementTree ? "checked" : ""}>`
-            + `\n      <label for=\"fetch_chara_enhance_tree_checkbox\">下载（官方未开放的）精神强化数据</label>`
-            + `\n    </div>`
-            + `\n    <div>`
-            + `\n      <input id=\"arena_simulate_checkbox\" name=\"arena_simulate\" value=\"true\" type=\"checkbox\" ${this.params.arenaSimulate ? "checked" : ""}>`
-            + `\n      <label for=\"arena_simulate_checkbox\"><b>（需通关第二章开启镜层且至少有1BP）</b>通过镜层演习获取好友队伍配置</label>`
-            + `\n    </div>`
-            + `\n    <div>`
-            + `\n      <input id=\"concurrent_fetch_checkbox\" name=\"concurrent_fetch\" value=\"true\" type=\"checkbox\" ${this.params.concurrentFetch ? "checked" : ""}>`
-            + `\n      <label for=\"concurrent_fetch_checkbox\">开启并行下载</label>`
-            + `\n    </div>`
-            + `\n  </fieldset>`
-            + `\n  <fieldset>`
-            + `\n  <legend>开始下载</legend>`
-            + `\n    <div>`
-            + `\n      <input id=\"new_download_checkbox\" name=\"new\" value=\"true\" type=\"checkbox\" ${this.userdataDmp.lastError != null ? "checked" : ""}>`
-            + `\n      <label for=\"new_download_checkbox\" onclick=\"unlock_prepare_download_btn();\">重新从官服下载</label>`
-            + `\n    </div>`
-            + `\n    <div>`
-            + `\n      <input type=\"submit\" ${isDownloading || isImporting ? "disabled" : ""} value=\"从官服下载\" id=\"prepare_download_btn\">`
-            + `\n      <br><i>从官服下载个人账号数据数据到本地服务器需要大约几分钟时间。下载完成后，下面会给出文件保存链接。</i>`
-            + `\n      <br><i>请不要反复从官服下载，避免给官服增加压力。</i>`
-            + `\n      <br><b style=\"color: red\">因为可能含有隐私敏感数据，请勿分享下载到的个人数据。</b>`
-            + `\n    </div>`
-            + `\n  </form>`
-            + `\n  </fieldset>`
-            + `\n  <fieldset>`
-            + `\n  <legend>下载进度</legend>`
-            + `\n  <div>`
-            + `\n    <button id=\"refreshbtn4\" onclick=\"window.location.reload(true);\">刷新</button>`
-            + `\n    <label id=\"userdatadumpstatus\" style=\"${userdataDumpStatusStyle}\" for=\"refreshbtn4\">TO_BE_FILLED_BY_JAVASCRIPT</label>`
-            + `\n  </div>`
-            + `\n  </fieldset>`
-            + `\n  <fieldset>`
-            + `\n  <legend>清除登录状态</legend>`
-            + `\n  <form action=\"/api/clear_game_login\" method=\"post\">`
-            + `\n    <div>`
-            + `\n      <input type=\"submit\" id=\"clear_game_login_btn\" value=\"清除游戏登录状态\">`
-            + `\n    </div>`
-            + `\n  </form>`
-            + `\n  <form action=\"/api/clear_magireco_ids\" method=\"post\">`
-            + `\n    <div>`
-            + `\n      <input type=\"submit\" id=\"clear_magireco_ids_btn\" value=\"清除游戏登录状态并重置设备ID\">`
-            + `\n    </div>`
-            + `\n  </form>`
-            + `\n  </fieldset>`
-            + `\n  <fieldset>`
-            + `\n  <legend>${this.userdataDmp.lastDump == null ? "尚未下载，无链接可显示" : "将下载到的数据导出另存为文件"}</legend>`
-            + `\n    ${this.userdataDmp.lastDump == null ? "" : "<b>↓点击下面的下载链接即可另存↓</b>"}`
-            + `\n    ${this.userdataDmp.lastDump == null ? "" : "<br>" + aHref(this.userdataDmp.userdataDumpFileName, `/${this.userdataDmp.userdataDumpFileName}`)}`
-            + `\n    ${this.userdataDmp.lastDump == null ? "" : "<br><i>在某品牌手机上，曾经观察到第一次点击此链接下载回来是0字节空文件的问题，如果碰到这个问题可以再次点击或长按链接重试下载，或者换个浏览器试试。</i>"}`
-            + `\n  </fieldset>`
-            + `\n  <fieldset>`
-            + `\n  <legend>导入之前另存的个人账号数据</legend>`
-            + `\n    <form enctype=\"multipart/form-data\" action=\"/api/upload_dump\" method=\"post\">`
-            + `\n      <div>`
-            + `\n        <input type=\"file\" name=\"uploaded_dump\" id=\"dump_file\">`
-            + `\n      </div>`
-            + `\n      <div>`
-            + `\n        <input type=\"submit\" value=\"上传并导入\" id=\"import_btn\" ${isDownloading || isImporting ? "disabled" : ""}>`
-            + `\n        <label for=\"import_btn\"><b>上传并导入后，将会覆盖当前的数据！</b></label>`
-            + `\n      </div>`
-            + `\n    </form>`
-            + `\n    <fieldset>`
-            + `\n    <legend>导入进度</legend>`
-            + `\n    <div>`
-            + `\n      <button id=\"refreshbtn7\" onclick=\"window.location.reload(true);\">刷新</button>`
-            + `\n      <label id=\"importstatus\" style=\"${userdataDumpStatusStyle}\" for=\"refreshbtn7\">TO_BE_FILLED_BY_JAVASCRIPT</label>`
-            + `\n    </div>`
-            + `\n    </fieldset>`
-            + `\n  </fieldset>`
-            + `\n  <hr>`
-            + `\n  <h2 id=\"crawlstaticdata\">爬取游戏静态资源文件</h2>`
-            + `\n  <fieldset>`
-            + `\n  <legend>爬取进度</legend>`
-            + `\n  <div>`
-            + `\n    <button id=\"refreshbtn5\" onclick=\"window.location.reload(true);\">刷新</button>`
-            + `\n    <label id=\"crawlingstatus\" style=\"${crawlingStatusStyle}\" for=\"refreshbtn5\">TO_BE_FILLED_BY_JAVASCRIPT</label>`
-            + `\n  </div>`
-            + `\n  </fieldset>`
-            + `\n  <fieldset>`
-            + `\n  <legend>控制</legend>`
-            + `\n  <form action=\"/api/crawl_static_data\" method=\"post\">`
-            + `\n    <div>`
-            + `\n      <input id=\"crawl_web_res\" name=\"crawl_web_res\" value=\"true\" type=\"checkbox\" ${crawlWebRes ? "checked" : ""}>`
-            + `\n      <label for=\"crawl_web_res\">下载Web资源（<b id=\"crawl_web_res_lbl\">TO_BE_FILLED_BY_JAVASCRIPT</b>，此部分在停止后不能恢复上次进度）</label>`
-            + `\n    </div>`
-            + `\n    <div>`
-            + `\n      <input id=\"crawl_assets\" name=\"crawl_assets\" value=\"true\" type=\"checkbox\" ${crawlAssets ? "checked" : ""}>`
-            + `\n      <label for=\"crawl_assets\">下载本地资源（<b id=\"crawl_assets_lbl\">TO_BE_FILLED_BY_JAVASCRIPT</b>，此部分可自动恢复上次进度）</label>`
-            + `\n    </div>`
-            + `\n    <div>`
-            + `\n      <input id=\"concurrent_crawl_checkbox\" name=\"concurrent_crawl\" value=\"true\" type=\"checkbox\" ${this.params.concurrentCrawl ? "checked" : ""}>`
-            + `\n      <label for=\"concurrent_crawl_checkbox\">开启并行下载</label>`
-            + `\n    </div>`
-            + `\n    <div>`
-            + `\n      <input type=\"submit\" id=\"crawl_static_data_btn\" ${isCrawling ? "disabled" : ""} value=\"开始爬取\">`
-            + `\n      <br><i>请不要反复从官服下载，避免给官服增加压力。</i>`
-            + `\n    </div>`
-            + `\n  </form>`
-            + `\n  <form action=\"/api/stop_crawling\" method=\"post\">`
-            + `\n    <div>`
-            + `\n      <input type=\"submit\" id=\"stop_crawling_btn\" ${isCrawling ? "" : "disabled"} value=\"停止爬取\">`
-            + `\n    </div>`
-            + `\n  </form>`
-            + `\n  </fieldset>`
-            + `\n  <fieldset>`
-            + `\n  <legend>检查文件完整性</legend>`
-            + `\n  <div>`
-            + `\n    <button id=\"refreshbtn6\" onclick=\"window.location.reload(true);\">刷新</button>`
-            + `\n    <label id=\"integritycheckresult\" style=\"${integrityCheckResultStyle}\" for=\"refreshbtn6\">TO_BE_FILLED_BY_JAVASCRIPT</label>`
-            + `\n  </div>`
-            + `\n  <form action=\"/api/check_integrity\" method=\"post\">`
-            + `\n    <div>`
-            + `\n      <input type=\"submit\" id=\"integrity_check_btn\" ${isFscking || isCheckingIntegrity ? "" : "disabled"} value=\"检查文件完整性\">`
-            + `\n      <br>检查资源包的内容是否有缺失或损坏。`
-            + `\n    </div>`
-            + `\n  </form>`
-            + `\n  </fieldset>`
-            + `\n  <fieldset>`
-            + `\n  <legend>清理</legend>`
-            + `\n  <div>`
-            + `\n    <button id=\"refreshbtn7\" onclick=\"window.location.reload(true);\">刷新</button>`
-            + `\n    <label id=\"fsckresult\" style=\"${fsckResultStyle}\" for=\"refreshbtn7\">TO_BE_FILLED_BY_JAVASCRIPT</label>`
-            + `\n  </div>`
-            + `\n  <form action=\"/api/fsck\" method=\"post\">`
-            + `\n    <div>`
-            + `\n      <input type=\"submit\" id=\"fsck_btn\" ${isFscking || isCheckingIntegrity ? "" : "disabled"} value=\"删除已被打包的文件\">`
-            + `\n      <br>自1.6.9版开始，在升级后会自动将静态资源文件重新打包，以节约存储空间。已被打包的文件已不再需要，但不会在打包过程中自动删除，请手动点击上面的按钮扫描并删除。`
-            + `\n    </div>`
-            + `\n  </form>`
-            + `\n  </fieldset>`
-            + `\n  <hr>`
-            /* //FIXME
-            + `\n  <h2>Control</h2>`
-            + `\n  <form action=\"/api/shutdown\" method=\"get\">`
-            + `\n    <button>Shutdown</button>`
-            + `\n  </form>`
-            + `\n  <form action=\"/api/restart\" method=\"get\">`
-            + `\n    <button>Restart</button>`
-            + `\n  </form>`
-            + `\n  <hr>`
-            */
-            + `\n</body>`
-            + `\n</html>`;
+                : aHref("（请先选择一个本机IP地址）", "#local_ipv4_addr_list", false, "clash_yaml_link")}
+            <br><i>文件名中含有HTTP代理端口号，请注意核对端口号是否与上面显示的一致。</i></div>
+        </fieldset>
+
+        <!-- 下载/上传配置数据 -->
+        <div class="grid">
+            <fieldset><legend>下载配置数据</legend>
+                <fieldset><legend>服务器配置</legend><b style="color:red">（含有登录密钥等敏感数据，请勿分享）</b> ${aHref("params.json", "/params.json")}</fieldset>
+                <fieldset><legend>玩家配置</legend>${aHref("overrides.json", "/overrides.json")}</fieldset>
+            </fieldset>
+            <fieldset><legend>上传配置数据</legend>
+                <fieldset><legend>服务器配置</legend>
+                    <form enctype="multipart/form-data" action="/api/upload_params" method="post">
+                        <input type="file" name="uploaded_params" id="params_file">
+                        <input type="submit" value="上传配置数据" id="upload_params_btn">
+                    </form>
+                </fieldset>
+                <fieldset><legend>玩家配置</legend>
+                    <form enctype="multipart/form-data" action="/api/upload_overrides" method="post">
+                        <input type="file" name="uploaded_overrides" id="overrides_file">
+                        <input type="submit" value="上传配置数据" id="upload_overrides_btn">
+                    </form>
+                </fieldset>
+            </fieldset>
+        </div>
+
+        <hr>
+
+        <!-- 详细说明（可折叠） -->
+        <h2>说明</h2>
+        <ol>
+            <li>登录后即可通过导入功能恢复个人账号数据，包括你拥有的魔法少女列表、记忆结晶列表、好友列表、以及最近的获得履历等等。</li>
+            <li id="verbosedesc">${aHref("（点击显示详细设置说明）", "javascript:swapVerboseDesc();", false)}
+                <ul>
+                    <li>${aHref("离线补丁版", patchedApkURL.href)}游戏客户端不需要CA证书；<br>但模拟器中，目前仅发现${aHref("Android12的MuMuX模拟器", mumuXURL.href)}可以运行；<br>真机理论上只支持Android9以上系统，实际上目前仅在Android12上测试过。<br>而且它目前只能免去对CA证书的需求，仍然需要继续设置Clash。</li>
+                    <li>电脑上应该用${aHref("最新版NodeJS", nodeJsUrl.href)}直接跑${aHref("这个本地服务器", npmRepoUrl.href)}<b>（不推荐在模拟器里通过Termux运行本地服务器）</b>、用Android模拟器跑游戏客户端和${aHref("Clash for Android", clashURL.href)}，<br>然后用<code>adb -e reverse tcp:${httpProxyPort} tcp:${httpProxyPort}</code>命令设置端口映射来让模拟器里的Clash能连到外边；<br>CA证书也安装在（跑着游戏客户端和Clash的）Android模拟器里；或者改用不需要CA证书的${aHref("离线补丁版", patchedApkURL.href)}游戏客户端。</li>
+                    <li>或是在Android真机上用${aHref("Termux", termuxURL.href)}跑这个本地服务器，<br>然后用类似${aHref("光速", gsxnjURL.href)}之类虚拟机来跑游戏客户端，<br>并在虚拟机内安装CA证书（若是离线补丁版则不需要）。Clash则直接跑在真机上，然后需要设置Clash分流来<b>只让跑着游戏客户端的虚拟机App走代理，不能让跑着本地服务器的Termux也走代理</b>。</li>
+                    <li><b>注意Clash第一次启动后需要设置一下代理模式</b>，否则默认是DIRECT直连。</li>
+                    <li>必须在Clash设置中启用<b>[DNS劫持]</b>。</li>
+                    <li><b>如果不是离线补丁版游戏客户端，则必须安装CA证书，且必须安装为Android的系统证书</b>（需要Root权限）。</li>
+                    <li>Android 9或以上的新版MuMu模拟器，建议如上述方式修改Clash设置，只让游戏客户端通过Clash联网，并启用[绕过私有网络]和[DNS劫持]。</li>
+                    <li>雷电模拟器9的系统分区默认不可写，导致无法安装CA证书，需要在模拟器右上角三条横线菜单[软件设置]=>[性能设置]中将[磁盘共享]设为<b>[System.vmdk可写入]</b>。</li>
+                </ul>
+            </li>
+            <li>本地离线模式<b>必须</b>先下载静态资源才能正常提供服务（静态资源已内置在安装包中，无需额外操作）。</li>
+            <li>本地离线模式只支持通过<b>用户名密码登录</b>，目前只有首页背景、看板、档案、镜层演习等少数功能完成修复；</li>
+            <li>本地离线模式下，在游戏客户端中输入任意非空用户名密码均可照常登录到离线服务器。</li>
+            <li>目前暂时<b>只有之前导入过个人账号数据的情况下才能正常登录到离线服务器</b>。</li>
+        </ol>
+
+        <hr>
+
+        <!-- 设置区域 -->
+        <h2>设置</h2>
+        <fieldset id="setmode"><legend>工作模式</legend>
+            <div><input checked disabled type="radio" id="mode_radio2" name="mode" value="local_offline"><label for="mode_radio2">本地离线模式</label></div>
+        </fieldset>
+
+        <fieldset><legend>启动时自动打开浏览器</legend>
+            <form action="/api/set_auto_open_web" method="post">
+                <div><input id="auto_open_web" name="auto_open_web" value="true" type="checkbox" ${autoOpenWeb ? "checked" : ""}><label for="auto_open_web">启动时自动打开浏览器</label></div>
+                <div><input type="submit" id="set_auto_open_web_btn" value="应用"></div>
+            </form>
+        </fieldset>
+
+        <fieldset><legend>圆神附体</legend>
+            <i>需要修改libmadomagi_native.so才能把精强主动技能按钮显示出来。</i><br><i>国服关服前并未提供圆神精强数据，数据实际上来自日服；技能名称翻译则参考了开启精强的其他角色。</i>
+            <form action="/api/set_inject_madokami_se" method="post">
+                <div><input id="inject_madokami_se" name="inject_madokami_se" value="true" type="checkbox" ${injectMadokamiSE ? "checked" : ""}><label for="inject_madokami_se">镜层演习我方全体角色获得圆神精强技能</label></div>
+                <div><input type="submit" id="set_inject_madokami_se_btn" value="应用"></div>
+            </form>
+        </fieldset>
+
+        <hr>
+
+        <!-- 个人数据管理（仅保留登录状态、清除登录、导入） -->
+        <h2>个人数据管理</h2>
+        <fieldset><legend>游戏登录状态</legend>
+            <div><button id="refreshbtn2" onclick="window.location.reload(true);">刷新</button><span style="${openIdTicketStatusStyle}" id="openidticketstatus">${openIdTicketStatus}</span></div>
+        </fieldset>
+
+        <fieldset><legend>清除游戏登录状态</legend>
+            <form action="/api/clear_game_login" method="post"><input type="submit" id="clear_game_login_btn" value="清除游戏登录状态"></form>
+            <form action="/api/clear_magireco_ids" method="post"><input type="submit" id="clear_magireco_ids_btn" value="清除游戏登录状态并重置设备ID"></form>
+        </fieldset>
+
+        <fieldset><legend>导入之前另存的个人账号数据</legend>
+            <form enctype="multipart/form-data" action="/api/upload_dump" method="post">
+                <div><input type="file" name="uploaded_dump" id="dump_file"></div>
+                <div><input type="submit" value="上传并导入" id="import_btn" ${isImporting ? "disabled" : ""}><label for="import_btn"><b>上传并导入后，将会覆盖当前的数据！</b></label></div>
+            </form>
+            <fieldset><legend>导入进度</legend>
+                <div><button id="refreshbtn4" onclick="window.location.reload(true);">刷新</button><span style="${status.importStatusStyle}" id="importstatus">${importStatus}</span></div>
+            </fieldset>
+        </fieldset>
+
+        <hr>
+
+        <!-- 资源维护 -->
+        <h2>资源维护</h2>
+        <div class="grid">
+            <fieldset><legend>检查文件完整性</legend>
+                <div><button id="refreshbtn5" onclick="window.location.reload(true);">刷新</button><span style="${integrityCheckResultStyle}" id="integritycheckresult">${integrityCheckResult}</span></div>
+                <form action="/api/check_integrity" method="post">
+                    <input type="submit" id="integrity_check_btn" ${isFscking || isCheckingIntegrity ? "" : "disabled"} value="检查文件完整性">
+                    <br>检查资源包的内容是否有缺失或损坏。
+                </form>
+            </fieldset>
+
+            <fieldset><legend>清理</legend>
+                <div><button id="refreshbtn6" onclick="window.location.reload(true);">刷新</button><span style="${fsckResultStyle}" id="fsckresult">${fsckResult}</span></div>
+                <form action="/api/fsck" method="post">
+                    <input type="submit" id="fsck_btn" ${isFscking || isCheckingIntegrity ? "" : "disabled"} value="删除已被打包的文件">
+                    <br>自1.6.9版开始，在升级后会自动将静态资源文件重新打包，以节约存储空间。已被打包的文件已不再需要，但不会在打包过程中自动删除，请手动点击上面的按钮扫描并删除。
+                </form>
+            </fieldset>
+        </div>
+
+        <hr>
+        <!-- 原 shutdown/restart 按钮已注释，保留占位 -->
+    </div>
+</body>
+</html>`;
         return html;
     }
+
     getGameUid(openIdTicket) {
         const open_id = openIdTicket === null || openIdTicket === void 0 ? void 0 : openIdTicket.open_id;
         const uidMatched = open_id === null || open_id === void 0 ? void 0 : open_id.match(/\d+$/);
         return uidMatched != null && !isNaN(Number(uidMatched[0])) ? (Number(uidMatched[0])) : undefined;
     }
+
     getStatus(gameUid) {
         var _a;
-        let userdataDumpStatus = "尚未开始从官服下载", userdataDumpStatusStyle = "color: red";
-        ;
+        // 下载相关状态不再用于前端显示，但保留以备内部使用
         const isDownloading = this.userdataDmp.isDownloading;
         const lastDump = this.userdataDmp.lastDump;
-        if (isDownloading)
-            userdataDumpStatus = `从官服下载中 ${this.userdataDmp.fetchStatus}`, userdataDumpStatusStyle = "color: blue";
-        else if (lastDump != null) {
-            const lastUid = lastDump.uid;
-            const topPageUrl = `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/TopPage?value=`
-                + `user`
-                + `%2CgameUser`
-                + `%2CitemList`
-                + `%2CgiftList`
-                + `%2CpieceList`
-                + `%2CuserQuestAdventureList`
-                + `&timeStamp=`;
-            const topPage = userdataDump.getUnBrBody(lastDump.httpResp.get, topPageUrl);
-            const loginName = (_a = topPage === null || topPage === void 0 ? void 0 : topPage.user) === null || _a === void 0 ? void 0 : _a.loginName;
-            const downloadDate = new Date(lastDump.timestamp);
-            const downloadDateStr = `${downloadDate.toLocaleDateString()} ${downloadDate.toLocaleTimeString()}`;
-            userdataDumpStatus = `从官服下载数据完毕 uid=[${lastUid}] 玩家名(非B站用户名)=[${loginName}] 下载时间(按系统本地时区显示)=[${downloadDateStr}]`;
-            if (this.userdataDmp.lastError != null) {
-                userdataDumpStatus = `本次下载过程出错 status=[${this.userdataDmp.fetchStatus}] lastError=[${this.userdataDmp.lastError}] （先前${userdataDumpStatus}）`;
-                userdataDumpStatusStyle = "color: orange";
-            }
-            else {
-                userdataDumpStatusStyle = "color: green";
-            }
-        }
-        else if (this.userdataDmp.lastError != null)
-            userdataDumpStatus = `从官服下载数据过程中出错  ${this.userdataDmp.fetchStatus}`, userdataDumpStatusStyle = "color: red";
-        let crawlingStatus = this.crawler.crawlingStatus, crawlingStatusStyle = "color: grey";
-        const isCrawling = this.crawler.isCrawling;
-        if (this.crawler.isCrawlingFullyCompleted) {
-            crawlingStatus = "爬取已成功完成";
-            crawlingStatusStyle = "color: green";
-        }
-        else if (this.crawler.isCrawling) {
-            crawlingStatusStyle = "color: blue";
-        }
-        else {
-            if (crawlingStatus == null || crawlingStatus === "") {
-                crawlingStatus = "本次启动以来尚未开始爬取";
-            }
-            if (this.crawler.lastError != null)
-                crawlingStatusStyle = "color: red";
-        }
+
         const integrityCheckStatus = this.crawler.zippedAssets.integrityCheckStatus;
         const isCheckingIntegrity = integrityCheckStatus.isRunning;
         const integrityCheckResult = integrityCheckStatus.statusString;
@@ -1493,6 +1100,7 @@ class controlInterface {
                 : integrityCheckStatus.isAllPassed
                     ? "color: green"
                     : "color: red";
+
         const isFscking = this.crawler.isFscking;
         const fsckResult = this.crawler.lastFsckResult;
         const fsckStatus = this.crawler.fsckStatus;
@@ -1503,57 +1111,56 @@ class controlInterface {
                 : fsckStatus.notPassed > 0
                     ? "color: red"
                     : "color: green";
-        const isWebResCompleted = this.crawler.isWebResCompleted;
-        const isAssetsCompleted = this.crawler.isAssetsCompleted;
+
         const isImporting = this.userdataDmp.isImporting;
         let importStatus = "", importStatusStyle = "color: red";
         if (isImporting) {
             importStatus = "正在导入...";
             importStatusStyle = "color: blue";
-        }
-        else {
+        } else {
             const lastImportError = this.userdataDmp.lastImportError;
             if (lastImportError == null) {
                 importStatus = "已导入";
                 importStatusStyle = "color: green";
-            }
-            else {
+            } else {
                 importStatus = "导入过程出错";
                 importStatusStyle = "color: red";
                 if (lastImportError instanceof Error)
                     importStatus += ` [${lastImportError.message}]`;
             }
         }
+
         return {
             mode: this.params.mode,
             isDownloading: isDownloading,
-            userdataDumpStatus: userdataDumpStatus,
-            userdataDumpStatusStyle: userdataDumpStatusStyle,
-            isCrawling: isCrawling,
-            crawlingStatus: crawlingStatus,
-            crawlingStatusStyle: crawlingStatusStyle,
+            userdataDumpStatus: lastDump ? "已下载（前端隐藏）" : "未下载", // 不再显示
+            userdataDumpStatusStyle: "color: grey",
             isCheckingIntegrity: isCheckingIntegrity,
             integrityCheckResult: integrityCheckResult,
             integrityCheckResultStyle: integrityCheckResultStyle,
             isFscking: isFscking,
             fsckResult: fsckResult,
             fsckResultStyle: fsckResultStyle,
-            isWebResCompleted: isWebResCompleted,
-            isAssetsCompleted: isAssetsCompleted,
             isImporting: isImporting,
             importStatus: importStatus,
             importStatusStyle: importStatusStyle,
         };
     }
+
+    // 修改后的 addrSelectHtml，添加固定IP和域名
     get addrSelectHtml() {
         let addrList = [];
         try {
             const interfaces = os.networkInterfaces();
             Object.values(interfaces).forEach((array) => array === null || array === void 0 ? void 0 : array.filter((info) => info.family === "IPv4").forEach((addr) => addrList.push(addr.address)));
-        }
-        catch (e) {
+        } catch (e) {
             console.error(e);
         }
+        // 添加固定选项
+        const fixedOptions = [
+            { label: "110.42.45.179", id: "local_ipv4_addr_110_42_45_179" },
+            { label: "game.magi.cbnv.top", id: "local_ipv4_addr_game_magi_cbnv_top" }
+        ];
         const max = 10;
         if (addrList.length > max) {
             console.error(`addrList.length=[${addrList.length}] > ${max}`);
@@ -1562,51 +1169,53 @@ class controlInterface {
             for (let i = 0; i < max; i++)
                 addrList.push(list[i]);
         }
-        return `<fieldset id=\"local_ipv4_addr_list\"><legend>本机IP地址列表</legend>\n`
-            + `${addrList.map((addr) => `<div><input type=\"radio\" name=\"local_ipv4_addr\" id=\"local_ipv4_addr_${addr.replace(/\./g, "_")}\"`
-                + ` onclick=\"localIPv4Select(this);\">`
-                + `<label for=\"local_ipv4_addr_${addr.replace(/\./g, "_")}\">${addr}</label>`
-                + `</div>`).join("\n")}\n`
-            + `</fieldset>`;
+        // 生成本机地址单选按钮
+        const localRadios = addrList.map((addr) => `<div><input type="radio" name="local_ipv4_addr" id="local_ipv4_addr_${addr.replace(/\./g, "_")}" onclick="localIPv4Select(this);"><label for="local_ipv4_addr_${addr.replace(/\./g, "_")}">${addr}</label></div>`).join("\n");
+        // 生成固定选项单选按钮
+        const fixedRadios = fixedOptions.map((opt) => `<div><input type="radio" name="local_ipv4_addr" id="${opt.id}" onclick="localIPv4Select(this);"><label for="${opt.id}">${opt.label}</label></div>`).join("\n");
+        return `<fieldset id="local_ipv4_addr_list"><legend>选择代理服务器地址</legend>\n${localRadios}\n${fixedRadios}\n</fieldset>`;
     }
+
     async sendResultAsync(res, statusCode, result, isJson = false) {
         return new Promise((resolve, reject) => {
             if (!isJson) {
                 let strRep = (0, get_str_rep_1.getStrRep)(result);
-                let html = `<!doctype html>`
-                    + `\n<html>`
-                    + `\n<head>`
-                    + `\n  <meta charset =\"utf-8\">`
-                    + `\n  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>`
-                    + `\n  <title>Magireco CN Local Server - API Result</title>`
-                    + `\n  <script>`
-                    + `\n    window.onload =() => {`
-                    + `\n      document.getElementById(\"httpstatus\").textContent = \"${statusCode}\";`
-                    + `\n      document.getElementById(\"result\").textContent = \"${strRep}\";`
-                    + `\n    };`
-                    + `\n  </script>`
-                    + `\n  <style>`
-                    + `\n    label,input {`
-                    + `\n      display:flex;`
-                    + `\n      flex-direction:column;`
-                    + `\n    }`
-                    + `\n  </style>`
-                    + `\n</head>`
-                    + `\n<body>`
-                    + `\n  <label for=\"backbtn\">${statusCode == 200 ? "操作成功，请返回" : "错误"}</label>`
-                    + `\n  <br><b>以下内容可能含有敏感隐私信息，请勿分享。</b>`
-                    + `\n  <button id=\"backbtn\" onclick=\"window.history.back();\">返回 Back</button>`
-                    + `\n  <hr>`
-                    + `\n  <label for=\"httpstatus\">HTTP Status Code</label>`
-                    + `\n  <textarea id=\"httpstatus\" readonly rows=\"1\" cols=\"64\">TO_BE_FILLED_BY_JAVASCRIPT</textarea>`
-                    + `\n  <br>`
-                    + `\n  <label for=\"result\">${statusCode == 200 ? "结果 Result" : "错误消息 Error Message"}</label>`
-                    + `\n  <textarea id=\"result\" readonly rows=\"20\" cols=\"64\">TO_BE_FILLED_BY_JAVASCRIPT</textarea>`
-                    + `\n</body>`
-                    + `\n</html>`;
+                let html = `<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+    <title>Magireco CN Local Server - API Result</title>
+    <style>
+        body { background: #f5f7fa; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 20px; }
+        .container { max-width: 600px; margin: 0 auto; background: white; border-radius: 12px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        button { background: #3498db; color: white; border: none; padding: 10px 20px; border-radius: 30px; cursor: pointer; }
+        textarea { width: 100%; border: 1px solid #ddd; border-radius: 8px; padding: 10px; font-family: monospace; }
+    </style>
+    <script>
+        window.onload = () => {
+            document.getElementById("httpstatus").textContent = "${statusCode}";
+            document.getElementById("result").textContent = "${strRep}";
+        };
+    </script>
+</head>
+<body>
+    <div class="container">
+        <label>${statusCode == 200 ? "操作成功，请返回" : "错误"}</label>
+        <br><b>以下内容可能含有敏感隐私信息，请勿分享。</b>
+        <button id="backbtn" onclick="window.history.back();">返回 Back</button>
+        <hr>
+        <label>HTTP Status Code</label>
+        <textarea id="httpstatus" readonly rows="1"></textarea>
+        <br>
+        <label>${statusCode == 200 ? "结果 Result" : "错误消息 Error Message"}</label>
+        <textarea id="result" readonly rows="20"></textarea>
+    </div>
+</body>
+</html>`;
                 result = html;
             }
-            res.on('error', (err) => { console.error(err); resolve(); }); // prevent crash
+            res.on('error', (err) => { console.error(err); resolve(); });
             res.writeHead(statusCode, { 'Content-Type': isJson ? 'application/json' : 'text/html' });
             res.end(result, () => resolve());
         });
