@@ -397,10 +397,12 @@ export class fakeMagirecoProdRespHook implements hook {
                         body = Buffer.from(JSON.stringify({ inviteCode: inviteCode, bannedTime: bannedTime }), 'utf-8');
                         break;
                     }
+                // camera top
+                case "page/CameraTop":
+                // browser debug - quest/arena stub
                 case "page/QuestStub":
                 case "page/ArenaStub":
                     {
-                        // browser debug - quest/arena stub
                         // FIXME use MyPage for now
                         body = this.fakeMyPage("page/MyPage");
                         break;
