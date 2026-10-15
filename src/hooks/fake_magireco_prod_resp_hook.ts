@@ -343,6 +343,7 @@ export class fakeMagirecoProdRespHook implements hook {
                     }
                 // empty ones
                 case "page/ResumeBackground":
+                case "page/Help": // required, otherwise /magica/json/page/Help.json does not work, in MyPage it hangs
                 case "page/BackgroundSet":
                 case "page/CharaListCompose":
                 case "page/CharaListComposeMagia":
