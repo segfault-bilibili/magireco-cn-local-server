@@ -16,7 +16,7 @@ var mode;
 (function (mode) {
     mode[mode["ONLINE"] = 1] = "ONLINE";
     mode[mode["LOCAL_OFFLINE"] = 2] = "LOCAL_OFFLINE";
-})(mode = exports.mode || (exports.mode = {}));
+})(mode || (exports.mode = mode = {}));
 const persistParams = {
     mode: mode.LOCAL_OFFLINE,
     autoOpenWeb: true,
@@ -50,38 +50,6 @@ const persistParams = {
     lastDownloadedFileName: undefined,
 };
 class params {
-    constructor(mapData, lastSaved, filePath) {
-        this.supportH2Expire = 3600 * 1000;
-        this.supportH2MaxSize = 1024;
-        this.mapData = mapData;
-        const CACerts = tls.rootCertificates.slice();
-        CACerts.push(this.CACertPEM);
-        const upstreamProxyCACert = this.upstreamProxyCACert;
-        if (upstreamProxyCACert != null) {
-            CACerts.unshift(upstreamProxyCACert);
-            console.log("added upstreamProxyCACert to CACerts");
-        }
-        this.CACerts = CACerts;
-        this.supportH2Map = new Map();
-        this.lastSaved = lastSaved;
-        this.unfinishedSave = [];
-        this.path = filePath;
-        let overridesDB;
-        if (fs.existsSync(params.overridesDBPath) && fs.statSync(params.overridesDBPath).isFile()) {
-            try {
-                let content = fs.readFileSync(params.overridesDBPath, 'utf-8');
-                overridesDB = JSON.parse(content, util_1.reviver);
-                if (!(overridesDB instanceof Map))
-                    throw new Error("not instance of map");
-            }
-            catch (e) {
-                console.error(`error loading from ${params.overridesDBPath}, creating new one`, e);
-            }
-        }
-        if (overridesDB == null)
-            overridesDB = new Map();
-        this.overridesDB = overridesDB;
-    }
     static async load(path) {
         if (path == null)
             path = this.defaultPath;
@@ -250,6 +218,38 @@ class params {
     set lastDownloadedFileName(fileName) { this.mapData.set("lastDownloadedFileName", fileName); }
     get CACertPEM() { return this.CACertAndKey.cert; }
     get CACertSubjectHashOld() { return "9489bdaf"; } //FIXME
+    constructor(mapData, lastSaved, filePath) {
+        this.supportH2Expire = 3600 * 1000;
+        this.supportH2MaxSize = 1024;
+        this.mapData = mapData;
+        const CACerts = tls.rootCertificates.slice();
+        CACerts.push(this.CACertPEM);
+        const upstreamProxyCACert = this.upstreamProxyCACert;
+        if (upstreamProxyCACert != null) {
+            CACerts.unshift(upstreamProxyCACert);
+            console.log("added upstreamProxyCACert to CACerts");
+        }
+        this.CACerts = CACerts;
+        this.supportH2Map = new Map();
+        this.lastSaved = lastSaved;
+        this.unfinishedSave = [];
+        this.path = filePath;
+        let overridesDB;
+        if (fs.existsSync(params.overridesDBPath) && fs.statSync(params.overridesDBPath).isFile()) {
+            try {
+                let content = fs.readFileSync(params.overridesDBPath, 'utf-8');
+                overridesDB = JSON.parse(content, util_1.reviver);
+                if (!(overridesDB instanceof Map))
+                    throw new Error("not instance of map");
+            }
+            catch (e) {
+                console.error(`error loading from ${params.overridesDBPath}, creating new one`, e);
+            }
+        }
+        if (overridesDB == null)
+            overridesDB = new Map();
+        this.overridesDB = overridesDB;
+    }
     refreshCACert() {
         const CACerts = tls.rootCertificates.slice();
         CACerts.push(this.CACertPEM);
