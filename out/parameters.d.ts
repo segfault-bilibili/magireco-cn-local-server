@@ -1,11 +1,11 @@
 import * as certGenerator from "./cert_generator";
 import * as bsgamesdkPwdAuthenticate from "./bsgamesdk-pwd-authenticate";
 import * as userdataDump from "./userdata_dump";
-export type listenAddr = {
+export declare type listenAddr = {
     port: number;
     host: string;
 };
-export type listenList = Record<string, listenAddr> & {
+export declare type listenList = Record<string, listenAddr> & {
     controlInterface: listenAddr;
     httpProxy: listenAddr;
     localServer: listenAddr;
@@ -14,7 +14,7 @@ export declare enum mode {
     ONLINE = 1,
     LOCAL_OFFLINE = 2
 }
-export type overrides = {
+export declare type overrides = {
     gameUser?: {
         bgItemId?: string;
         modifyChara?: [number, Record<string, string | number>];

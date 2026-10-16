@@ -1,5 +1,6 @@
-type zipEntryName = string;
-type subDirectory = "cn_official" | "cn_mod" | "cn_output";
+/// <reference types="node" />
+declare type zipEntryName = string;
+declare type subDirectory = "cn_official" | "cn_mod" | "cn_output";
 export declare class zippedAssets {
     private static readonly assetJsonNames;
     private static readonly FHSigature;

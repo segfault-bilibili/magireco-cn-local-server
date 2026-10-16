@@ -1,7 +1,8 @@
+/// <reference types="node" />
 import { localServer } from "./local_server";
 import * as parameters from "./parameters";
 import { zippedAssets } from "./zipped_assets";
-type fsckStatus = {
+declare type fsckStatus = {
     passed: number;
     deleted: number;
     remaining: number;
