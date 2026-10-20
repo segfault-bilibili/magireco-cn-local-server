@@ -26,8 +26,11 @@ export enum mode {
     LOCAL_OFFLINE = 2,
 }
 
+export const defaultJPDump = "国服离线模式";
+
 const persistParams: {
     mode: mode.LOCAL_OFFLINE,
+    selectedJPDump: string,
     autoOpenWeb: boolean,
     injectMadokamiSE: boolean,
     listenList: listenList,
@@ -51,6 +54,7 @@ const persistParams: {
     lastDownloadedFileName?: string,
 } = {
     mode: mode.LOCAL_OFFLINE,
+    selectedJPDump: defaultJPDump,
     autoOpenWeb: true,
     injectMadokamiSE: false,
     listenList: {
@@ -210,6 +214,7 @@ export class params {
     }
 
     get mode(): mode { return this.mapData.get("mode"); }
+    get selectedJPDump(): string { return this.mapData.get("selectedJPDump"); }
     get autoOpenWeb(): boolean { return this.mapData.get("autoOpenWeb"); }
     get injectMadokamiSE(): boolean { return this.mapData.get("injectMadokamiSE"); }
     get listenList(): listenList { return this.mapData.get("listenList"); }

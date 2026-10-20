@@ -27,6 +27,8 @@ import { zippedAssets } from "./zipped_assets";
 const aHref = (text: string, url: string, newTab = true, id?: string) =>
     `<a target=\"${newTab ? "_blank" : "_self"}\" href=${url}${id != null ? ` id=\"${id}\"` : ""}>${text}</a>`
 
+const defaultJPDump = parameters.defaultJPDump;
+
 type parsedMultiPart = Array<{ filename?: string, name?: string, type?: string, data: Buffer }>;
 export class controlInterface {
     private closing = false;
@@ -290,6 +292,33 @@ export class controlInterface {
                             this.sendResultAsync(res, 500, e instanceof Error ? e.message : `${apiName} error`);
                         }
                         return;
+                    case "choose_or_delete_jp_dump_entry":
+                        try {
+                            let postParams = await this.getParsedPostData(req);
+                            let isDelete = postParams.has("delete");
+                            let selectedJPDump = postParams.get("selectedJPDump");
+                            if (selectedJPDump == null) throw new Error(`selectedJPDump == null`);
+                            let filepath = path.join(this.JPDumpDir, selectedJPDump);
+                            let isExist = fs.existsSync(filepath);
+                            let resultText = "set to "
+                            if (isDelete) {
+                                if (isExist && fs.statSync(filepath).isFile()) {
+                                    fs.rmSync(filepath);
+                                }
+                                selectedJPDump = defaultJPDump;
+                            } else {
+                                if ((!isExist) || (!fs.statSync(filepath).isFile())) {
+                                    selectedJPDump = defaultJPDump;
+                                } // else just use the POSTed selectedJPDump value
+                            }
+                            resultText += `"${selectedJPDump}"`
+                            this.params.save({ key: "selectedJPDump", val: selectedJPDump });
+                            this.sendResultAsync(res, 200, resultText);
+                        } catch (e) {
+                            console.error(`${apiName} error`, e);
+                            this.sendResultAsync(res, 500, e instanceof Error ? e.message : `${apiName} error`);
+                        }
+                        return;
                     case "upload_jp_dump":
                         try {
                             let postData = await this.getPostData(req);
@@ -298,7 +327,7 @@ export class controlInterface {
                             if (uploaded_jp_dump == null) throw new Error("uploaded_jp_dump == null");
                             const filename = uploaded_jp_dump.filename;
                             if (filename == null) throw new Error("filename == null");
-                            if (filename === "国服离线模式") throw new Error("filename === \"国服离线模式\"");
+                            if (filename === defaultJPDump) throw new Error(`filename === \"${defaultJPDump}\"`);
                             if (!filename.match(/\.zip$/i)) throw new Error("filename not ended with .zip");
                             this.sendResultAsync(res, 200, "receiving new jp dump"); // send request before importing
                             this.receiveNewJPDumpAsync(filename, uploaded_jp_dump.data)
@@ -1633,9 +1662,11 @@ export class controlInterface {
             CNDmpImportStatusStyle: CNDmpImportStatusStyle,
         }
     }
-    
+
     private get JPDmpListHtml(): string {
-        const JPDmpList: Array<string> = ["国服离线模式"];
+        const defaultJPDump = parameters.defaultJPDump;
+        const JPDmpList: Array<string> = [defaultJPDump];
+        const selectedJPDump = this.params.selectedJPDump;
         let result: Array<string> = [];
         try {
             // ensure directory exists
@@ -1651,25 +1682,29 @@ export class controlInterface {
         } catch (e) {
             console.error("JPDmpListHtml", e);
             while (JPDmpList.pop());
-            JPDmpList.push("国服离线模式");
+            JPDmpList.push(defaultJPDump);
             JPDmpList.push("|\\/\\/\\/❌目录读取错误❌\\/\\/\\/|");
             console.error(e);
         }
-        return `<form action=\"/api/choose_jp_dump\" method=\"post\">`
-            + `<fieldset><legend>选择要载入的<b>日服</b>个人存档</legend>`
+        return `<form id="choose_or_delete_jp_dump_entry" action=\"/api/choose_or_delete_jp_dump_entry\" method=\"post\">`
+            + `<fieldset><legend>选择要使用的<b>日服</b>账号存档</legend>`
             + `<div><ul><li>`
-            + `  选择形如[connect-XXXXXXXX-XXXXXXXX-玩家名.zip]的存档<b>提交</b>即可切换服务器为日服离线模式。`
+            + `  选择形如[connect-XXXXXXXX-XXXXXXXX-玩家名.zip]的存档，<b>并提交，</b>即可切换服务器为日服离线模式。`
             + `</li><li>`
             + `  <i>这种格式的个人账号存档在关服前，由美服玩家社区开发者${aHref("LiviaMedeiros", "https://github.com/LiviaMedeiros")}开发的connect.cirno.name从日服爬取数据保存生成。</i>`
             + `</li><li>`
-            + `  选择[国服离线模式]<b>提交</b>即可切回国服离线模式。`
+            + `  选择[${defaultJPDump}]，<b>并提交，</b>即可切回国服离线模式。`
             + `</li></ul></div>`
             + `<div>`
-            + `${JPDmpList.map(
-                (item, index) => `<input type="radio" id="JPDmpZipNo${index + 1}" name="JPDmpList" value="${item}" />`
-                    + `<label for="JPDmpZipNo${index + 1}">${item}</label>`
-            ).join("<br>")}`
+            + `${JPDmpList.map((item, index) =>
+                `<input type="radio" id="JPDumpZipNo${index + 1}" name="selectedJPDump" value="${item}"`
+                + `${item === selectedJPDump ? " checked" : ""}/>`
+                + `<label for="JPDumpZipNo${index + 1}">${item}</label>`
+            ).join("<br>")}<br>`
             + `</div>`
+            + `<button type="submit" name="choose" style="margin-right: 1em;">提交</button>`
+            + `<button type="submit" name="delete"`
+            + ` onclick="return confirm('删除后不可恢复。继续？');">删除</button>`
             + `</fieldset>`
             + `</form>`;
     }
