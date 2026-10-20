@@ -23,6 +23,10 @@ import { saveOpenIdTicketHook } from "./hooks/save_open_id_ticket_hook";
 import * as favicon from "./favicon";
 import { zippedAssets } from "./zipped_assets";
 
+
+const aHref = (text: string, url: string, newTab = true, id?: string) =>
+    `<a target=\"${newTab ? "_blank" : "_self"}\" href=${url}${id != null ? ` id=\"${id}\"` : ""}>${text}</a>`
+
 type parsedMultiPart = Array<{ filename?: string, name?: string, type?: string, data: Buffer }>;
 export class controlInterface {
     private closing = false;
@@ -813,9 +817,6 @@ export class controlInterface {
         const mumuXURL = new URL("https://mumu.163.com/update/");
         const oldPatchedApkURL = new URL("https://share.weiyun.com/HhJbXRP7");
         const patchedApkURL = new URL("https://share.weiyun.com/zfwE8zUE");
-
-        const aHref = (text: string, url: string, newTab = true, id?: string) =>
-            `<a target=\"${newTab ? "_blank" : "_self"}\" href=${url}${id != null ? ` id=\"${id}\"` : ""}>${text}</a>`
 
         const isOnlineMode = this.params.mode === parameters.mode.ONLINE;
         const isLocalOfflineMode = this.params.mode === parameters.mode.LOCAL_OFFLINE;
@@ -1632,23 +1633,7 @@ export class controlInterface {
             CNDmpImportStatusStyle: CNDmpImportStatusStyle,
         }
     }
-    /*
-                + `\n  <fieldset><legend>选择要载入的<b>日服</b>个人存档</legend>`
-                + `\n    <div>`
-                + `\n      <ul>`
-                + `\n      <li>`
-                + `\n        选择形如[connect-XXXXXXXX-XXXXXXXX-玩家名.zip]的存档<b>提交</b>即可切换服务器为日服离线模式。`
-                + `\n      </li>`
-                + `\n      <li>`
-                + `\n        <i>这种格式的个人账号存档在关服前，由美服玩家社区开发者${aHref("LiviaMedeiros", "https://github.com/LiviaMedeiros")}开发的connect.cirno.name从日服爬取数据保存生成。</i>`
-                + `\n      </li>`
-                + `\n      <li>`
-                + `\n        选择[国服离线模式]<b>提交</b>即可切回国服离线模式。`
-                + `\n      </li>`
-                + `\n      </ul>`
-                + `\n    </div>`
-                + `\n  </fieldset>`
-    */
+    
     private get JPDmpListHtml(): string {
         const JPDmpList: Array<string> = ["国服离线模式"];
         let result: Array<string> = [];
@@ -1670,8 +1655,15 @@ export class controlInterface {
             JPDmpList.push("|\\/\\/\\/❌目录读取错误❌\\/\\/\\/|");
             console.error(e);
         }
-        return `<form action=\"/api/choose_jp_dump\" method=\"post\"><fieldset>`
-            + `<legend>选择要载入的<b>日服</b>个人存档</legend>`
+        return `<form action=\"/api/choose_jp_dump\" method=\"post\">`
+            + `<fieldset><legend>选择要载入的<b>日服</b>个人存档</legend>`
+            + `<div><ul><li>`
+            + `  选择形如[connect-XXXXXXXX-XXXXXXXX-玩家名.zip]的存档<b>提交</b>即可切换服务器为日服离线模式。`
+            + `</li><li>`
+            + `  <i>这种格式的个人账号存档在关服前，由美服玩家社区开发者${aHref("LiviaMedeiros", "https://github.com/LiviaMedeiros")}开发的connect.cirno.name从日服爬取数据保存生成。</i>`
+            + `</li><li>`
+            + `  选择[国服离线模式]<b>提交</b>即可切回国服离线模式。`
+            + `</li></ul></div>`
             + `<div>`
             + `${JPDmpList.map(
                 (item, index) => `<input type="radio" id="JPDmpZipNo${index + 1}" name="JPDmpList" value="${item}" />`
