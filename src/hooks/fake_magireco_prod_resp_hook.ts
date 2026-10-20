@@ -10,34 +10,37 @@ import { bsgamesdkPwdAuth } from "../bsgamesdk-pwd-authenticate";
 import { missingData } from "./etc/missing_data";
 import * as favicon from "../favicon";
 
+
+
+const magirecoProdUrlRegEx = /^(http|https):\/\/l\d+-prod-[0-9a-z\-]+-mfsn\d*\.bilibiligame\.net\/((|maintenance\/)magica\/.+|favicon\.ico)$/;
+const magicaMaintenanceConfigRegEx = /^\/maintenance\/magica\/config((|\?.*)$)/;
+const magicaMaintenanceViewJsonRegEx = /^\/maintenance\/magica\/view\/json((|\?.*)$)/;
+const magirecoPatchUrlRegEx = /^(http|https):\/\/line\d+-prod-patch-mfsn\d*\.bilibiligame\.net\/magica\/.+$/;
+const apiPathNameRegEx = /^\/magica\/api\/.+$/;
+const slashGuidEndRegEx = /\/[\da-f]{8}(-[\da-f]{4}){3}-[\da-f]{12}$/;
+
+const browserDebugUrlRegEx = /^(http|https):\/\/10\.24\.19\.50:9997\/(magica\/.+|favicon.ico)$/;
+
+const bsgameSdkLoginRegEx = /^(http|https):\/\/line\d+-sdk-center-login-sh\.biligame\.net\/api\/external\/(login|login\/otp|user\.token\.oauth\.login)\/v3((|\?.*)$)/;
+const bsgameSdkCipherRegEx = /^(http|https):\/\/line\d+-sdk-center-login-sh\.biligame\.net\/api\/external\/issue\/cipher\/v3((|\?.*)$)/;
+const bsgameSdkOtpSendRegEx = /^(http|https):\/\/line\d+-sdk-center-login-sh\.biligame\.net\/api\/external\/otp\/send\/v3((|\?.*)$)/;
+
+const bilibiliAgreementConfigRegEx = /^(http|https):\/\/line\d-sdk-app-api\.biligame\.net\/api\/agreement\/config((|\?.*)$)/;
+const bilibiliGameAgreementRegEx = /^(http|https):\/\/game\.bilibili\.com\/agreement\/(updatetips|userterms|privacy)\/.+$/;
+
+const touristLoginRegEx = /^(http|https):\/\/p\.biligame\.com\/api\/external\/tourist\.login\/v3((|\?.*)$)/;
+const touristBindTelPwdRegEx = /^(http|https):\/\/line\d+-sdk-center-login-sh\.biligame\.net\/api\/external\/tourist\/bind\/tel\.pwd\/v3((|\?.*)$)/;
+
+const bilibiliGameRealnameAuthRegEx = /^(http|https):\/\/game\.bilibili\.com\/sdk\/authentication?.+$/;
+
+const part2Section3RegEx = /^\/magica\/resource\/download\/asset\/master\/resource\/2207081501\/asset_section_10230(1|2|3)\.json$/;
+
 export class fakeMagirecoProdRespHook implements hook {
     private readonly params: parameters.params;
     private readonly crawler: staticResCrawler.crawler;
     private readonly userdataDmp: userdataDump.userdataDmp;
 
-    private readonly magirecoProdUrlRegEx: RegExp;
-    private readonly magicaMaintenanceConfigRegEx: RegExp;
-    private readonly magicaMaintenanceViewJsonRegEx: RegExp;
-    private readonly magirecoPatchUrlRegEx: RegExp;
-    private readonly apiPathNameRegEx: RegExp;
-    private readonly slashGuidEndRegEx: RegExp;
-
-    private readonly browserDebugUrlRegEx: RegExp;
-
-    private readonly bsgameSdkLoginRegEx: RegExp;
-    private readonly bsgameSdkCipherRegEx: RegExp;
-    private readonly bsgameSdkOtpSendRegEx: RegExp;
-
-    private readonly bilibiliAgreementConfigRegEx: RegExp;
-    private readonly bilibiliGameAgreementRegEx: RegExp;
-    private readonly bilibiliGameRealnameAuthRegEx: RegExp;
-
-    private readonly touristLoginRegEx: RegExp;
-    private readonly touristBindTelPwdRegEx: RegExp;
-
-    private readonly part2Section3RegEx: RegExp;
-
-    private readonly arenaSimulateMap: Map<string, string>;
+    private readonly arenaSimulateMap = new Map<string, string>();
 
     get stringifiedOverrideDB(): string {
         return JSON.stringify(this.params.overridesDB, replacer);
@@ -104,31 +107,6 @@ export class fakeMagirecoProdRespHook implements hook {
         this.params = params;
         this.crawler = crawler;
         this.userdataDmp = dmp;
-
-        this.magirecoProdUrlRegEx = /^(http|https):\/\/l\d+-prod-[0-9a-z\-]+-mfsn\d*\.bilibiligame\.net\/((|maintenance\/)magica\/.+|favicon\.ico)$/;
-        this.magicaMaintenanceConfigRegEx = /^\/maintenance\/magica\/config((|\?.*)$)/;
-        this.magicaMaintenanceViewJsonRegEx = /^\/maintenance\/magica\/view\/json((|\?.*)$)/;
-        this.magirecoPatchUrlRegEx = /^(http|https):\/\/line\d+-prod-patch-mfsn\d*\.bilibiligame\.net\/magica\/.+$/;
-        this.apiPathNameRegEx = /^\/magica\/api\/.+$/;
-        this.slashGuidEndRegEx = /\/[\da-f]{8}(-[\da-f]{4}){3}-[\da-f]{12}$/;
-
-        this.browserDebugUrlRegEx = /^(http|https):\/\/10\.24\.19\.50:9997\/(magica\/.+|favicon.ico)$/;
-
-        this.bsgameSdkLoginRegEx = /^(http|https):\/\/line\d+-sdk-center-login-sh\.biligame\.net\/api\/external\/(login|login\/otp|user\.token\.oauth\.login)\/v3((|\?.*)$)/;
-        this.bsgameSdkCipherRegEx = /^(http|https):\/\/line\d+-sdk-center-login-sh\.biligame\.net\/api\/external\/issue\/cipher\/v3((|\?.*)$)/;
-        this.bsgameSdkOtpSendRegEx = /^(http|https):\/\/line\d+-sdk-center-login-sh\.biligame\.net\/api\/external\/otp\/send\/v3((|\?.*)$)/;
-
-        this.bilibiliAgreementConfigRegEx = /^(http|https):\/\/line\d-sdk-app-api\.biligame\.net\/api\/agreement\/config((|\?.*)$)/;
-        this.bilibiliGameAgreementRegEx = /^(http|https):\/\/game\.bilibili\.com\/agreement\/(updatetips|userterms|privacy)\/.+$/;
-
-        this.touristLoginRegEx = /^(http|https):\/\/p\.biligame\.com\/api\/external\/tourist\.login\/v3((|\?.*)$)/;
-        this.touristBindTelPwdRegEx = /^(http|https):\/\/line\d+-sdk-center-login-sh\.biligame\.net\/api\/external\/tourist\/bind\/tel\.pwd\/v3((|\?.*)$)/;
-
-        this.bilibiliGameRealnameAuthRegEx = /^(http|https):\/\/game\.bilibili\.com\/sdk\/authentication?.+$/;
-
-        this.part2Section3RegEx = /^\/magica\/resource\/download\/asset\/master\/resource\/2207081501\/asset_section_10230(1|2|3)\.json$/;
-
-        this.arenaSimulateMap = new Map<string, string>();
     }
 
     // if matched, keep a copy of request/response data in memory
@@ -160,17 +138,17 @@ export class fakeMagirecoProdRespHook implements hook {
             }
         }
 
-        const isMagiRecoProd = url?.href.match(this.magirecoProdUrlRegEx) != null;
-        const isMagiRecoPatch = url?.href.match(this.magirecoPatchUrlRegEx) != null;
-        const isBsgamesdkLogin = url?.href.match(this.bsgameSdkLoginRegEx) != null;
-        const isBsgamesdkCipher = url?.href.match(this.bsgameSdkCipherRegEx) != null;
-        const isBsgamesdkOtpSend = url?.href.match(this.bsgameSdkOtpSendRegEx) != null;
-        const isTouristLogin = url?.href.match(this.touristLoginRegEx) != null;
-        const isTouristBindTelPwd = url?.href.match(this.touristBindTelPwdRegEx) != null;
-        const isBilibiliAgreementConfig = url?.href.match(this.bilibiliAgreementConfigRegEx) != null;
-        const isBilibiliGameAgreement = url?.href.match(this.bilibiliGameAgreementRegEx) != null;
-        const isBilibiliGameRealnameAuth = url?.href.match(this.bilibiliGameRealnameAuthRegEx) != null;
-        const isBrowserDebug = url?.href.match(this.browserDebugUrlRegEx) != null || (
+        const isMagiRecoProd = url?.href.match(magirecoProdUrlRegEx) != null;
+        const isMagiRecoPatch = url?.href.match(magirecoPatchUrlRegEx) != null;
+        const isBsgamesdkLogin = url?.href.match(bsgameSdkLoginRegEx) != null;
+        const isBsgamesdkCipher = url?.href.match(bsgameSdkCipherRegEx) != null;
+        const isBsgamesdkOtpSend = url?.href.match(bsgameSdkOtpSendRegEx) != null;
+        const isTouristLogin = url?.href.match(touristLoginRegEx) != null;
+        const isTouristBindTelPwd = url?.href.match(touristBindTelPwdRegEx) != null;
+        const isBilibiliAgreementConfig = url?.href.match(bilibiliAgreementConfigRegEx) != null;
+        const isBilibiliGameAgreement = url?.href.match(bilibiliGameAgreementRegEx) != null;
+        const isBilibiliGameRealnameAuth = url?.href.match(bilibiliGameRealnameAuthRegEx) != null;
+        const isBrowserDebug = url?.href.match(browserDebugUrlRegEx) != null || (
             isMagiRecoPatch && url.pathname === "/magica/fonts/lzs_v_2_1_p.ttf");
 
         if (
@@ -281,7 +259,7 @@ export class fakeMagirecoProdRespHook implements hook {
             }
         }
 
-        const isApi = url.pathname.match(this.apiPathNameRegEx) != null;
+        const isApi = url.pathname.match(apiPathNameRegEx) != null;
         let apiUnimplemented = false;
         if (isApi) {
             let statusCode = 200;
@@ -292,7 +270,7 @@ export class fakeMagirecoProdRespHook implements hook {
             const isBanned = Date.now() > 0 ? undefined : true;// DEBUG TODO this.params.isBanned;
 
             const apiName = url.pathname.replace(/^\/magica\/api\//, "")
-                .replace(this.slashGuidEndRegEx, "");
+                .replace(slashGuidEndRegEx, "");
 
             if (apiName.match(/^system\/(game\/login|sns\/login\/[0-9a-z]{32})$/)) {
                 body = this.fakeSystemLogin();
@@ -357,16 +335,16 @@ export class fakeMagirecoProdRespHook implements hook {
                 case "page/MemoriaList":
                 case "page/MemoriaSetList":
                 case "page/MagiRepoDetail":
-                /*
-                // empty ones - backdoor test - no longer needed, handled before apiUnimplemented
-                case "page/Backdoor":
-                case "page/BackdoorLive2d":
-                case "page/NativeSandBox":
-                case "page/SoundTest":
-                case "page/SelectStoryTest":
-                case "page/TipsTest":
-                case "page/EffectTest":
-                */
+                    /*
+                    // empty ones - backdoor test - no longer needed, handled before apiUnimplemented
+                    case "page/Backdoor":
+                    case "page/BackdoorLive2d":
+                    case "page/NativeSandBox":
+                    case "page/SoundTest":
+                    case "page/SelectStoryTest":
+                    case "page/TipsTest":
+                    case "page/EffectTest":
+                    */
                     {
                         body = this.fakeEmptyResp(apiName);
                         break;
@@ -526,13 +504,13 @@ export class fakeMagirecoProdRespHook implements hook {
                 contentType = this.crawler.getContentType(pathname);
                 body = await this.crawler.readFileAsync(pathname);
                 if (body == null) {
-                    if (url.pathname.match(this.magicaMaintenanceConfigRegEx) != null) {
+                    if (url.pathname.match(magicaMaintenanceConfigRegEx) != null) {
                         contentType = "application/json; charset=utf-8";
                         body = Buffer.from(staticResCrawler.crawler.maintenanceConfigStr, 'utf-8');
-                    } else if (url.pathname.match(this.magicaMaintenanceViewJsonRegEx) != null) {
+                    } else if (url.pathname.match(magicaMaintenanceViewJsonRegEx) != null) {
                         contentType = "application/json; charset=utf-8";
                         body = Buffer.from(staticResCrawler.crawler.maintenanceViewJsonStr, 'utf-8');
-                    } else if (url.pathname.match(this.part2Section3RegEx) != null) {
+                    } else if (url.pathname.match(part2Section3RegEx) != null) {
                         // not a workaround: response from offical server was like this
                         contentType = "application/json; charset=utf-8";
                         body = Buffer.from(JSON.stringify([]), 'utf-8');
@@ -614,14 +592,14 @@ export class fakeMagirecoProdRespHook implements hook {
             interceptResponse: false,
         }
 
-        const isMagiRecoProd = url?.href.match(this.magirecoProdUrlRegEx) != null;
-        const isMagiRecoPatch = url?.href.match(this.magirecoPatchUrlRegEx) != null;
+        const isMagiRecoProd = url?.href.match(magirecoProdUrlRegEx) != null;
+        const isMagiRecoPatch = url?.href.match(magirecoPatchUrlRegEx) != null;
         if (!isMagiRecoProd && !isMagiRecoPatch) return {
             nextAction: "passOnRequestBody",
             interceptResponse: false,
         }
 
-        const isApi = url.pathname.match(this.apiPathNameRegEx) != null;
+        const isApi = url.pathname.match(apiPathNameRegEx) != null;
         let apiUnimplemented = false;
         if (isApi) {
             let statusCode = 200;
@@ -629,7 +607,7 @@ export class fakeMagirecoProdRespHook implements hook {
             let respBody: Buffer | undefined;
 
             const apiName = url.pathname.replace(/^\/magica\/api\//, "")
-                .replace(this.slashGuidEndRegEx, "");
+                .replace(slashGuidEndRegEx, "");
             switch (apiName) {
                 case "test/logger/error":
                     {
@@ -1231,7 +1209,7 @@ export class fakeMagirecoProdRespHook implements hook {
         }
         const urlBase = urlBases[apiName];
 
-        const matched = pathname.match(this.slashGuidEndRegEx);
+        const matched = pathname.match(slashGuidEndRegEx);
         const guid = matched != null ? matched[0].replace(/^\//, "") : undefined;
         if (guid == null) {
             return this.fakeErrorResp("错误", "参数非法");
