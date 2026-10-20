@@ -1,5 +1,7 @@
 import * as stream from "stream";
 import * as fs from "fs";
+import * as fsPromises from "fs/promises";
+import * as path from "path";
 import * as net from "net";
 import * as http from "http";
 import * as process from "process";
@@ -86,6 +88,42 @@ export class controlInterface {
             console.error(e);
         }
         console.log("（按CTRL+C即可中断程序运行）");
+    }
+
+    private readonly JPDumpDir = path.join(".", "jp_userdata_dumps");
+    private JPDumpRecv: Promise<void> | undefined;
+    private receiveNewJPDumpAsync(filename: string, filedata: Buffer): Promise<void> {
+        let p1 = new Promise<void>((resolve, reject) => {
+            let p0 = this.JPDumpRecv;
+            if (p0 == null) p0 = new Promise(r => r());
+            p0.then(() => {
+                try {
+                    // ensure directory exists
+                    const JPDumpDir = this.JPDumpDir;
+                    if (!fs.existsSync(JPDumpDir)) fs.mkdirSync(JPDumpDir);
+                    if (!fs.statSync(JPDumpDir).isDirectory())
+                        throw new Error(`${JPDumpDir} is not a directory`);
+                    // ensure filepath is file or nonexist
+                    // FIXME non-writable situations
+                    // FIXME filename charset error: 小叶 => å°å¶
+                    const filepath = path.join(JPDumpDir, filename);
+                    if (fs.existsSync(filepath) && !fs.statSync(filepath).isFile())
+                        throw new Error(`${filepath} is not available as a file or nonexistent path`);
+                    // write file
+                    fsPromises.writeFile(filepath, filedata).then(() => resolve()).then(() => this.JPDumpRecv = undefined)
+                        .catch(e => {
+                            this.JPDumpRecv = undefined;
+                            reject(e);
+                        });
+                } catch (e) {
+                    console.log("receiveNewJPDumpAsync", e);
+                    this.JPDumpRecv = undefined;
+                    reject(e);
+                }
+            });
+        });
+        this.JPDumpRecv = p1;
+        return p1;
     }
 
     private constructor(params: parameters.params, serverList: Array<localServer | httpProxy>, crawler: staticResCrawler.crawler) {
@@ -248,7 +286,25 @@ export class controlInterface {
                             this.sendResultAsync(res, 500, e instanceof Error ? e.message : `${apiName} error`);
                         }
                         return;
-                    case "upload_dump":
+                    case "upload_jp_dump":
+                        try {
+                            let postData = await this.getPostData(req);
+                            if (typeof postData === 'string') throw new Error("postData is string");
+                            const uploaded_jp_dump = postData.find((item) => item.name === "uploaded_jp_dump");
+                            if (uploaded_jp_dump == null) throw new Error("uploaded_jp_dump == null");
+                            const filename = uploaded_jp_dump.filename;
+                            if (filename == null) throw new Error("filename == null");
+                            if (filename === "国服离线模式") throw new Error("filename === \"国服离线模式\"");
+                            if (!filename.match(/\.zip$/i)) throw new Error("filename not ended with .zip");
+                            this.sendResultAsync(res, 200, "receiving new jp dump"); // send request before importing
+                            this.receiveNewJPDumpAsync(filename, uploaded_jp_dump.data)
+                                .catch((e) => console.error(`${apiName} error`, e)); // prevent crash
+                        } catch (e) {
+                            console.error(`${apiName} error`, e);
+                            this.sendResultAsync(res, 500, e instanceof Error ? e.message : `${apiName} error`);
+                        }
+                        return;
+                    case "upload_cn_dump":
                         try {
                             let postData = await this.getPostData(req);
                             const isDownloading = this.userdataDmp.isDownloading;
@@ -262,10 +318,10 @@ export class controlInterface {
                                 this.sendResultAsync(res, 503, "为防止数据被覆盖丢失，请先另存当前的个人账号数据！");
                             } else {
                                 if (typeof postData === 'string') throw new Error("postData is string");
-                                let uploaded_dump = postData.find((item) => item.name === "uploaded_dump");
-                                if (!uploaded_dump?.filename?.match(/\.json$/i)) throw new Error("filename not ended with .json");
-                                this.sendResultAsync(res, 200, "processing new dump"); // send request before importing
-                                this.userdataDmp.importDumpAsync(uploaded_dump.data)
+                                let uploaded_cn_dump = postData.find((item) => item.name === "uploaded_cn_dump");
+                                if (!uploaded_cn_dump?.filename?.match(/\.json$/i)) throw new Error("filename not ended with .json");
+                                this.sendResultAsync(res, 200, "processing new cn dump"); // send request before importing
+                                this.userdataDmp.importCNDumpAsync(uploaded_cn_dump.data)
                                     .catch((e) => console.error(`${apiName} error`, e)); // prevent crash
                             }
                         } catch (e) {
@@ -755,7 +811,8 @@ export class controlInterface {
         const nodeJsUrl = new URL("https://nodejs.org/zh-cn/download/current/");
         const npmRepoUrl = new URL("https://www.npmjs.com/package/magireco-cn-local-server");
         const mumuXURL = new URL("https://mumu.163.com/update/");
-        const patchedApkURL = new URL("https://share.weiyun.com/HhJbXRP7");
+        const oldPatchedApkURL = new URL("https://share.weiyun.com/HhJbXRP7");
+        const patchedApkURL = new URL("https://share.weiyun.com/zfwE8zUE");
 
         const aHref = (text: string, url: string, newTab = true, id?: string) =>
             `<a target=\"${newTab ? "_blank" : "_self"}\" href=${url}${id != null ? ` id=\"${id}\"` : ""}>${text}</a>`
@@ -834,6 +891,8 @@ export class controlInterface {
         }
 
         const status = this.getStatus(gameUid);
+        const JPDmpUploadStatus = status.JPDmpUploadStatus;
+        const JPDmpUploadStatusStyle = status.JPDmpUploadStatusStyle;
         const isDownloading = status.isDownloading;
         const userdataDumpStatus = status.userdataDumpStatus;
         const userdataDumpStatusStyle = status.userdataDumpStatusStyle
@@ -848,7 +907,7 @@ export class controlInterface {
         const isFscking = status.isFscking;
 
         const isImporting = status.isImporting;
-        const importStatus = status.importStatus;
+        const CNDmpImportStatus = status.CNDmpImportStatus;
 
         const crawlWebRes = this.params.crawlWebRes;
         const crawlAssets = this.params.crawlAssets;
@@ -910,9 +969,11 @@ export class controlInterface {
             + `\n          el.textContent = status.isWebResCompleted ? \"已完成下载\" : \"未完成下载\"; el.style = status.isWebResCompleted ? \"color: green\" : \"\";`
             + `\n          el = document.getElementById(\"crawl_assets_lbl\");`
             + `\n          el.textContent = status.isAssetsCompleted ? \"已完成下载\" : \"未完成下载\";el.style = status.isAssetsCompleted ? \"color: green\": \"\"`
-            + `\n          el = document.getElementById(\"importstatus\");`
-            + `\n          el.textContent = status.importStatus; el.style = status.importStatusStyle;`
-            + `\n          document.getElementById(\"import_btn\").disabled = status.isDownloading || status.isImporting;`
+            + `\n          el = document.getElementById(\"jpdmpuploadstatus\");`
+            + `\n          el.textContent = status.JPDmpUploadStatus; el.style = status.JPDmpUploadStatusStyle;`
+            + `\n          el = document.getElementById(\"cndmpimportstatus\");`
+            + `\n          el.textContent = status.CNDmpImportStatus; el.style = status.CNDmpImportStatusStyle;`
+            + `\n          document.getElementById(\"cn_import_btn\").disabled = status.isDownloading || status.isImporting;`
             + `\n          el = document.getElementById(\"fsckresult\");`
             + `\n          el.textContent = status.fsckResult; el.style = status.fsckResultStyle;`
             + `\n          document.getElementById(\"fsck_btn\").disabled = status.isFscking || status.isCheckingIntegrity;`
@@ -973,6 +1034,52 @@ export class controlInterface {
             + `\n      <br><i>手机端可能需要切换到桌面UA（电脑版）。</i>`
             + `\n    </div>`
             + `\n  </fieldset>`
+            + `\n  <hr>`
+            + `\n  <h2>上传个人账号数据</h2>`
+            + `\n${this.JPDmpListHtml}\n`
+            + `\n  <fieldset>`
+            + `\n  <legend>导入<b>日服</b>个人账号数据</legend>`
+            + `\n    <fieldset><legend>上传日服账号存档</legend>`
+            + `\n      <form enctype=\"multipart/form-data\" action=\"/api/upload_jp_dump\" method=\"post\">`
+            + `\n        <div>`
+            + `\n          <input type=\"file\" name=\"uploaded_jp_dump\" id=\"jp_dump_file\">`
+            + `\n        </div>`
+            + `\n        <div>`
+            + `\n          <input type=\"submit\" value=\"上传\" id=\"jp_import_btn\" ${isDownloading || isImporting ? "disabled" : ""}>`
+            + `\n          <label for=\"jp_import_btn\"><b>将会覆盖同名存档！</b></label>`
+            + `\n        </div>`
+            + `\n      </form>`
+            + `\n      <fieldset>`
+            + `\n      <legend>上传进度</legend>`
+            + `\n      <div>`
+            + `\n        <button id=\"refreshbtn8\" onclick=\"window.location.reload(true);\">刷新</button>`
+            + `\n        <label id=\"jpdmpuploadstatus\" style=\"${JPDmpUploadStatusStyle}\" for=\"refreshbtn8\">TO_BE_FILLED_BY_JAVASCRIPT</label>`
+            + `\n      </div>`
+            + `\n      </fieldset>`
+            + `\n    </fieldset>`
+            + `\n  </fieldset>`
+            + `\n  <hr>`
+            + `\n  <fieldset id="fieldset_upload_cn_dump">`
+            + `\n  <legend>导入之前另存的<b>国服/B站服</b>个人账号数据</legend>`
+            + `\n    <form enctype=\"multipart/form-data\" action=\"/api/upload_cn_dump\" method=\"post\">`
+            + `\n      <div>`
+            + `\n        <input type=\"file\" name=\"uploaded_cn_dump\" id=\"dump_file\">`
+            + `\n      </div>`
+            + `\n      <div>`
+            + `\n        <input type=\"submit\" value=\"上传并导入\" id=\"cn_import_btn\" ${isDownloading || isImporting ? "disabled" : ""}>`
+            + `\n        <label for=\"cn_import_btn\"><b>上传并导入后，将会覆盖当前的数据！</b></label>`
+            + `\n      </div>`
+            + `\n    </form>`
+            + `\n    <fieldset>`
+            + `\n    <legend>导入进度</legend>`
+            + `\n    <div>`
+            + `\n      <button id=\"refreshbtn7\" onclick=\"window.location.reload(true);\">刷新</button>`
+            + `\n      <label id=\"cndmpimportstatus\" style=\"${userdataDumpStatusStyle}\" for=\"refreshbtn7\">TO_BE_FILLED_BY_JAVASCRIPT</label>`
+            + `\n    </div>`
+            + `\n    </fieldset>`
+            + `\n  </fieldset>`
+            + `\n  <hr>`
+            + `\n  <h2>服务器配置与中间人CA证书</h2>`
             + `\n  <fieldset>`
             + `\n  <legend>HTTP代理</legend>`
             + `\n  <fieldset><legend>HTTP代理信息</legend>`
@@ -1084,10 +1191,10 @@ export class controlInterface {
             + `\n  ${aHref("（点击隐藏详细设置说明，即让游戏客户端连接到本地服务器而不是直连官服）", "javascript:swapVerboseDesc();", false)}`
             + `\n    <ul>`
             + `\n      <li>`
-            + `\n        ${aHref("离线补丁版", patchedApkURL.href)}游戏客户端不需要CA证书；`
-            + `\n        <br>但模拟器中，目前仅发现${aHref("Android12的MuMuX模拟器", mumuXURL.href)}可以运行；`
+            + `\n        <!-- ${aHref("离线补丁版", oldPatchedApkURL.href)} -->${aHref("离线补丁版", patchedApkURL.href)}游戏客户端不需要CA证书；`
+            + `\n        <!-- <br>但模拟器中，目前仅发现${aHref("Android12的MuMuX模拟器", mumuXURL.href)}可以运行；`
             + `\n        <br>真机理论上只支持Android9以上系统，实际上目前仅在Android12上测试过。`
-            + `\n        <br>而且它目前只能免去对CA证书的需求，仍然需要继续设置Clash。`
+            + `\n        <br>而且 --><br>它目前只能免去对CA证书的需求，仍然需要继续设置Clash。`
             + `\n      </li><li>`
             + `\n        电脑上应该用${aHref("最新版NodeJS", nodeJsUrl.href)}直接跑${aHref("这个本地服务器", npmRepoUrl.href)}<b>（不推荐在模拟器里通过Termux运行本地服务器）</b>、用Android模拟器跑${aHref("游戏客户端", officialURL.href)}和${aHref("Clash for Android", clashURL.href)}，`
             + `\n        <br>然后用<code>adb -e reverse tcp:${httpProxyPort} tcp:${httpProxyPort}</code>命令设置端口映射来让模拟器里的Clash能连到外边；`
@@ -1310,22 +1417,9 @@ export class controlInterface {
             + `\n  </fieldset>`
             + `\n  <fieldset>`
             + `\n  <legend>导入之前另存的个人账号数据</legend>`
-            + `\n    <form enctype=\"multipart/form-data\" action=\"/api/upload_dump\" method=\"post\">`
-            + `\n      <div>`
-            + `\n        <input type=\"file\" name=\"uploaded_dump\" id=\"dump_file\">`
-            + `\n      </div>`
-            + `\n      <div>`
-            + `\n        <input type=\"submit\" value=\"上传并导入\" id=\"import_btn\" ${isDownloading || isImporting ? "disabled" : ""}>`
-            + `\n        <label for=\"import_btn\"><b>上传并导入后，将会覆盖当前的数据！</b></label>`
-            + `\n      </div>`
-            + `\n    </form>`
-            + `\n    <fieldset>`
-            + `\n    <legend>导入进度</legend>`
             + `\n    <div>`
-            + `\n      <button id=\"refreshbtn7\" onclick=\"window.location.reload(true);\">刷新</button>`
-            + `\n      <label id=\"importstatus\" style=\"${userdataDumpStatusStyle}\" for=\"refreshbtn7\">TO_BE_FILLED_BY_JAVASCRIPT</label>`
+            + `\n      请参看${aHref("导入国服个人账号数据", "#fieldset_upload_cn_dump", false)}。`
             + `\n    </div>`
-            + `\n    </fieldset>`
             + `\n  </fieldset>`
             + `\n  <hr>`
             + `\n  <h2 id=\"crawlstaticdata\">爬取游戏静态资源文件</h2>`
@@ -1378,8 +1472,8 @@ export class controlInterface {
             + `\n  <fieldset>`
             + `\n  <legend>清理</legend>`
             + `\n  <div>`
-            + `\n    <button id=\"refreshbtn7\" onclick=\"window.location.reload(true);\">刷新</button>`
-            + `\n    <label id=\"fsckresult\" style=\"${fsckResultStyle}\" for=\"refreshbtn7\">TO_BE_FILLED_BY_JAVASCRIPT</label>`
+            + `\n    <button id=\"refreshbtn9\" onclick=\"window.location.reload(true);\">刷新</button>`
+            + `\n    <label id=\"fsckresult\" style=\"${fsckResultStyle}\" for=\"refreshbtn9\">TO_BE_FILLED_BY_JAVASCRIPT</label>`
             + `\n  </div>`
             + `\n  <form action=\"/api/fsck\" method=\"post\">`
             + `\n    <div>`
@@ -1413,6 +1507,8 @@ export class controlInterface {
     private getStatus(gameUid: number | undefined): {
         mode: parameters.mode,
         isDownloading: boolean,
+        JPDmpUploadStatus: string,
+        JPDmpUploadStatusStyle: string,
         userdataDumpStatus: string,
         userdataDumpStatusStyle: string,
         isCrawling: boolean,
@@ -1427,9 +1523,11 @@ export class controlInterface {
         isWebResCompleted: boolean,
         isAssetsCompleted: boolean,
         isImporting: boolean,
-        importStatus: string,
-        importStatusStyle: string,
+        CNDmpImportStatus: string,
+        CNDmpImportStatusStyle: string,
     } {
+        const JPDmpUploadStatus = this.JPDumpRecv != null ? "上传中" : "就绪";
+        const JPDmpUploadStatusStyle = this.JPDumpRecv != null ? "color: orange" : "color: green";
         let userdataDumpStatus = "尚未开始从官服下载", userdataDumpStatusStyle = "color: red";;
         const isDownloading = this.userdataDmp.isDownloading;
         const lastDump = this.userdataDmp.lastDump;
@@ -1497,22 +1595,24 @@ export class controlInterface {
         const isAssetsCompleted = this.crawler.isAssetsCompleted;
 
         const isImporting = this.userdataDmp.isImporting;
-        let importStatus = "", importStatusStyle = "color: red";
+        let CNDmpImportStatus = "", CNDmpImportStatusStyle = "color: red";
         if (isImporting) {
-            importStatus = "正在导入..."; importStatusStyle = "color: blue";
+            CNDmpImportStatus = "正在导入..."; CNDmpImportStatusStyle = "color: blue";
         } else {
             const lastImportError = this.userdataDmp.lastImportError;
             if (lastImportError == null) {
-                importStatus = "已导入";
-                importStatusStyle = "color: green";
+                CNDmpImportStatus = "已导入";
+                CNDmpImportStatusStyle = "color: green";
             } else {
-                importStatus = "导入过程出错"; importStatusStyle = "color: red";
-                if (lastImportError instanceof Error) importStatus += ` [${lastImportError.message}]`;
+                CNDmpImportStatus = "导入过程出错"; CNDmpImportStatusStyle = "color: red";
+                if (lastImportError instanceof Error) CNDmpImportStatus += ` [${lastImportError.message}]`;
             }
         }
 
         return {
             mode: this.params.mode,
+            JPDmpUploadStatus: JPDmpUploadStatus,
+            JPDmpUploadStatusStyle: JPDmpUploadStatusStyle,
             isDownloading: isDownloading,
             userdataDumpStatus: userdataDumpStatus,
             userdataDumpStatusStyle: userdataDumpStatusStyle,
@@ -1528,9 +1628,58 @@ export class controlInterface {
             isWebResCompleted: isWebResCompleted,
             isAssetsCompleted: isAssetsCompleted,
             isImporting: isImporting,
-            importStatus: importStatus,
-            importStatusStyle: importStatusStyle,
+            CNDmpImportStatus: CNDmpImportStatus,
+            CNDmpImportStatusStyle: CNDmpImportStatusStyle,
         }
+    }
+    /*
+                + `\n  <fieldset><legend>选择要载入的<b>日服</b>个人存档</legend>`
+                + `\n    <div>`
+                + `\n      <ul>`
+                + `\n      <li>`
+                + `\n        选择形如[connect-XXXXXXXX-XXXXXXXX-玩家名.zip]的存档<b>提交</b>即可切换服务器为日服离线模式。`
+                + `\n      </li>`
+                + `\n      <li>`
+                + `\n        <i>这种格式的个人账号存档在关服前，由美服玩家社区开发者${aHref("LiviaMedeiros", "https://github.com/LiviaMedeiros")}开发的connect.cirno.name从日服爬取数据保存生成。</i>`
+                + `\n      </li>`
+                + `\n      <li>`
+                + `\n        选择[国服离线模式]<b>提交</b>即可切回国服离线模式。`
+                + `\n      </li>`
+                + `\n      </ul>`
+                + `\n    </div>`
+                + `\n  </fieldset>`
+    */
+    private get JPDmpListHtml(): string {
+        const JPDmpList: Array<string> = ["国服离线模式"];
+        let result: Array<string> = [];
+        try {
+            // ensure directory exists
+            const JPDumpDir = this.JPDumpDir;
+            if (!fs.existsSync(JPDumpDir)) fs.mkdirSync(JPDumpDir);
+            if (!fs.statSync(JPDumpDir).isDirectory()) {
+                throw new Error(`${JPDumpDir} is not a directory`);
+            }
+            // now we can readdir
+            result = fs.readdirSync(JPDumpDir).filter(item => item.endsWith(".zip"));
+            let item: string | undefined;
+            while ((item = result.shift()) != null) JPDmpList.push(item);
+        } catch (e) {
+            console.error("JPDmpListHtml", e);
+            while (JPDmpList.pop());
+            JPDmpList.push("国服离线模式");
+            JPDmpList.push("|\\/\\/\\/❌目录读取错误❌\\/\\/\\/|");
+            console.error(e);
+        }
+        return `<form action=\"/api/choose_jp_dump\" method=\"post\"><fieldset>`
+            + `<legend>选择要载入的<b>日服</b>个人存档</legend>`
+            + `<div>`
+            + `${JPDmpList.map(
+                (item, index) => `<input type="radio" id="JPDmpZipNo${index + 1}" name="JPDmpList" value="${item}" />`
+                    + `<label for="JPDmpZipNo${index + 1}">${item}</label>`
+            ).join("<br>")}`
+            + `</div>`
+            + `</fieldset>`
+            + `</form>`;
     }
 
     private get addrSelectHtml(): string {

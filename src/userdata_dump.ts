@@ -348,7 +348,7 @@ export class userdataDmp {
             console.log(`loadLastDump`, e);
         }
     }
-    importDumpAsync(src: Buffer): Promise<void> {
+    importCNDumpAsync(src: Buffer): Promise<void> {
         return new Promise((resolve, reject) =>
             this.getImportDumpPromise(src)
                 .then(() => resolve())
