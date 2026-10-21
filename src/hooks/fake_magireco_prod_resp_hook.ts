@@ -187,7 +187,7 @@ export class fakeMagirecoProdRespHook implements hook {
                                     let extracted = await myZippedAssets.readFileAsync(pathInZip);
                                     if (extracted != null) body[objKey] = JSON.parse(extracted.toString('utf-8'));
                                 }
-                                this.fixCurrentTime(body);
+                                body.currentTime = "", this.fixCurrentTime(body);
                                 body = JSON.stringify(body);
                             } else {
                                 statusCode = 400;
