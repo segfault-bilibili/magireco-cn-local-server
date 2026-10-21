@@ -15,8 +15,8 @@ import { missingData } from "./etc/missing_data";
 import * as favicon from "../favicon";
 
 
-const magirecoJPProdUrlRegEx = /^(http|https):\/\/(android|dorothy)\.magi-reco\.com(|:10002)\/((|maintenance\/)magica\/.+|favicon\.ico)$/;
-const magirecoJPApiUrlRegEx = /^(http|https):\/\/(android|dorothy)\.magi-reco\.com(|:10002)\/magica\/api\/.+$/;
+const magirecoJPProdUrlRegEx = /^(http|https):\/\/(android|dorothy)\.magi-reco\.com\/((|maintenance\/)magica\/.+|favicon\.ico)$/;
+const magirecoJPApiUrlRegEx = /^(http|https):\/\/(android|dorothy)\.magi-reco\.com\/magica\/api\/.+$/;
 const noahappsJPregistUrlRegEx = /^(http|https):\/\/api-pnote2\.noahapps\.jp(\/|.+\/regist)$/;
 const magirecoJPtedataUrlRegEx = /^(http|https):\/\/te-data\.magi-reco\.com\/(config|sync)(|\?.*)$/;
 const AppAdjustUrlRegEx = /^(http|https):\/\/app\.adjust\.(com|net\.in|world)\/(session|attribution)(|\?.*)$/;
