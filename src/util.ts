@@ -1,4 +1,4 @@
-import { randomBytes } from "crypto";
+import * as crypto from "crypto";
 import * as dns from "dns";
 import * as zlib from "zlib";
 
@@ -136,10 +136,13 @@ export const decompress = (data: Buffer, encoding?: string): Buffer => {
 
 
 export const getRandomHex = (charCount: number): string => {
-    return randomBytes(Math.trunc((charCount + 1) / 2)).toString('hex').substring(0, charCount);
+    return crypto.randomBytes(Math.trunc((charCount + 1) / 2)).toString('hex').substring(0, charCount);
 }
 export const getRandomGuid = (): string => {
     return [8, 4, 4, 4, 12].map((len) => getRandomHex(len)).join("-");
+}
+export const md5 = (file: Buffer): string => {
+    return crypto.createHash('md5').update(file).digest().toString('hex');
 }
 
 

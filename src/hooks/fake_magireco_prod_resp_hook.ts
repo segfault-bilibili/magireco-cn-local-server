@@ -4,7 +4,7 @@ import * as http from "http";
 import * as http2 from "http2";
 import * as zlib from "zlib";
 import * as crypto from "crypto";
-import { replacer, compress, getRandomHex, getRandomGuid, getMime } from "../util";
+import { replacer, compress, getRandomHex, getRandomGuid, getMime, md5 } from "../util";
 import { fakeResponse, hook, passOnRequest, passOnRequestBody } from "../local_server";
 import { zippedAssets } from "../zipped_assets";
 import * as parameters from "../parameters";
@@ -113,6 +113,8 @@ export class fakeMagirecoProdRespHook implements hook {
         this.params.saveOverrideDB();
     }
 
+    private readonly etagDict = new Map<string, [string, number]>();
+
     constructor(params: parameters.params, crawler: staticResCrawler.crawler, dmp: userdataDump.userdataDmp) {
         this.params = params;
         this.crawler = crawler;
@@ -158,6 +160,7 @@ export class fakeMagirecoProdRespHook implements hook {
             let statusCode = 200;
             let mime = "application/octet-stream";
             let body: any = zlib.gzipSync(new ArrayBuffer(0), { level: 0 });
+            let etag: string | undefined;
 
             if (isMagiRecoJPApi) {
                 mime = "application/json";
@@ -197,12 +200,33 @@ export class fakeMagirecoProdRespHook implements hook {
                 let filepath = path.join(MagiRecoJPAssetPath, url.pathname);
                 if (fs.existsSync(filepath) && fs.statSync(filepath).isFile()) {
                     body = fs.readFileSync(filepath);
+
                     //enable browser debug
                     if (url.pathname === '/magica/js/system/replacement.js') {
                         body = Buffer.from(body.toString('utf-8').replace(/window\.isDebug\s*=\s*false;/,
                             "window.isDebug=window.showBackdoor=!0;"
                         ), 'utf-8');
                     }
+
+                    const etagDict = this.etagDict;
+                    const mtimeMs = fs.statSync(filepath).mtimeMs;
+                    let val = etagDict.get(url.pathname);
+                    if (val == null) {
+                        etag = md5(body);
+                        etagDict.set(url.pathname, [etag, mtimeMs]);
+                    } else {
+                        if (mtimeMs > val[1]) {
+                            etag = md5(body);
+                            etagDict.set(url.pathname, [etag, mtimeMs]);
+                        } else {
+                            etag = val[0];
+                        }
+                    }
+                    if (headers?.[http2.constants.HTTP2_HEADER_IF_NONE_MATCH] === etag) {
+                        statusCode = 304;
+                        body = Buffer.alloc(0);
+                    }
+
                     mime = getMime(filepath.replace(/\.gz$/, ""));
                 } else {
                     if (url.pathname === "/magica/resource/image_web/debug/selectedBranch.json") {
@@ -213,6 +237,11 @@ export class fakeMagirecoProdRespHook implements hook {
                 }
             }
 
+            let respHeaders: any = {
+                [http2.constants.HTTP2_HEADER_CONTENT_TYPE]: mime,
+            };
+            if (etag != null) respHeaders[http2.constants.HTTP2_HEADER_ETAG] = etag;
+
             return {
                 nextAction: "fakeResponse",
                 fakeResponse: {
@@ -221,7 +250,7 @@ export class fakeMagirecoProdRespHook implements hook {
                         ? "OK" : statusCode == 304
                             ? "Not Modified" : statusCode == 404
                                 ? "Not Found" : "Bad Request",
-                    headers: { [http2.constants.HTTP2_HEADER_CONTENT_TYPE]: mime },
+                    headers: respHeaders,
                     body: body,
                 },
                 interceptResponse: false,
