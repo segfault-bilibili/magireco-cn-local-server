@@ -22,6 +22,7 @@ import { saveAccessKeyHook } from "./hooks/save_access_key_hook";
 import { saveOpenIdTicketHook } from "./hooks/save_open_id_ticket_hook";
 import * as favicon from "./favicon";
 import { zippedAssets } from "./zipped_assets";
+import { isDir } from "./util";
 
 
 const aHref = (text: string, url: string, newTab = true, id?: string) =>
@@ -96,41 +97,7 @@ export class controlInterface {
         console.log("（按CTRL+C即可中断程序运行）");
     }
 
-    private readonly JPDumpDir = path.join(".", "jp_userdata_dumps");
-    private JPDumpRecv: Promise<void> | undefined;
-    private receiveNewJPDumpAsync(filename: string, filedata: Buffer): Promise<void> {
-        let p1 = new Promise<void>((resolve, reject) => {
-            let p0 = this.JPDumpRecv;
-            if (p0 == null) p0 = new Promise(r => r());
-            p0.then(() => {
-                try {
-                    // ensure directory exists
-                    const JPDumpDir = this.JPDumpDir;
-                    if (!fs.existsSync(JPDumpDir)) fs.mkdirSync(JPDumpDir);
-                    if (!fs.statSync(JPDumpDir).isDirectory())
-                        throw new Error(`${JPDumpDir} is not a directory`);
-                    // ensure filepath is file or nonexist
-                    // FIXME non-writable situations
-                    // FIXME filename charset error: 小叶 => å°å¶
-                    const filepath = path.join(JPDumpDir, filename);
-                    if (fs.existsSync(filepath) && !fs.statSync(filepath).isFile())
-                        throw new Error(`${filepath} is not available as a file or nonexistent path`);
-                    // write file
-                    fsPromises.writeFile(filepath, filedata).then(() => resolve()).then(() => this.JPDumpRecv = undefined)
-                        .catch(e => {
-                            this.JPDumpRecv = undefined;
-                            reject(e);
-                        });
-                } catch (e) {
-                    console.log("receiveNewJPDumpAsync", e);
-                    this.JPDumpRecv = undefined;
-                    reject(e);
-                }
-            });
-        });
-        this.JPDumpRecv = p1;
-        return p1;
-    }
+    private readonly JPDumpDir = path.join(".", "user_page_jsons");
 
     private constructor(params: parameters.params, serverList: Array<localServer | httpProxy>, crawler: staticResCrawler.crawler) {
         const httpPxy = serverList.find((s) => s instanceof httpProxy) as httpProxy;
@@ -292,47 +259,18 @@ export class controlInterface {
                             this.sendResultAsync(res, 500, e instanceof Error ? e.message : `${apiName} error`);
                         }
                         return;
-                    case "choose_or_delete_jp_dump_entry":
+                    case "choose_jp_dump_entry":
                         try {
                             let postParams = await this.getParsedPostData(req);
-                            let isDelete = postParams.has("delete");
                             let selectedJPDump = postParams.get("selectedJPDump");
                             if (selectedJPDump == null) throw new Error(`selectedJPDump == null`);
-                            let filepath = path.join(this.JPDumpDir, selectedJPDump);
-                            let isExist = fs.existsSync(filepath);
                             let resultText = "set to "
-                            if (isDelete) {
-                                let toDelete = [filepath, `${filepath}.map.bin.gz`];
-                                toDelete.forEach(filepath => {
-                                    if (isExist && fs.statSync(filepath).isFile()) fs.rmSync(filepath);
-                                });
+                            if (!isDir(path.join(this.JPDumpDir, selectedJPDump))) {
                                 selectedJPDump = defaultJPDump;
-                            } else {
-                                if ((!isExist) || (!fs.statSync(filepath).isFile())) {
-                                    selectedJPDump = defaultJPDump;
-                                } // otherwise just use the POSTed selectedJPDump value
-                            }
+                            } // otherwise just use the POSTed selectedJPDump value
                             resultText += `"${selectedJPDump}"`
                             this.params.save({ key: "selectedJPDump", val: selectedJPDump });
                             this.sendResultAsync(res, 200, resultText);
-                        } catch (e) {
-                            console.error(`${apiName} error`, e);
-                            this.sendResultAsync(res, 500, e instanceof Error ? e.message : `${apiName} error`);
-                        }
-                        return;
-                    case "upload_jp_dump":
-                        try {
-                            let postData = await this.getPostData(req);
-                            if (typeof postData === 'string') throw new Error("postData is string");
-                            const uploaded_jp_dump = postData.find((item) => item.name === "uploaded_jp_dump");
-                            if (uploaded_jp_dump == null) throw new Error("uploaded_jp_dump == null");
-                            const filename = uploaded_jp_dump.filename;
-                            if (filename == null) throw new Error("filename == null");
-                            if (filename === defaultJPDump) throw new Error(`filename === \"${defaultJPDump}\"`);
-                            if (!filename.match(/\.zip$/i)) throw new Error("filename not ended with .zip");
-                            this.sendResultAsync(res, 200, "receiving new jp dump"); // send request before importing
-                            this.receiveNewJPDumpAsync(filename, uploaded_jp_dump.data)
-                                .catch((e) => console.error(`${apiName} error`, e)); // prevent crash
                         } catch (e) {
                             console.error(`${apiName} error`, e);
                             this.sendResultAsync(res, 500, e instanceof Error ? e.message : `${apiName} error`);
@@ -923,8 +861,6 @@ export class controlInterface {
         }
 
         const status = this.getStatus(gameUid);
-        const JPDmpUploadStatus = status.JPDmpUploadStatus;
-        const JPDmpUploadStatusStyle = status.JPDmpUploadStatusStyle;
         const isDownloading = status.isDownloading;
         const userdataDumpStatus = status.userdataDumpStatus;
         const userdataDumpStatusStyle = status.userdataDumpStatusStyle
@@ -1001,8 +937,6 @@ export class controlInterface {
             + `\n          el.textContent = status.isWebResCompleted ? \"已完成下载\" : \"未完成下载\"; el.style = status.isWebResCompleted ? \"color: green\" : \"\";`
             + `\n          el = document.getElementById(\"crawl_assets_lbl\");`
             + `\n          el.textContent = status.isAssetsCompleted ? \"已完成下载\" : \"未完成下载\";el.style = status.isAssetsCompleted ? \"color: green\": \"\"`
-            + `\n          el = document.getElementById(\"jpdmpuploadstatus\");`
-            + `\n          el.textContent = status.JPDmpUploadStatus; el.style = status.JPDmpUploadStatusStyle;`
             + `\n          el = document.getElementById(\"cndmpimportstatus\");`
             + `\n          el.textContent = status.CNDmpImportStatus; el.style = status.CNDmpImportStatusStyle;`
             + `\n          document.getElementById(\"cn_import_btn\").disabled = status.isDownloading || status.isImporting;`
@@ -1070,28 +1004,6 @@ export class controlInterface {
             + `\n  <hr>`
             + `\n  <h2>上传个人账号数据</h2>`
             + `\n${this.JPDumpListHtml}\n`
-            + `\n  <fieldset>`
-            + `\n  <legend>导入<b>日服</b>个人账号数据</legend>`
-            + `\n    <fieldset><legend>上传日服账号存档</legend>`
-            + `\n      <form enctype=\"multipart/form-data\" action=\"/api/upload_jp_dump\" method=\"post\">`
-            + `\n        <div>`
-            + `\n          <input type=\"file\" name=\"uploaded_jp_dump\" id=\"jp_dump_file\">`
-            + `\n        </div>`
-            + `\n        <div>`
-            + `\n          <input type=\"submit\" value=\"上传\" id=\"jp_import_btn\" ${isDownloading || isImporting ? "disabled" : ""}>`
-            + `\n          <label for=\"jp_import_btn\"><b>将会覆盖同名存档！</b></label>`
-            + `\n        </div>`
-            + `\n      </form>`
-            + `\n      <fieldset>`
-            + `\n      <legend>上传进度</legend>`
-            + `\n      <div>`
-            + `\n        <button id=\"refreshbtn8\" onclick=\"window.location.reload(true);\">刷新</button>`
-            + `\n        <label id=\"jpdmpuploadstatus\" style=\"${JPDmpUploadStatusStyle}\" for=\"refreshbtn8\">TO_BE_FILLED_BY_JAVASCRIPT</label>`
-            + `\n      </div>`
-            + `\n      </fieldset>`
-            + `\n    </fieldset>`
-            + `\n  </fieldset>`
-            + `\n  <hr>`
             + `\n  <fieldset id="fieldset_upload_cn_dump">`
             + `\n  <legend>导入之前另存的<b>国服/B站服</b>个人账号数据</legend>`
             + `\n    <form enctype=\"multipart/form-data\" action=\"/api/upload_cn_dump\" method=\"post\">`
@@ -1540,8 +1452,6 @@ export class controlInterface {
     private getStatus(gameUid: number | undefined): {
         mode: parameters.mode,
         isDownloading: boolean,
-        JPDmpUploadStatus: string,
-        JPDmpUploadStatusStyle: string,
         userdataDumpStatus: string,
         userdataDumpStatusStyle: string,
         isCrawling: boolean,
@@ -1559,8 +1469,6 @@ export class controlInterface {
         CNDmpImportStatus: string,
         CNDmpImportStatusStyle: string,
     } {
-        const JPDmpUploadStatus = this.JPDumpRecv != null ? "上传中" : "就绪";
-        const JPDmpUploadStatusStyle = this.JPDumpRecv != null ? "color: orange" : "color: green";
         let userdataDumpStatus = "尚未开始从官服下载", userdataDumpStatusStyle = "color: red";;
         const isDownloading = this.userdataDmp.isDownloading;
         const lastDump = this.userdataDmp.lastDump;
@@ -1644,8 +1552,6 @@ export class controlInterface {
 
         return {
             mode: this.params.mode,
-            JPDmpUploadStatus: JPDmpUploadStatus,
-            JPDmpUploadStatusStyle: JPDmpUploadStatusStyle,
             isDownloading: isDownloading,
             userdataDumpStatus: userdataDumpStatus,
             userdataDumpStatusStyle: userdataDumpStatusStyle,
@@ -1679,7 +1585,7 @@ export class controlInterface {
                 throw new Error(`${JPDumpDir} is not a directory`);
             }
             // now we can readdir
-            result = fs.readdirSync(JPDumpDir).filter(item => item.endsWith(".zip"));
+            result = fs.readdirSync(JPDumpDir).filter(item => isDir(path.join(JPDumpDir, item)));
             let item: string | undefined;
             while ((item = result.shift()) != null) JPDmpList.push(item);
         } catch (e) {
@@ -1689,7 +1595,7 @@ export class controlInterface {
             JPDmpList.push("|\\/\\/\\/❌目录读取错误❌\\/\\/\\/|");
             console.error(e);
         }
-        return `<form id="choose_or_delete_jp_dump_entry" action=\"/api/choose_or_delete_jp_dump_entry\" method=\"post\">`
+        return `<form action=\"/api/choose_jp_dump_entry\" method=\"post\">`
             + `<fieldset><legend>选择要使用的<b>日服</b>账号存档</legend>`
             + `<div><ul><li>`
             + `  选择形如[connect-XXXXXXXX-XXXXXXXX-玩家名.zip]的存档，<b>并提交，</b>即可让服务器切换至中/日服本地离线双服务模式。`
@@ -1706,8 +1612,6 @@ export class controlInterface {
             ).join("<br>")}<br>`
             + `</div>`
             + `<button type="submit" name="choose" style="margin-right: 1em;">提交</button>`
-            + `<button type="submit" name="delete"`
-            + ` onclick="return confirm('删除后不可恢复。继续？');">删除</button>`
             + `</fieldset>`
             + `</form>`;
     }

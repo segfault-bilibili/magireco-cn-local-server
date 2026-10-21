@@ -1,3 +1,4 @@
+import * as fs from "fs"
 import * as crypto from "crypto";
 import * as dns from "dns";
 import * as zlib from "zlib";
@@ -167,3 +168,7 @@ export const getMime = (fullpath: string): string => {
     }
     return mime;
 }
+
+
+export const isDir = (dirpath: string): boolean => fs.existsSync(dirpath) && fs.statSync(dirpath).isDirectory();
+export const isFile = (dirpath: string): boolean => fs.existsSync(dirpath) && fs.statSync(dirpath).isFile();

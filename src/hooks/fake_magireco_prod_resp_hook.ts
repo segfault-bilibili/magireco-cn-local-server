@@ -4,9 +4,8 @@ import * as http from "http";
 import * as http2 from "http2";
 import * as zlib from "zlib";
 import * as crypto from "crypto";
-import { replacer, compress, getRandomHex, getRandomGuid, getMime, md5 } from "../util";
+import { replacer, compress, getRandomHex, getRandomGuid, getMime, md5, isDir, isFile } from "../util";
 import { fakeResponse, hook, passOnRequest, passOnRequestBody } from "../local_server";
-import { zippedAssets } from "../zipped_assets";
 import * as parameters from "../parameters";
 import * as staticResCrawler from "../static_res_crawler";
 import * as userdataDump from "../userdata_dump";
@@ -164,41 +163,66 @@ export class fakeMagirecoProdRespHook implements hook {
 
             if (isMagiRecoJPApi) {
                 mime = "application/json";
-                const apiName = url.pathname.replace(/^\/magica\/api\//, "");
-                switch (apiName) {
+                let apiName = url.pathname.replace(/^\/magica\/api\//, "");
+                if (apiName === "user/create") apiName = "page/TopPage";
+                if (apiName.match(/^page\/[^\/].+$/)) {
+                    body = { currentTime: "" }; this.fixCurrentTime(body);
+                    const pageName = apiName.replace(/^page\//, "");
+                    const selectedJPDump = this.params.selectedJPDump;
+                    const JPDumpDir = path.join(".", "user_page_jsons", selectedJPDump);
+                    if (isDir(JPDumpDir)) {
+                        const pageDir = path.join(JPDumpDir, pageName);
+                        let valueSet: Set<string> = new Set();
+                        const value = url.searchParams.get("value");
+                        if (value != null && value !== "") valueSet = new Set(value.split(","));
+                        if (isDir(pageDir)) fs.readdirSync(pageDir).forEach(item => valueSet.add(item.replace(/\.json$/, "")));
+                        valueSet.forEach(requestedValue => {
+                            if (isDir(pageDir)) {
+                                let filepath = path.join(pageDir, requestedValue + ".json");
+                                if (isFile(filepath)) {
+                                    body[requestedValue] = JSON.parse(fs.readFileSync(filepath, 'utf-8'));
+                                    valueSet.delete(requestedValue)
+                                }
+                            }
+                        });
+                        if (valueSet.size > 0) {
+                            const pageDirs = fs.readdirSync(JPDumpDir).filter(item => isDir(item));
+                            valueSet.forEach(missingValue => {
+                                for (let item of pageDirs) {
+                                    if (item === pageName) continue;
+                                    let filepath = path.join(JPDumpDir, item, missingValue + ".json");
+                                    if (isFile(filepath)) {
+                                        body[missingValue] = JSON.parse(fs.readFileSync(filepath, 'utf-8'));
+                                        valueSet.delete(missingValue);
+                                    }
+                                }
+                            });
+                        }
+                        if (valueSet.size > 0) {
+                            console.log(`pageName=[${pageName}] valueSet.size=[${valueSet.size}]`, valueSet);
+                        }
+                        body = JSON.stringify(body);
+                    } else {
+                        statusCode = 404;
+                        body = Buffer.alloc(0);
+                    }
+                } else switch (apiName) {
                     case "system/native/getDomainPath":
                     case "gameUser/cacheClear": {
                         body = `{"resultCode":"success"}`;
                         break;
                     }
                     default: {
-                        let requiredObjects = url.searchParams.get("value")?.split(",");
-                        const selectedJPDump = this.params.selectedJPDump;
-                        if (selectedJPDump === parameters.defaultJPDump) {
-                            statusCode = 400;
-                        } else {
-                            // FIXME get rid of frequent re-init
-                            body = {};
-                            const myZippedAssets = await zippedAssets.initForJPUserdataDump(selectedJPDump);
-                            let filepath = path.join(".", "jp_userdata_dumps", selectedJPDump);
-                            if (requiredObjects != null && fs.existsSync(filepath) && fs.statSync(filepath).isFile()) {
-                                for (let objKey of requiredObjects) {
-                                    let pathInZip = ["connect", objKey + ".json"].join("/");
-                                    let extracted = await myZippedAssets.readFileAsync(pathInZip);
-                                    if (extracted != null) body[objKey] = JSON.parse(extracted.toString('utf-8'));
-                                }
-                                body.currentTime = "", this.fixCurrentTime(body);
-                                body = JSON.stringify(body);
-                            } else {
-                                statusCode = 400;
-                            }
-                        }
+                        statusCode = 400;
                     }
                 }
             } else { // JP Assets
                 const MagiRecoJPAssetPath = path.join(".", "static_staging_jp");
                 let filepath = path.join(MagiRecoJPAssetPath, url.pathname);
-                if (fs.existsSync(filepath) && fs.statSync(filepath).isFile()) {
+                if (url.pathname.startsWith("/magica/resource/image_web/") && !isFile(filepath)) {
+                    filepath = filepath.replace("image_web", "image_native");
+                }
+                if (isFile(filepath)) {
                     body = fs.readFileSync(filepath);
 
                     //enable browser debug
