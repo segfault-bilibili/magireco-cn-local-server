@@ -156,16 +156,11 @@ export class fakeMagirecoProdRespHook implements hook {
 
         if (isMagiRecoJP) {
             let statusCode = 200;
-            let respHeaders: http.IncomingHttpHeaders | (http2.IncomingHttpHeaders & http2.IncomingHttpStatusHeader) = {
-                [http2.constants.HTTP2_HEADER_CONTENT_TYPE]: "application/octet-stream",
-                [http2.constants.HTTP2_HEADER_CONTENT_ENCODING]: "gzip",
-            }
+            let mime = "application/octet-stream";
             let body: any = zlib.gzipSync(new ArrayBuffer(0), { level: 0 });
 
             if (isMagiRecoJPApi) {
-                respHeaders = {
-                    [http2.constants.HTTP2_HEADER_CONTENT_TYPE]: "application/json",
-                }
+                mime = "application/json";
                 const apiName = url.pathname.replace(/^\/magica\/api\//, "");
                 switch (apiName) {
                     case "system/native/getDomainPath":
@@ -202,21 +197,13 @@ export class fakeMagirecoProdRespHook implements hook {
                 let filepath = path.join(MagiRecoJPAssetPath, url.pathname);
                 if (fs.existsSync(filepath) && fs.statSync(filepath).isFile()) {
                     body = fs.readFileSync(filepath);
-
                     //enable browser debug
                     if (url.pathname === '/magica/js/system/replacement.js') {
                         body = Buffer.from(body.toString('utf-8').replace(/window\.isDebug\s*=\s*false;/,
                             "window.isDebug=window.showBackdoor=!0;"
                         ), 'utf-8');
                     }
-
-                    if (!filepath.endsWith(".gz")) body = zlib.gzipSync(body, { level: 1 });
-                    respHeaders = {
-                        [http2.constants.HTTP2_HEADER_CONTENT_TYPE]:
-                            [getMime(filepath.replace(/\.gz$/, ""))],
-                        [http2.constants.HTTP2_HEADER_CONTENT_ENCODING]:
-                            ["gzip"],
-                    };
+                    mime = getMime(filepath.replace(/\.gz$/, ""));
                 } else {
                     if (url.pathname === "/magica/resource/image_web/debug/selectedBranch.json") {
                         body = `{"webBranch":"mybrowserdebug"}`;
@@ -234,7 +221,7 @@ export class fakeMagirecoProdRespHook implements hook {
                         ? "OK" : statusCode == 304
                             ? "Not Modified" : statusCode == 404
                                 ? "Not Found" : "Bad Request",
-                    headers: respHeaders,
+                    headers: { [http2.constants.HTTP2_HEADER_CONTENT_TYPE]: mime },
                     body: body,
                 },
                 interceptResponse: false,
