@@ -302,14 +302,15 @@ export class controlInterface {
                             let isExist = fs.existsSync(filepath);
                             let resultText = "set to "
                             if (isDelete) {
-                                if (isExist && fs.statSync(filepath).isFile()) {
-                                    fs.rmSync(filepath);
-                                }
+                                let toDelete = [filepath, `${filepath}.map.bin.gz`];
+                                toDelete.forEach(filepath => {
+                                    if (isExist && fs.statSync(filepath).isFile()) fs.rmSync(filepath);
+                                });
                                 selectedJPDump = defaultJPDump;
                             } else {
                                 if ((!isExist) || (!fs.statSync(filepath).isFile())) {
                                     selectedJPDump = defaultJPDump;
-                                } // else just use the POSTed selectedJPDump value
+                                } // otherwise just use the POSTed selectedJPDump value
                             }
                             resultText += `"${selectedJPDump}"`
                             this.params.save({ key: "selectedJPDump", val: selectedJPDump });
@@ -844,8 +845,9 @@ export class controlInterface {
         const nodeJsUrl = new URL("https://nodejs.org/zh-cn/download/current/");
         const npmRepoUrl = new URL("https://www.npmjs.com/package/magireco-cn-local-server");
         const mumuXURL = new URL("https://mumu.163.com/update/");
-        const oldPatchedApkURL = new URL("https://share.weiyun.com/HhJbXRP7");
-        const patchedApkURL = new URL("https://share.weiyun.com/zfwE8zUE");
+        const oldPatchedCNApkURL = new URL("https://share.weiyun.com/HhJbXRP7");
+        const patchedCNApkURL = new URL("https://share.weiyun.com/zfwE8zUE");
+        const patchedJPApkURL = new URL("https://share.weiyun.com/php1M8JT");
 
         const isOnlineMode = this.params.mode === parameters.mode.ONLINE;
         const isLocalOfflineMode = this.params.mode === parameters.mode.LOCAL_OFFLINE;
@@ -1059,14 +1061,15 @@ export class controlInterface {
             + `\n  <fieldset><legend>浏览器调试</legend>`
             + `\n    <div>`
             + `\n      通过下面这个链接即可通过浏览器登录游戏，便于调试。`
-            + `\n      <br>${aHref("index.html", "https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/index.html")}`
+            + `\n      <br>${aHref("index.html（日服）", "https://android.magi-reco.com/magica/index.html")}`
+            + `\n      <br>${aHref("index.html（国服）", "https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/index.html")}`
             + `\n      <br><i>需要F12然后开启设备模拟才能模拟触控操作。</i>`
             + `\n      <br><i>手机端可能需要切换到桌面UA（电脑版）。</i>`
             + `\n    </div>`
             + `\n  </fieldset>`
             + `\n  <hr>`
             + `\n  <h2>上传个人账号数据</h2>`
-            + `\n${this.JPDmpListHtml}\n`
+            + `\n${this.JPDumpListHtml}\n`
             + `\n  <fieldset>`
             + `\n  <legend>导入<b>日服</b>个人账号数据</legend>`
             + `\n    <fieldset><legend>上传日服账号存档</legend>`
@@ -1221,19 +1224,19 @@ export class controlInterface {
             + `\n  ${aHref("（点击隐藏详细设置说明，即让游戏客户端连接到本地服务器而不是直连官服）", "javascript:swapVerboseDesc();", false)}`
             + `\n    <ul>`
             + `\n      <li>`
-            + `\n        <!-- ${aHref("离线补丁版", oldPatchedApkURL.href)} -->${aHref("离线补丁版", patchedApkURL.href)}游戏客户端不需要CA证书；`
+            + `\n        <!-- ${aHref("离线补丁版", oldPatchedCNApkURL.href)} -->离线补丁版（${aHref("日服", patchedJPApkURL.href)}，${aHref("国服", patchedCNApkURL.href)}）游戏客户端不需要CA证书；`
             + `\n        <!-- <br>但模拟器中，目前仅发现${aHref("Android12的MuMuX模拟器", mumuXURL.href)}可以运行；`
             + `\n        <br>真机理论上只支持Android9以上系统，实际上目前仅在Android12上测试过。`
             + `\n        <br>而且 --><br>它目前只能免去对CA证书的需求，仍然需要继续设置Clash。`
             + `\n      </li><li>`
             + `\n        电脑上应该用${aHref("最新版NodeJS", nodeJsUrl.href)}直接跑${aHref("这个本地服务器", npmRepoUrl.href)}<b>（不推荐在模拟器里通过Termux运行本地服务器）</b>、用Android模拟器跑${aHref("游戏客户端", officialURL.href)}和${aHref("Clash for Android", clashURL.href)}，`
             + `\n        <br>然后用<code>adb -e reverse tcp:${httpProxyPort} tcp:${httpProxyPort}</code>命令设置端口映射来让模拟器里的Clash能连到外边；`
-            + `\n        <br>CA证书也安装在（跑着游戏客户端和Clash的）Android模拟器里；或者改用不需要CA证书的${aHref("离线补丁版", patchedApkURL.href)}游戏客户端；`
+            + `\n        <br>CA证书也安装在（跑着游戏客户端和Clash的）Android模拟器里；或者改用不需要CA证书的${aHref("离线补丁版", patchedCNApkURL.href)}游戏客户端；`
             + `\n        <br>（<code>adb</code>的<code>-e</code>参数指定连接至模拟器而不是真机；<code>-d</code>则反之。若有多个设备/模拟器则可用<code>-t</code>指定<code>adb devices -l</code>列出的transport_id编号，比如<code>-t 2</code>）`
             + `\n      </li><li>`
             + `\n        或是在Android真机上用${aHref("Termux", termuxURL.href)}跑这个本地服务器，`
             + `\n        <br>然后用类似${aHref("光速", gsxnjURL.href)}之类虚拟机来跑${aHref("游戏客户端", officialURL.href)}，`
-            + `\n        <br>并在虚拟机内安装CA证书（若是${aHref("离线补丁版", patchedApkURL.href)}游戏客户端则不需要CA证书）。`
+            + `\n        <br>并在虚拟机内安装CA证书（若是${aHref("离线补丁版", patchedCNApkURL.href)}游戏客户端则不需要CA证书）。`
             + `\n        <br>Clash则直接跑在真机上，然后需要设置Clash分流来<b>只让跑着游戏客户端的虚拟机App走代理，不能让跑着本地服务器的Termux也走代理</b>，`
             + `\n        <br>也就是在Clash的[网络]=>[访问控制模式]中选择<b>[仅允许已选择的应用]</b>，然后在[访问控制应用包列表]中<b>只勾选虚拟机App</b>（虚拟机里跑着游戏客户端以及下文提到的autoBattle脚本）。`
             + `\n        <br><i>（否则很显然，本地服务器转发到游戏官服时又被Clash拦截送回本地服务器，这样网络通信就“死循环”了）</i>`
@@ -1242,7 +1245,7 @@ export class controlInterface {
             + `\n      </li><li>`
             + `\n        必须在Clash设置中启用<b>[DNS劫持]</b>。`
             + `\n      </li><li>`
-            + `\n        <b>如果不是${aHref("离线补丁版", patchedApkURL.href)}游戏客户端，则必须安装CA证书，且必须安装为Android的系统证书</b>`
+            + `\n        <b>如果不是${aHref("离线补丁版", patchedCNApkURL.href)}游戏客户端，则必须安装CA证书，且必须安装为Android的系统证书</b>`
             + `\n        <br><i>（必须<b>Root权限</b>，所以对于获取Root权限不便的真机，需要在虚拟机内安装游戏客户端；而虚拟机内可能不支持运行Clash，故Clash需要跑在虚拟机外）。</i>`
             + `\n        <br>安装CA证书这一步可以用${aHref("autoBattle脚本", autoBattleURL.href)}（安装后请先下拉在线更新到最新版）选择运行[安装CA证书]这个脚本自动完成。`
             + `\n      </li><li>`
@@ -1663,7 +1666,7 @@ export class controlInterface {
         }
     }
 
-    private get JPDmpListHtml(): string {
+    private get JPDumpListHtml(): string {
         const defaultJPDump = parameters.defaultJPDump;
         const JPDmpList: Array<string> = [defaultJPDump];
         const selectedJPDump = this.params.selectedJPDump;
@@ -1680,7 +1683,7 @@ export class controlInterface {
             let item: string | undefined;
             while ((item = result.shift()) != null) JPDmpList.push(item);
         } catch (e) {
-            console.error("JPDmpListHtml", e);
+            console.error("JPDumpListHtml", e);
             while (JPDmpList.pop());
             JPDmpList.push(defaultJPDump);
             JPDmpList.push("|\\/\\/\\/❌目录读取错误❌\\/\\/\\/|");
@@ -1689,11 +1692,11 @@ export class controlInterface {
         return `<form id="choose_or_delete_jp_dump_entry" action=\"/api/choose_or_delete_jp_dump_entry\" method=\"post\">`
             + `<fieldset><legend>选择要使用的<b>日服</b>账号存档</legend>`
             + `<div><ul><li>`
-            + `  选择形如[connect-XXXXXXXX-XXXXXXXX-玩家名.zip]的存档，<b>并提交，</b>即可切换服务器为日服离线模式。`
+            + `  选择形如[connect-XXXXXXXX-XXXXXXXX-玩家名.zip]的存档，<b>并提交，</b>即可让服务器切换至中/日服本地离线双服务模式。`
             + `</li><li>`
             + `  <i>这种格式的个人账号存档在关服前，由美服玩家社区开发者${aHref("LiviaMedeiros", "https://github.com/LiviaMedeiros")}开发的connect.cirno.name从日服爬取数据保存生成。</i>`
             + `</li><li>`
-            + `  选择[${defaultJPDump}]，<b>并提交，</b>即可切回国服离线模式。`
+            + `  选择[${defaultJPDump}]，<b>并提交，</b>即可切回单国服本地离线模式。`
             + `</li></ul></div>`
             + `<div>`
             + `${JPDmpList.map((item, index) =>

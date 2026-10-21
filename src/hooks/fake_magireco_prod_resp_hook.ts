@@ -1,8 +1,12 @@
+import * as path from "path";
+import * as fs from "node:fs";
 import * as http from "http";
 import * as http2 from "http2";
+import * as zlib from "zlib";
 import * as crypto from "crypto";
-import { replacer, compress, getRandomHex, getRandomGuid } from "../util";
+import { replacer, compress, getRandomHex, getRandomGuid, getMime } from "../util";
 import { fakeResponse, hook, passOnRequest, passOnRequestBody } from "../local_server";
+import { zippedAssets } from "../zipped_assets";
 import * as parameters from "../parameters";
 import * as staticResCrawler from "../static_res_crawler";
 import * as userdataDump from "../userdata_dump";
@@ -10,6 +14,12 @@ import { bsgamesdkPwdAuth } from "../bsgamesdk-pwd-authenticate";
 import { missingData } from "./etc/missing_data";
 import * as favicon from "../favicon";
 
+
+const magirecoJPProdUrlRegEx = /^(http|https):\/\/(android|dorothy)\.magi-reco\.com(|:10002)\/((|maintenance\/)magica\/.+|favicon\.ico)$/;
+const magirecoJPApiUrlRegEx = /^(http|https):\/\/(android|dorothy)\.magi-reco\.com(|:10002)\/magica\/api\/.+$/;
+const noahappsJPregistUrlRegEx = /^(http|https):\/\/api-pnote2\.noahapps\.jp(\/|.+\/regist)$/;
+const magirecoJPtedataUrlRegEx = /^(http|https):\/\/te-data\.magi-reco\.com\/(config|sync)(|\?.*)$/;
+const AppAdjustUrlRegEx = /^(http|https):\/\/app\.adjust\.(com|net\.in|world)\/(session|attribution)(|\?.*)$/;
 
 
 const magirecoProdUrlRegEx = /^(http|https):\/\/l\d+-prod-[0-9a-z\-]+-mfsn\d*\.bilibiligame\.net\/((|maintenance\/)magica\/.+|favicon\.ico)$/;
@@ -137,6 +147,140 @@ export class fakeMagirecoProdRespHook implements hook {
                 interceptResponse: false,
             }
         }
+
+        const isMagiRecoJP = url?.href.match(magirecoJPProdUrlRegEx) != null;
+        const isMagiRecoJPApi = url?.href.match(magirecoJPApiUrlRegEx) != null;
+        const isNoahappsJPRegist = url?.href.match(noahappsJPregistUrlRegEx) != null;
+        const isMagiRecoJPtedata = url?.href.match(magirecoJPtedataUrlRegEx) != null;
+        const isAppAdjust = url?.href.match(AppAdjustUrlRegEx)
+
+        if (isMagiRecoJP) {
+            let statusCode = 200;
+            let respHeaders: http.IncomingHttpHeaders | (http2.IncomingHttpHeaders & http2.IncomingHttpStatusHeader) = {
+                [http2.constants.HTTP2_HEADER_CONTENT_TYPE]: "application/octet-stream",
+                [http2.constants.HTTP2_HEADER_CONTENT_ENCODING]: "gzip",
+            }
+            let body: any = zlib.gzipSync(new ArrayBuffer(0), { level: 0 });
+
+            if (isMagiRecoJPApi) {
+                respHeaders = {
+                    [http2.constants.HTTP2_HEADER_CONTENT_TYPE]: "application/json",
+                }
+                const apiName = url.pathname.replace(/^\/magica\/api\//, "");
+                switch (apiName) {
+                    case "system/native/getDomainPath":
+                    case "gameUser/cacheClear": {
+                        body = `{"resultCode":"success"}`;
+                        break;
+                    }
+                    default: {
+                        let requiredObjects = url.searchParams.get("value")?.split(",");
+                        const selectedJPDump = this.params.selectedJPDump;
+                        if (selectedJPDump === parameters.defaultJPDump) {
+                            statusCode = 400;
+                        } else {
+                            // FIXME get rid of frequent re-init
+                            body = {};
+                            const myZippedAssets = await zippedAssets.initForJPUserdataDump(selectedJPDump);
+                            let filepath = path.join(".", "jp_userdata_dumps", selectedJPDump);
+                            if (requiredObjects != null && fs.existsSync(filepath) && fs.statSync(filepath).isFile()) {
+                                for (let objKey of requiredObjects) {
+                                    let pathInZip = ["connect", objKey + ".json"].join("/");
+                                    let extracted = await myZippedAssets.readFileAsync(pathInZip);
+                                    if (extracted != null) body[objKey] = JSON.parse(extracted.toString('utf-8'));
+                                }
+                                this.fixCurrentTime(body);
+                                body = JSON.stringify(body);
+                            } else {
+                                statusCode = 400;
+                            }
+                        }
+                    }
+                }
+            } else { // JP Assets
+                const MagiRecoJPAssetPath = path.join(".", "static_staging_jp");
+                let filepath = path.join(MagiRecoJPAssetPath, url.pathname);
+                if (fs.existsSync(filepath) && fs.statSync(filepath).isFile()) {
+                    body = fs.readFileSync(filepath);
+
+                    //enable browser debug
+                    if (url.pathname === '/magica/js/system/replacement.js') {
+                        body = Buffer.from(body.toString('utf-8').replace(/window\.isDebug\s*=\s*false;/,
+                            "window.isDebug=window.showBackdoor=!0;"
+                        ), 'utf-8');
+                    }
+
+                    if (!filepath.endsWith(".gz")) body = zlib.gzipSync(body, { level: 1 });
+                    respHeaders = {
+                        [http2.constants.HTTP2_HEADER_CONTENT_TYPE]:
+                            [getMime(filepath.replace(/\.gz$/, ""))],
+                        [http2.constants.HTTP2_HEADER_CONTENT_ENCODING]:
+                            ["gzip"],
+                    };
+                } else {
+                    if (url.pathname === "/magica/resource/image_web/debug/selectedBranch.json") {
+                        body = `{"webBranch":"mybrowserdebug"}`;
+                    } else {
+                        statusCode = 404;
+                    }
+                }
+            }
+
+            return {
+                nextAction: "fakeResponse",
+                fakeResponse: {
+                    statusCode: statusCode,
+                    statusMessage: statusCode == 200
+                        ? "OK" : statusCode == 304
+                            ? "Not Modified" : statusCode == 404
+                                ? "Not Found" : "Bad Request",
+                    headers: respHeaders,
+                    body: body,
+                },
+                interceptResponse: false,
+            }
+        } else if (isNoahappsJPRegist) {
+            return {
+                nextAction: "fakeResponse",
+                fakeResponse: {
+                    statusCode: 200,
+                    statusMessage: "OK",
+                    headers: {
+                        [http2.constants.HTTP2_HEADER_CONTENT_TYPE]: getMime(".json"),
+                    },
+                    body: `{"status":"0"}`,
+                },
+                interceptResponse: false,
+            }
+        } else if (isMagiRecoJPtedata) {
+            return {
+                nextAction: "fakeResponse",
+                fakeResponse: {
+                    statusCode: 200,
+                    statusMessage: "OK",
+                    headers: {
+                        [http2.constants.HTTP2_HEADER_CONTENT_TYPE]: getMime(".json"),
+                    },
+                    body: `{"code":"0"}`,
+                },
+                interceptResponse: false,
+            }
+        } else if (isAppAdjust) {
+            return {
+                nextAction: "fakeResponse",
+                fakeResponse: {
+                    statusCode: 200,
+                    statusMessage: "OK",
+                    headers: {
+                        [http2.constants.HTTP2_HEADER_CONTENT_TYPE]: getMime(".json"),
+                    },
+                    body: `{"app_token":"111111qqqqqq","adid":"ffffffffffffffffffffffffffffffff","ask_in":5000,`
+                        + `"attribution":{"tracker_token":"fffffff","tracker_name":"Organic","network":"Organic"}}`,
+                },
+                interceptResponse: false,
+            }
+        }
+
 
         const isMagiRecoProd = url?.href.match(magirecoProdUrlRegEx) != null;
         const isMagiRecoPatch = url?.href.match(magirecoPatchUrlRegEx) != null;

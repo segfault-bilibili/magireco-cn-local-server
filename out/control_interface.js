@@ -24,6 +24,62 @@ const save_open_id_ticket_hook_1 = require("./hooks/save_open_id_ticket_hook");
 const favicon = require("./favicon");
 const zipped_assets_1 = require("./zipped_assets");
 class controlInterface {
+    static async launch() {
+        const params = await parameters.params.load();
+        if (params.checkModified())
+            await params.save();
+        let zippedassets = await zipped_assets_1.zippedAssets.init();
+        let localserver = new local_server_1.localServer(params);
+        let httpproxy = new http_proxy_1.httpProxy(params);
+        let crawler = await staticResCrawler.crawler.init(params, localserver, zippedassets);
+        let control_interface = new controlInterface(params, [localserver, httpproxy], crawler);
+        control_interface.openWebOnAndroid();
+    }
+    openWebOnAndroid() {
+        var _a;
+        try {
+            const addr = this.params.listenList.controlInterface;
+            const webUrl = `http://${addr.host}:${addr.port}/`;
+            let shellCmd;
+            const androidSpecificFileList = [
+                "/system/build.prop",
+                "/sdcard",
+                "/storage/emulated",
+            ];
+            let found = androidSpecificFileList.filter((path) => fs.existsSync(path));
+            if (found.length > 0) {
+                shellCmd = `am start -a \"android.intent.action.VIEW\" -d \"${webUrl}\"`;
+            }
+            else if ((_a = process.env["windir"]) === null || _a === void 0 ? void 0 : _a.match(/^[A-Z]\:\\WINDOWS/i)) {
+                shellCmd = `start ${webUrl}`;
+            }
+            if (shellCmd == null || !this.params.autoOpenWeb) {
+                console.log(`请手动在浏览器中打开Web控制界面\nOpen Web control interface in your browser manually\n  ${webUrl}`);
+                return;
+            }
+            ChildProcess.exec(shellCmd, (error, stdout, stderr) => {
+                try {
+                    if (error == null) {
+                        console.log(`    即将从浏览器打开Web控制界面...\n  ${webUrl}`);
+                        console.log(`  如果没成功自动打开浏览器，请手动复制上述网址粘贴到浏览器地址栏`);
+                        console.log(`  Please manually copy the URL above to the address bar of your browser, in case it did not pop up automatically`);
+                    }
+                    else {
+                        console.error("error", error);
+                        console.error("stdout", stdout);
+                        console.error("stderr", stderr);
+                    }
+                }
+                catch (e) {
+                    console.error(e);
+                }
+            });
+        }
+        catch (e) {
+            console.error(e);
+        }
+        console.log("（按CTRL+C即可中断程序运行）");
+    }
     constructor(params, serverList, crawler) {
         this.closing = false;
         this.isTogglingLoopbackListen = false;
@@ -606,62 +662,6 @@ class controlInterface {
         this.userdataDmp = userdataDmp;
         this.crawler = crawler;
     }
-    static async launch() {
-        const params = await parameters.params.load();
-        if (params.checkModified())
-            await params.save();
-        let zippedassets = await zipped_assets_1.zippedAssets.init();
-        let localserver = new local_server_1.localServer(params);
-        let httpproxy = new http_proxy_1.httpProxy(params);
-        let crawler = await staticResCrawler.crawler.init(params, localserver, zippedassets);
-        let control_interface = new controlInterface(params, [localserver, httpproxy], crawler);
-        control_interface.openWebOnAndroid();
-    }
-    openWebOnAndroid() {
-        var _a;
-        try {
-            const addr = this.params.listenList.controlInterface;
-            const webUrl = `http://${addr.host}:${addr.port}/`;
-            let shellCmd;
-            const androidSpecificFileList = [
-                "/system/build.prop",
-                "/sdcard",
-                "/storage/emulated",
-            ];
-            let found = androidSpecificFileList.filter((path) => fs.existsSync(path));
-            if (found.length > 0) {
-                shellCmd = `am start -a \"android.intent.action.VIEW\" -d \"${webUrl}\"`;
-            }
-            else if ((_a = process.env["windir"]) === null || _a === void 0 ? void 0 : _a.match(/^[A-Z]\:\\WINDOWS/i)) {
-                shellCmd = `start ${webUrl}`;
-            }
-            if (shellCmd == null || !this.params.autoOpenWeb) {
-                console.log(`请手动在浏览器中打开Web控制界面\nOpen Web control interface in your browser manually\n  ${webUrl}`);
-                return;
-            }
-            ChildProcess.exec(shellCmd, (error, stdout, stderr) => {
-                try {
-                    if (error == null) {
-                        console.log(`    即将从浏览器打开Web控制界面...\n  ${webUrl}`);
-                        console.log(`  如果没成功自动打开浏览器，请手动复制上述网址粘贴到浏览器地址栏`);
-                        console.log(`  Please manually copy the URL above to the address bar of your browser, in case it did not pop up automatically`);
-                    }
-                    else {
-                        console.error("error", error);
-                        console.error("stdout", stdout);
-                        console.error("stderr", stderr);
-                    }
-                }
-                catch (e) {
-                    console.error(e);
-                }
-            });
-        }
-        catch (e) {
-            console.error(e);
-        }
-        console.log("（按CTRL+C即可中断程序运行）");
-    }
     async closeAll() {
         let promises = this.serverList.map((server) => server.close());
         promises.push(new Promise((resolve) => {
@@ -998,6 +998,32 @@ class controlInterface {
             + `\n      <br><i>需要F12然后开启设备模拟才能模拟触控操作。</i>`
             + `\n      <br><i>手机端可能需要切换到桌面UA（电脑版）。</i>`
             + `\n    </div>`
+            + `\n  </fieldset>`
+            + `\n  <fieldset>`
+            + `\n  <legend>日服离线模式</legend>`
+            + `\n    <fieldset><legend>玩家配置（如看板背景等）</legend>`
+            + `\n      <div>`
+            + `\n        <ul>`
+            + `\n        <li>`
+            + `\n          选择形如[connect-XXXXXXXX-XXXXXXXX-玩家名.zip]的存档即可切换服务器为日服离线模式。`
+            + `\n        </li>`
+            + `\n        <li>`
+            + `\n          选择[国服离线模式]即可切换回国服离线模式。`
+            + `\n        </li>`
+            + `\n        </ul>`
+            + `\n      </div>`
+            + `\n    </fieldset>`
+            + `\n    <fieldset><legend>上传日服账号存档</legend>`
+            + `\n      <form enctype=\"multipart/form-data\" action=\"/api/upload_jp_dump\" method=\"post\">`
+            + `\n        <div>`
+            + `\n          <input type=\"file\" name=\"uploaded_jp_dump\" id=\"jp_dump_file\">`
+            + `\n        </div>`
+            + `\n        <div>`
+            + `\n          <input type=\"submit\" value=\"上传\" id=\"import_btn\" ${isDownloading || isImporting ? "disabled" : ""}>`
+            + `\n          <label for=\"import_btn\"><b>将会覆盖之前的存档！</b></label>`
+            + `\n        </div>`
+            + `\n      </form>`
+            + `\n    </fieldset>`
             + `\n  </fieldset>`
             + `\n  <fieldset>`
             + `\n  <legend>HTTP代理</legend>`

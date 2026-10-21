@@ -141,3 +141,26 @@ export const getRandomHex = (charCount: number): string => {
 export const getRandomGuid = (): string => {
     return [8, 4, 4, 4, 12].map((len) => getRandomHex(len)).join("-");
 }
+
+
+const defMime = "application/octet-stream";
+const mimeMap = new Map<string, string>();
+mimeMap.set(".css", "text/css");
+mimeMap.set(".gz", "application/gzip");
+mimeMap.set(".html", "text/html; charset=utf-8");
+mimeMap.set(".jpg", "image/jpeg");
+mimeMap.set(".js", "application/javascript; charset=utf-8");
+mimeMap.set(".json", "application/json; charset=utf-8");
+mimeMap.set(".ExportJson", "application/json; charset=utf-8");
+mimeMap.set(".mp4", "video/mp4");
+mimeMap.set(".plist", "application/x-plist");
+mimeMap.set(".png", "image/png");
+export const getMime = (fullpath: string): string => {
+    let ext = fullpath.match(/\.[^\.]*$/)?.[0];
+    if (ext == null) return defMime;
+    let mime = mimeMap.get(ext);
+    if (mime == null) {
+        mime = defMime;
+    }
+    return mime;
+}

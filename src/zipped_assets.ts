@@ -51,7 +51,9 @@ export class zippedAssets {
     private static readonly CDFHSigature = toInt("PK\x01\x02");
     private static readonly EOCDSigature = toInt("PK\x05\x06");
 
+    private isJPUserdataDump = false;
     private static readonly cnOffcialZippedAssetsDir = path.join(".", "static_zip_cn_official");
+    private static readonly jpUserdataDumpsDir = path.join(".", "jp_userdata_dumps");
     private readonly assetToZipMap: Map<zipEntryName, positionInZip>;
     private readonly fileHandleMap: Map<zipFileName, fsPromises.FileHandle>;
 
@@ -89,11 +91,42 @@ export class zippedAssets {
     private static readonly chunkSize = 1048576;
 
 
-    private constructor(assetToZipMap: Map<zipEntryName, positionInZip>, fileHandleMap: Map<zipFileName, fsPromises.FileHandle>) {
+    private constructor(assetToZipMap: Map<zipEntryName, positionInZip>,
+        fileHandleMap: Map<zipFileName, fsPromises.FileHandle>,
+        isJPUserdataDump = false
+    ) {
+        this.isJPUserdataDump = isJPUserdataDump;
+
         this.assetToZipMap = assetToZipMap;
         this.fileHandleMap = fileHandleMap;
 
-        console.log(`zippedAssets: initialized, registered ${this.assetToZipMap.size} entries stored in ${this.fileHandleMap.size} zip archives`);
+        console.log(`zippedAssets: initialized${isJPUserdataDump ? " for JPUserdataDump" : ""}, registered ${this.assetToZipMap.size} entries stored in ${this.fileHandleMap.size} zip archives`);
+    }
+
+    static async initForJPUserdataDump(zipFileName: string): Promise<zippedAssets> {
+        // 1. scan ./jp_userdata_dumps/ to register zip files
+        // 2. parse each zip file to create the map: requested path => zip
+
+        if (!zipFileName.endsWith(".zip")) throw new Error(`zipFileName=[${zipFileName}] does not have .zip suffix`);
+
+        console.log(`zippedAssets: initForJPUserdataDump zipFileName=[${zipFileName}]...`);
+
+        const assetToZipMap: Map<zipEntryName, positionInZip> = new Map();
+        const fileHandleMap: Map<zipFileName, fsPromises.FileHandle> = new Map();
+
+        const zipDir = this.jpUserdataDumpsDir;
+        let zipFiles: Array<string>;
+        try {                                                            // actually only one file participated
+            zipFiles = (await fsPromises.readdir(zipDir)).filter((fileName) => fileName.endsWith(zipFileName));
+        } catch (e) {
+            console.error(`zippedAssets: cannot open directory [${zipDir}]`, e);
+            await fsPromises.mkdir(zipDir);
+            zipFiles = [];
+        }
+
+        await this.registerZips(zipFiles, assetToZipMap, fileHandleMap, false, this.jpUserdataDumpsDir);
+
+        return new zippedAssets(assetToZipMap, fileHandleMap, true);
     }
 
     static async init(): Promise<zippedAssets> {
@@ -133,12 +166,9 @@ export class zippedAssets {
 
     private static async registerZips(
         zipFiles: Array<string>, assetToZipMap: Map<zipEntryName, positionInZip>, fileHandleMap: Map<zipFileName, fsPromises.FileHandle>,
-        checkConflict: boolean = false
+        checkConflict: boolean = false, zipDir = this.cnOffcialZippedAssetsDir
     ): Promise<void> {
-        const zipDir = this.cnOffcialZippedAssetsDir;
-
         const CACHED_MAP_IS_STALE = `cached map is stale`
-
         for (let zipFileName of zipFiles) {
             try {
                 let startTime = Date.now();
@@ -1004,7 +1034,7 @@ export class zippedAssets {
     ): Promise<Uint8Array | undefined> {
         let handle = this.fileHandleMap.get(zipFileName);
         if (handle == null) {
-            const zipFilePath = path.join(zippedAssets.cnOffcialZippedAssetsDir, zipFileName);
+            const zipFilePath = path.join(this.isJPUserdataDump ? zippedAssets.jpUserdataDumpsDir : zippedAssets.cnOffcialZippedAssetsDir, zipFileName);
             handle = await fsPromises.open(zipFilePath, "r");
             this.fileHandleMap.set(zipFileName, handle);
         }
