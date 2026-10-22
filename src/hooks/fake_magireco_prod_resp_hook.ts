@@ -15,7 +15,6 @@ import * as favicon from "../favicon";
 
 
 const magirecoJPProdUrlRegEx = /^(http|https):\/\/(android|dorothy)\.magi-reco\.com\/((|maintenance\/)magica\/.+|favicon\.ico)$/;
-const magirecoJPApiUrlRegEx = /^(http|https):\/\/(android|dorothy)\.magi-reco\.com\/magica\/api\/.+$/;
 const noahappsJPregistUrlRegEx = /^(http|https):\/\/api-pnote2\.noahapps\.jp(\/|.+\/regist)$/;
 const magirecoJPtedataUrlRegEx = /^(http|https):\/\/te-data\.magi-reco\.com\/(config|sync)(|\?.*)$/;
 const AppAdjustUrlRegEx = /^(http|https):\/\/app\.adjust\.(com|net\.in|world)\/(session|attribution)(|\?.*)$/;
@@ -150,7 +149,6 @@ export class fakeMagirecoProdRespHook implements hook {
         }
 
         const isMagiRecoJP = url?.href.match(magirecoJPProdUrlRegEx) != null;
-        const isMagiRecoJPApi = url?.href.match(magirecoJPApiUrlRegEx) != null;
         const isNoahappsJPRegist = url?.href.match(noahappsJPregistUrlRegEx) != null;
         const isMagiRecoJPtedata = url?.href.match(magirecoJPtedataUrlRegEx) != null;
         const isAppAdjust = url?.href.match(AppAdjustUrlRegEx)
@@ -161,7 +159,9 @@ export class fakeMagirecoProdRespHook implements hook {
             let body: any = zlib.gzipSync(new ArrayBuffer(0), { level: 0 });
             let etag: string | undefined;
 
-            if (isMagiRecoJPApi) {
+            const isApi = url.pathname.match(apiPathNameRegEx) != null;
+            let apiUnimplemented = false; //FIXME
+            if (isApi) {
                 mime = "application/json";
                 let apiName = url.pathname.replace(/^\/magica\/api\//, "");
                 if (apiName === "user/create") apiName = "page/TopPage";
