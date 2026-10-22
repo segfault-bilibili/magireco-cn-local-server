@@ -219,8 +219,19 @@ export class fakeMagirecoProdRespHook implements hook {
             } else { // JP Assets
                 const MagiRecoJPAssetPath = path.join(".", "static_staging_jp");
                 let filepath = path.join(MagiRecoJPAssetPath, url.pathname);
-                if (url.pathname.startsWith("/magica/resource/image_web/") && !isFile(filepath)) {
-                    filepath = filepath.replace("image_web", "image_native");
+                const fixList: Array<[string | RegExp, string]> = [
+                    [/^(\/magica\/resource\/)download\/asset\/master\/resource\/(.+)$/, "$1$2"],
+                    [/^(\/magica\/resource\/image_)web(\/.+)$/, "$1native$2"],
+                ];
+                if (!isFile(filepath)) for (let fix of fixList) {
+                    if (url.pathname.match(fix[0]) != null) {
+                        let replaced = path.join(MagiRecoJPAssetPath, url.pathname.replace(fix[0], fix[1]));
+                        if (isFile(replaced)) {
+                            filepath = replaced;
+                            break;
+                        }
+                    }
+
                 }
                 if (isFile(filepath)) {
                     body = fs.readFileSync(filepath);
@@ -230,6 +241,11 @@ export class fakeMagirecoProdRespHook implements hook {
                         body = Buffer.from(body.toString('utf-8').replace(/window\.isDebug\s*=\s*false;/,
                             "window.isDebug=window.showBackdoor=!0;"
                         ), 'utf-8');
+                    }
+
+                    // fix resource download error
+                    if (url.pathname.match(/^\/magica\/resource\/download\/asset\/master\/.+\.json\.gz$/)) {
+                        body = zlib.gunzipSync(body);
                     }
 
                     const etagDict = this.etagDict;
