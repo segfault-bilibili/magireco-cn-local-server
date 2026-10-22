@@ -231,7 +231,7 @@ export class fakeMagirecoProdRespHook implements hook {
                     return filepath;
                 }
                 let filepath = getFilePath();
-                if (filepath.match(/\.(hca|usm|png|vfxb|ExportJson)\.[a-z]{3}$/)) {
+                if (filepath.match(/\.(hca|usm|jpg|png|vfx[a-z]{1}|moc3|plist|ExportJson)\.[a-z]{3}$/)) {
                     let origFilePath = getFilePath(url.pathname.replace(/\.[a-z]{3}$/, ""));
                     if (isFile(origFilePath)) {
                         const blockSize = 1048576;
