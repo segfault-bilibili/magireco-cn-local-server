@@ -156,7 +156,7 @@ export class fakeMagirecoProdRespHook implements hook {
         if (isMagiRecoJP) {
             let statusCode = 200;
             let mime = "application/octet-stream";
-            let body: any = zlib.gzipSync(new ArrayBuffer(0), { level: 0 });
+            let body: any;
             let etag: string | undefined;
 
             const isApi = url.pathname.match(apiPathNameRegEx) != null;
@@ -218,22 +218,37 @@ export class fakeMagirecoProdRespHook implements hook {
                 }
             } else { // JP Assets
                 const MagiRecoJPAssetPath = path.join(".", "static_staging_jp");
-                let filepath = path.join(MagiRecoJPAssetPath, url.pathname);
-                const fixList: Array<[string | RegExp, string]> = [
-                    [/^(\/magica\/resource\/)download\/asset\/master\/resource\/(.+)$/, "$1$2"],
-                    [/^(\/magica\/resource\/image_)web(\/.+)$/, "$1native$2"],
-                ];
-                if (!isFile(filepath)) for (let fix of fixList) {
-                    if (url.pathname.match(fix[0]) != null) {
-                        let replaced = path.join(MagiRecoJPAssetPath, url.pathname.replace(fix[0], fix[1]));
-                        if (isFile(replaced)) {
-                            filepath = replaced;
-                            break;
+                const getFilePath = (pathname = url.pathname): string => {
+                    let filepath = path.join(MagiRecoJPAssetPath, url.pathname);
+                    if (isFile(filepath)) return filepath;
+                    const fixList: Array<[string | RegExp, string]> = [
+                        [/^(\/magica\/resource\/)download\/asset\/master\/resource\/(.+)$/, "$1$2"],
+                        [/^(\/magica\/resource\/image_)web(\/.+)$/, "$1native$2"],
+                    ];
+                    let replacedUrlPathname = fixList.reduce((prev, cur) => prev.replace(cur[0], cur[1]), pathname);
+                    let newfilepath = path.join(MagiRecoJPAssetPath, replacedUrlPathname);
+                    if (isFile(newfilepath)) return newfilepath;
+                    return filepath;
+                }
+                let filepath = getFilePath();
+                if (filepath.match(/\.(hca|usm|png|vfxb|ExportJson)\.[a-z]{3}$/)) {
+                    let origFilePath = getFilePath(url.pathname.replace(/\.[a-z]{3}$/, ""));
+                    if (isFile(origFilePath)) {
+                        const blockSize = 1048576;
+                        const suffix = new Uint8Array(Buffer.from(filepath.substring(filepath.length - 3)));
+                        for (let i in suffix) suffix[i] -= new Uint8Array(Buffer.from("a", "ascii"))[0];
+                        const start = (suffix[0] * 26 * 26 + suffix[1] * 26 + suffix[2]) * blockSize;
+                        const fd = fs.openSync(origFilePath, "r");
+                        const filesize = fs.statSync(origFilePath).size;
+                        const remaining = filesize - start;
+                        if (remaining > 0) {
+                            const buffersize = remaining > blockSize ? blockSize : remaining;
+                            fs.readSync(fd, body = new Uint8Array(buffersize), 0, buffersize, start);
+                            mime = "application/octet-stream";
                         }
                     }
-
                 }
-                if (isFile(filepath)) {
+                if (body == null && isFile(filepath)) {
                     body = fs.readFileSync(filepath);
 
                     //enable browser debug
@@ -272,7 +287,7 @@ export class fakeMagirecoProdRespHook implements hook {
                     if (url.pathname === "/magica/resource/image_web/debug/selectedBranch.json") {
                         body = `{"webBranch":"mybrowserdebug"}`;
                     } else {
-                        statusCode = 404;
+                        if (body == null) statusCode = 404;
                     }
                 }
             }
