@@ -236,8 +236,8 @@ export class fakeMagirecoProdRespHook implements hook {
                     if (isFile(origFilePath)) {
                         const blockSize = 1048576;
                         const suffix = new Uint8Array(Buffer.from(filepath.substring(filepath.length - 3)));
-                        for (let i in suffix) suffix[i] -= new Uint8Array(Buffer.from("a", "ascii"))[0];
-                        const start = (suffix[0] * 26 * 26 + suffix[1] * 26 + suffix[2]) * blockSize;
+                        const start = suffix.reduce((prev, cur) =>
+                            prev * 26 + (cur - new Uint8Array(Buffer.from("a", "ascii"))[0]), 0) * blockSize;
                         const fd = fs.openSync(origFilePath, "r");
                         const filesize = fs.statSync(origFilePath).size;
                         const remaining = filesize - start;
