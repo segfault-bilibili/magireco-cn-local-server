@@ -203,7 +203,7 @@ export class fakeMagirecoProdRespHook implements hook {
                             });
                         }
                         if (valueSet.size > 0) {
-                            console.log(`pageName=[${pageName}] valueSet.size=[${valueSet.size}]`, valueSet);
+                            console.log(`pageName=[${pageName}] still missing: valueSet.size=[${valueSet.size}]`, valueSet);
                         }
                         body = JSON.stringify(body);
                     } else {
