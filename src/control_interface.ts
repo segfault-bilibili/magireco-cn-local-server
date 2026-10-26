@@ -1597,11 +1597,11 @@ export class controlInterface {
         }
         return `<form action=\"/api/choose_jp_dump_entry\" method=\"post\">`
             + `<fieldset><legend>选择要使用的<b>日服</b>账号存档</legend>`
-            + `<div><ul><li>`
+            + `<div><ul><!-- <li>`
             + `  选择形如[connect-XXXXXXXX-XXXXXXXX-玩家名.zip]的存档，<b>并提交，</b>即可让服务器切换至中/日服本地离线双服务模式。`
             + `</li><li>`
             + `  <i>这种格式的个人账号存档在关服前，由美服玩家社区开发者${aHref("LiviaMedeiros", "https://github.com/LiviaMedeiros")}开发的connect.cirno.name从日服爬取数据保存生成。</i>`
-            + `</li><li>`
+            + `</li>--> <li>`
             + `  选择[${defaultJPDump}]，<b>并提交，</b>即可切回单国服本地离线模式。`
             + `</li></ul></div>`
             + `<div>`
