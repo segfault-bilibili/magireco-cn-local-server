@@ -526,6 +526,7 @@ export class fakeMagirecoProdRespHook implements hook {
                 case "userChara/visualize":
                 case "userLive2d/set":
                 case "search/friend_search/_search":
+                case "page/SupportSelect":
                 case "quest/start":
                 case "arena/start":
                 case "quest/native/get":
@@ -850,6 +851,11 @@ export class fakeMagirecoProdRespHook implements hook {
                 case "search/friend_search/_search":
                     {
                         respBody = this.fakeFriendSearch(apiName, reqBody);
+                        break;
+                    }
+                case "page/SupportSelect":
+                    {
+                        respBody = this.fakeSupportSelect(apiName, reqBody);
                         break;
                     }
                 case "page/CharaEnhancementTree":
@@ -1363,6 +1369,34 @@ export class fakeMagirecoProdRespHook implements hook {
             lastDump.httpResp.post.get(urlBase)?.get(JSON.stringify({ type: type }))?.brBody);
         if (respBodyObj == null) return this.fakeErrorResp("错误", `找不到好友推荐数据`);
         return Buffer.from(JSON.stringify(respBodyObj), 'utf-8');
+    }
+
+    private fakeSupportSelect(apiName: string, reqBody: string | Buffer | undefined): Buffer | undefined {
+        let respBody: Buffer | undefined;
+        if (reqBody != null) {
+            // NPC responses
+            let strNpcHelpIds = (JSON.parse(reqBody.toString('utf-8')).strNpcHelpIds as string).split(",");
+            let npcHelpList = strNpcHelpIds.map(id => Number(id))
+                .map((id) => {
+                    let item: Object | undefined;
+                    let npcSupportPath = path.join(".", "npcSupport", `${id}.json`);
+                    try {
+                        item = JSON.parse(
+                            fs.readFileSync(npcSupportPath, 'utf-8')
+                        ).npcHelpList[0];
+                    } catch (e) {
+                        console.log(`error, cannot read [${npcSupportPath}]`)
+                        item = undefined;
+                    }
+                    return item;
+                });
+
+            // FIXME handle strUserIds
+            // if you ignore this, it seems to no longer crash on clicking "back" button
+
+            let respBodyObj = { npcHelpList: npcHelpList };
+            return respBody = Buffer.from(JSON.stringify(respBodyObj), 'utf-8');
+        }
     }
 
     private parsePageNum(reqBody: string | Buffer | undefined, type: "page" | "charaId"): number | undefined {
