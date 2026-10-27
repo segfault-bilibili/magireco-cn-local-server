@@ -1385,23 +1385,21 @@ export class fakeMagirecoProdRespHook implements hook {
                 console.error(e);
                 return;
             }
-            let npcHelpList = strNpcHelpIds.map(id => Number(id))
-                .map((id) => {
-                    let item: Object | undefined;
-                    let npcSupportPath = path.join(".", "npcSupport", `${id}.json`);
-                    try {
-                        item = JSON.parse(
-                            fs.readFileSync(npcSupportPath, 'utf-8')
-                        ).npcHelpList[0];
-                    } catch (e) {
-                        console.log(`error, cannot read [${npcSupportPath}]`)
-                        item = undefined;
-                    }
-                    return item;
-                });
+            let npcHelpList = strNpcHelpIds.map((id) => {
+                let item: Object | undefined;
+                let npcSupportPath = path.join(".", "npcSupport", `${id}.json`);
+                try {
+                    item = JSON.parse(
+                        fs.readFileSync(npcSupportPath, 'utf-8')
+                    ).npcHelpList[0];
+                } catch (e) {
+                    console.log(`error, cannot read [${npcSupportPath}]`)
+                    item = undefined;
+                }
+                return item;
+            });
 
             // FIXME handle strUserIds
-            // if you ignore this, it seems to no longer crash on clicking "back" button
 
             let respBodyObj = { npcHelpList: npcHelpList };
             return respBody = Buffer.from(JSON.stringify(respBodyObj), 'utf-8');
