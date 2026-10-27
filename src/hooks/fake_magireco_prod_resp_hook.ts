@@ -1391,16 +1391,12 @@ export class fakeMagirecoProdRespHook implements hook {
     private fakeSupportSelect(apiName: string, reqBody: string | Buffer | undefined): Buffer | undefined {
         let respBody: Buffer | undefined;
         if (reqBody != null) {
-            // NPC responses
+            // NPC supports
             let parsedReqBody: any;
             let strNpcHelpIds: Array<string>;
-            try {
-                parsedReqBody = JSON.parse(reqBody.toString('utf-8'));
-                strNpcHelpIds = parsedReqBody.strNpcHelpIds.split(",");
-            } catch (e) {
-                console.error(e);
-                return;
-            }
+            parsedReqBody = JSON.parse(reqBody.toString('utf-8'));
+            strNpcHelpIds = parsedReqBody?.strNpcHelpIds?.split(",");
+            if (strNpcHelpIds == null) strNpcHelpIds = [];
             let npcHelpList = strNpcHelpIds.map((id) => {
                 let item: Object | undefined;
                 let npcSupportPath = path.join(".", "npcSupport", `${id}.json`);
@@ -1415,9 +1411,20 @@ export class fakeMagirecoProdRespHook implements hook {
                 return item;
             });
 
-            // FIXME handle strUserIds
+            // player supports
+            const lastDump = this.userdataDmp.lastDump;
+            if (lastDump == null) return this.fakeErrorResp("错误", "未加载个人账号数据");
+            if (apiName !== "page/SupportSelect") {
+                console.error(`fakePagedResult invalid apiName=[${apiName}]`);
+                return;
+            }
+            const urlBase = `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/SupportSelect`;
+            let fetchedResponse = userdataDump.unBrBase64(lastDump.httpResp.post.get(urlBase)?.values().next().value?.brBody);
+            let supportUserList = fetchedResponse?.supportUserList;
+            if (supportUserList == null) supportUserList = [];;
 
-            let respBodyObj = { npcHelpList: npcHelpList };
+            let respBodyObj = {currentTime: "", npcHelpList: npcHelpList, supportUserList: supportUserList };
+            this.fixCurrentTime(respBodyObj);
             return respBody = Buffer.from(JSON.stringify(respBodyObj), 'utf-8');
         }
     }
