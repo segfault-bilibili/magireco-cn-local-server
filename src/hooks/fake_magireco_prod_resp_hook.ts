@@ -1375,7 +1375,14 @@ export class fakeMagirecoProdRespHook implements hook {
         let respBody: Buffer | undefined;
         if (reqBody != null) {
             // NPC responses
-            let strNpcHelpIds = (JSON.parse(reqBody.toString('utf-8')).strNpcHelpIds as string).split(",");
+            let parsedReqBody = JSON.parse(reqBody.toString('utf-8'));
+            let strNpcHelpIds: Array<string>;
+            try {
+                strNpcHelpIds = parsedReqBody.strNpcHelpIds.split(",");
+            } catch (e) {
+                console.error(e);
+                return;
+            }
             let npcHelpList = strNpcHelpIds.map(id => Number(id))
                 .map((id) => {
                     let item: Object | undefined;
