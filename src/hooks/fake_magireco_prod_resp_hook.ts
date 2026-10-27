@@ -190,7 +190,7 @@ export class fakeMagirecoProdRespHook implements hook {
                             }
                         });
                         if (valueSet.size > 0) {
-                            const pageDirs = fs.readdirSync(JPDumpDir).filter(item => isDir(item));
+                            const pageDirs = fs.readdirSync(JPDumpDir).filter(item => isDir(path.join(JPDumpDir, item)));
                             valueSet.forEach(missingValue => {
                                 for (let item of pageDirs) {
                                     if (item === pageName) continue;
