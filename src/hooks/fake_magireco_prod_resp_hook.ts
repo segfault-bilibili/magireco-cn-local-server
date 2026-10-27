@@ -227,6 +227,7 @@ export class fakeMagirecoProdRespHook implements hook {
                     if (isFile(filepath)) return filepath;
                     const fixList: Array<[string | RegExp, string]> = [
                         [/^(\/magica\/resource\/)download\/asset\/master\/resource\/(.+)$/, "$1$2"],
+                        [/^(\/magica\/resource\/)image_web\/thumbnail(\/.+)\.png$/, "$1scenario/img$2.jpg"], //gallery in story archive
                         [/^(\/magica\/resource\/image_)web(\/.+)$/, "$1native$2"],
                     ];
                     let replacedUrlPathname = fixList.reduce((prev, cur) => prev.replace(cur[0], cur[1]), pathname);
