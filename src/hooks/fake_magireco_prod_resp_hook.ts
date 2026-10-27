@@ -11,10 +11,12 @@ import * as staticResCrawler from "../static_res_crawler";
 import * as userdataDump from "../userdata_dump";
 import { bsgamesdkPwdAuth } from "../bsgamesdk-pwd-authenticate";
 import { missingData } from "./etc/missing_data";
+import { _friend_search_json } from "./etc/_friend_search_shrunk_json";
 import * as favicon from "../favicon";
 
 
 const magirecoJPProdUrlRegEx = /^(http|https):\/\/(android|dorothy)\.magi-reco\.com\/((|maintenance\/)magica\/.+|favicon\.ico)$/;
+const magirecoJPFriendSearchRegEx = /^(http|https):\/\/(android|dorothy)\.magi-reco\.com\/search\/friend_search\/_search$/;
 const noahappsJPregistUrlRegEx = /^(http|https):\/\/api-pnote2\.noahapps\.jp(\/|.+\/regist)$/;
 const magirecoJPtedataUrlRegEx = /^(http|https):\/\/te-data\.magi-reco\.com\/(config|sync)(|\?.*)$/;
 const AppAdjustUrlRegEx = /^(http|https):\/\/app\.adjust\.(com|net\.in|world)\/(session|attribution)(|\?.*)$/;
@@ -149,6 +151,7 @@ export class fakeMagirecoProdRespHook implements hook {
         }
 
         const isMagiRecoJP = url?.href.match(magirecoJPProdUrlRegEx) != null;
+        const isMagiRecoJPFriendSearch = url?.href.match(magirecoJPFriendSearchRegEx) != null;
         const isNoahappsJPRegist = url?.href.match(noahappsJPregistUrlRegEx) != null;
         const isMagiRecoJPtedata = url?.href.match(magirecoJPtedataUrlRegEx) != null;
         const isAppAdjust = url?.href.match(AppAdjustUrlRegEx)
@@ -312,6 +315,19 @@ export class fakeMagirecoProdRespHook implements hook {
                                 ? "Not Found" : "Bad Request",
                     headers: respHeaders,
                     body: body,
+                },
+                interceptResponse: false,
+            }
+        } else if (isMagiRecoJPFriendSearch) {
+            return {
+                nextAction: "fakeResponse",
+                fakeResponse: {
+                    statusCode: 200,
+                    statusMessage: "OK",
+                    headers: {
+                        [http2.constants.HTTP2_HEADER_CONTENT_TYPE]: getMime(".json"),
+                    },
+                    body: _friend_search_json,
                 },
                 interceptResponse: false,
             }
