@@ -6,11 +6,11 @@ const http2 = require("http2");
 const parameters = require("./parameters");
 exports.app_key_Android = "add83765a53c4664944eabc18298731b";
 class bsgamesdkPwdAuth {
-    get IDs() { return this.params.bsgamesdkIDs; }
     constructor(params, localServer) {
         this.params = params;
         this.localServer = localServer;
     }
+    get IDs() { return this.params.bsgamesdkIDs; }
     async login(username, password) {
         if (this.params.mode === parameters.mode.LOCAL_OFFLINE)
             throw new Error("cannot do bilibili login in local offline mode");

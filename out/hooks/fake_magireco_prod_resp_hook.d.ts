@@ -1,3 +1,6 @@
+/// <reference types="node" />
+/// <reference types="node" />
+/// <reference types="node" />
 import * as http from "http";
 import * as http2 from "http2";
 import { fakeResponse, hook, passOnRequest, passOnRequestBody } from "../local_server";
@@ -5,25 +8,13 @@ import * as parameters from "../parameters";
 import * as staticResCrawler from "../static_res_crawler";
 import * as userdataDump from "../userdata_dump";
 export declare class fakeMagirecoProdRespHook implements hook {
+    private readonly cnNpcSupportMap;
+    private readonly cnQuestsMap;
+    private readonly cnFakeQuestResultsMap;
     private readonly params;
     private readonly crawler;
     private readonly userdataDmp;
-    private readonly magirecoProdUrlRegEx;
-    private readonly magicaMaintenanceConfigRegEx;
-    private readonly magicaMaintenanceViewJsonRegEx;
-    private readonly magirecoPatchUrlRegEx;
-    private readonly apiPathNameRegEx;
-    private readonly slashGuidEndRegEx;
-    private readonly browserDebugUrlRegEx;
-    private readonly bsgameSdkLoginRegEx;
-    private readonly bsgameSdkCipherRegEx;
-    private readonly bsgameSdkOtpSendRegEx;
-    private readonly bilibiliAgreementConfigRegEx;
-    private readonly bilibiliGameAgreementRegEx;
-    private readonly bilibiliGameRealnameAuthRegEx;
-    private readonly touristLoginRegEx;
-    private readonly touristBindTelPwdRegEx;
-    private readonly part2Section3RegEx;
+    private readonly questStartMap;
     private readonly arenaSimulateMap;
     get stringifiedOverrideDB(): string;
     private missingData?;
@@ -31,6 +22,7 @@ export declare class fakeMagirecoProdRespHook implements hook {
     getOverrideValue(key: string): any;
     isOverriden(key: string): boolean;
     setOverrideValue(key: string, val: string | number | Map<number, Map<string, string | number>> | undefined, reset?: boolean): void;
+    private readonly etagDict;
     constructor(params: parameters.params, crawler: staticResCrawler.crawler, dmp: userdataDump.userdataDmp);
     matchRequest(method?: string, url?: URL, httpVersion?: string, headers?: http.IncomingHttpHeaders | http2.IncomingHttpHeaders): Promise<fakeResponse | passOnRequest>;
     onMatchedRequest(method?: string, url?: URL, httpVersion?: string, headers?: http.IncomingHttpHeaders | http2.IncomingHttpHeaders, reqBody?: string | Buffer): fakeResponse | passOnRequestBody;
@@ -41,13 +33,14 @@ export declare class fakeMagirecoProdRespHook implements hook {
     private fakeBsgamesdkLoginResp;
     private fakeSystemLogin;
     private fakeEmptyResp;
-    private getDateTimeString;
+    private get currentTime();
     private fixCurrentTime;
     private fakeMyPage;
     private modifyGameUser;
     private getModifiedGameChara;
     private modifyGameChara;
     private fakeFriendSearch;
+    private fakeSupportSelect;
     private parsePageNum;
     private fakePagedResult;
     private fakeGuidResult;

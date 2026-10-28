@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.controlInterface = void 0;
 const stream = require("stream");
 const fs = require("fs");
+const path = require("path");
 const net = require("net");
 const http = require("http");
 const process = require("process");
@@ -23,66 +24,14 @@ const save_access_key_hook_1 = require("./hooks/save_access_key_hook");
 const save_open_id_ticket_hook_1 = require("./hooks/save_open_id_ticket_hook");
 const favicon = require("./favicon");
 const zipped_assets_1 = require("./zipped_assets");
+const util_2 = require("./util");
+const aHref = (text, url, newTab = true, id) => `<a target=\"${newTab ? "_blank" : "_self"}\" href=${url}${id != null ? ` id=\"${id}\"` : ""}>${text}</a>`;
+const defaultJPDump = parameters.defaultJPDump;
 class controlInterface {
-    static async launch() {
-        const params = await parameters.params.load();
-        if (params.checkModified())
-            await params.save();
-        let zippedassets = await zipped_assets_1.zippedAssets.init();
-        let localserver = new local_server_1.localServer(params);
-        let httpproxy = new http_proxy_1.httpProxy(params);
-        let crawler = await staticResCrawler.crawler.init(params, localserver, zippedassets);
-        let control_interface = new controlInterface(params, [localserver, httpproxy], crawler);
-        control_interface.openWebOnAndroid();
-    }
-    openWebOnAndroid() {
-        var _a;
-        try {
-            const addr = this.params.listenList.controlInterface;
-            const webUrl = `http://${addr.host}:${addr.port}/`;
-            let shellCmd;
-            const androidSpecificFileList = [
-                "/system/build.prop",
-                "/sdcard",
-                "/storage/emulated",
-            ];
-            let found = androidSpecificFileList.filter((path) => fs.existsSync(path));
-            if (found.length > 0) {
-                shellCmd = `am start -a \"android.intent.action.VIEW\" -d \"${webUrl}\"`;
-            }
-            else if ((_a = process.env["windir"]) === null || _a === void 0 ? void 0 : _a.match(/^[A-Z]\:\\WINDOWS/i)) {
-                shellCmd = `start ${webUrl}`;
-            }
-            if (shellCmd == null || !this.params.autoOpenWeb) {
-                console.log(`请手动在浏览器中打开Web控制界面\nOpen Web control interface in your browser manually\n  ${webUrl}`);
-                return;
-            }
-            ChildProcess.exec(shellCmd, (error, stdout, stderr) => {
-                try {
-                    if (error == null) {
-                        console.log(`    即将从浏览器打开Web控制界面...\n  ${webUrl}`);
-                        console.log(`  如果没成功自动打开浏览器，请手动复制上述网址粘贴到浏览器地址栏`);
-                        console.log(`  Please manually copy the URL above to the address bar of your browser, in case it did not pop up automatically`);
-                    }
-                    else {
-                        console.error("error", error);
-                        console.error("stdout", stdout);
-                        console.error("stderr", stderr);
-                    }
-                }
-                catch (e) {
-                    console.error(e);
-                }
-            });
-        }
-        catch (e) {
-            console.error(e);
-        }
-        console.log("（按CTRL+C即可中断程序运行）");
-    }
     constructor(params, serverList, crawler) {
         this.closing = false;
         this.isTogglingLoopbackListen = false;
+        this.JPDumpDir = path.join(".", "user_page_jsons");
         const httpPxy = serverList.find((s) => s instanceof http_proxy_1.httpProxy);
         const localsvr = serverList.find((s) => s instanceof local_server_1.localServer);
         const bsgamesdkPwdAuth = new bsgamesdkPwdAuthenticate.bsgamesdkPwdAuth(params, localsvr);
@@ -254,7 +203,26 @@ class controlInterface {
                             this.sendResultAsync(res, 500, e instanceof Error ? e.message : `${apiName} error`);
                         }
                         return;
-                    case "upload_dump":
+                    case "choose_jp_dump_entry":
+                        try {
+                            let postParams = await this.getParsedPostData(req);
+                            let selectedJPDump = postParams.get("selectedJPDump");
+                            if (selectedJPDump == null)
+                                throw new Error(`selectedJPDump == null`);
+                            let resultText = "set to ";
+                            if (!(0, util_2.isDir)(path.join(this.JPDumpDir, selectedJPDump))) {
+                                selectedJPDump = defaultJPDump;
+                            } // otherwise just use the POSTed selectedJPDump value
+                            resultText += `"${selectedJPDump}"`;
+                            this.params.save({ key: "selectedJPDump", val: selectedJPDump });
+                            this.sendResultAsync(res, 200, resultText);
+                        }
+                        catch (e) {
+                            console.error(`${apiName} error`, e);
+                            this.sendResultAsync(res, 500, e instanceof Error ? e.message : `${apiName} error`);
+                        }
+                        return;
+                    case "upload_cn_dump":
                         try {
                             let postData = await this.getPostData(req);
                             const isDownloading = this.userdataDmp.isDownloading;
@@ -272,11 +240,11 @@ class controlInterface {
                             else {
                                 if (typeof postData === 'string')
                                     throw new Error("postData is string");
-                                let uploaded_dump = postData.find((item) => item.name === "uploaded_dump");
-                                if (!((_d = uploaded_dump === null || uploaded_dump === void 0 ? void 0 : uploaded_dump.filename) === null || _d === void 0 ? void 0 : _d.match(/\.json$/i)))
+                                let uploaded_cn_dump = postData.find((item) => item.name === "uploaded_cn_dump");
+                                if (!((_d = uploaded_cn_dump === null || uploaded_cn_dump === void 0 ? void 0 : uploaded_cn_dump.filename) === null || _d === void 0 ? void 0 : _d.match(/\.json$/i)))
                                     throw new Error("filename not ended with .json");
-                                this.sendResultAsync(res, 200, "processing new dump"); // send request before importing
-                                this.userdataDmp.importDumpAsync(uploaded_dump.data)
+                                this.sendResultAsync(res, 200, "processing new cn dump"); // send request before importing
+                                this.userdataDmp.importCNDumpAsync(uploaded_cn_dump.data)
                                     .catch((e) => console.error(`${apiName} error`, e)); // prevent crash
                             }
                         }
@@ -662,6 +630,62 @@ class controlInterface {
         this.userdataDmp = userdataDmp;
         this.crawler = crawler;
     }
+    static async launch() {
+        const params = await parameters.params.load();
+        if (params.checkModified())
+            await params.save();
+        let zippedassets = await zipped_assets_1.zippedAssets.init();
+        let localserver = new local_server_1.localServer(params);
+        let httpproxy = new http_proxy_1.httpProxy(params);
+        let crawler = await staticResCrawler.crawler.init(params, localserver, zippedassets);
+        let control_interface = new controlInterface(params, [localserver, httpproxy], crawler);
+        control_interface.openWebOnAndroid();
+    }
+    openWebOnAndroid() {
+        var _a;
+        try {
+            const addr = this.params.listenList.controlInterface;
+            const webUrl = `http://${addr.host}:${addr.port}/`;
+            let shellCmd;
+            const androidSpecificFileList = [
+                "/system/build.prop",
+                "/sdcard",
+                "/storage/emulated",
+            ];
+            let found = androidSpecificFileList.filter((path) => fs.existsSync(path));
+            if (found.length > 0) {
+                shellCmd = `am start -a \"android.intent.action.VIEW\" -d \"${webUrl}\"`;
+            }
+            else if ((_a = process.env["windir"]) === null || _a === void 0 ? void 0 : _a.match(/^[A-Z]\:\\WINDOWS/i)) {
+                shellCmd = `start ${webUrl}`;
+            }
+            if (shellCmd == null || !this.params.autoOpenWeb) {
+                console.log(`请手动在浏览器中打开Web控制界面\nOpen Web control interface in your browser manually\n  ${webUrl}`);
+                return;
+            }
+            ChildProcess.exec(shellCmd, (error, stdout, stderr) => {
+                try {
+                    if (error == null) {
+                        console.log(`    即将从浏览器打开Web控制界面...\n  ${webUrl}`);
+                        console.log(`  如果没成功自动打开浏览器，请手动复制上述网址粘贴到浏览器地址栏`);
+                        console.log(`  Please manually copy the URL above to the address bar of your browser, in case it did not pop up automatically`);
+                    }
+                    else {
+                        console.error("error", error);
+                        console.error("stdout", stdout);
+                        console.error("stderr", stderr);
+                    }
+                }
+                catch (e) {
+                    console.error(e);
+                }
+            });
+        }
+        catch (e) {
+            console.error(e);
+        }
+        console.log("（按CTRL+C即可中断程序运行）");
+    }
     async closeAll() {
         let promises = this.serverList.map((server) => server.close());
         promises.push(new Promise((resolve) => {
@@ -792,8 +816,9 @@ class controlInterface {
         const nodeJsUrl = new URL("https://nodejs.org/zh-cn/download/current/");
         const npmRepoUrl = new URL("https://www.npmjs.com/package/magireco-cn-local-server");
         const mumuXURL = new URL("https://mumu.163.com/update/");
-        const patchedApkURL = new URL("https://share.weiyun.com/HhJbXRP7");
-        const aHref = (text, url, newTab = true, id) => `<a target=\"${newTab ? "_blank" : "_self"}\" href=${url}${id != null ? ` id=\"${id}\"` : ""}>${text}</a>`;
+        const oldPatchedCNApkURL = new URL("https://share.weiyun.com/HhJbXRP7");
+        const patchedCNApkURL = new URL("https://share.weiyun.com/zfwE8zUE");
+        const patchedJPApkURL = new URL("https://share.weiyun.com/php1M8JT");
         const isOnlineMode = this.params.mode === parameters.mode.ONLINE;
         const isLocalOfflineMode = this.params.mode === parameters.mode.LOCAL_OFFLINE;
         const autoOpenWeb = this.params.autoOpenWeb;
@@ -878,7 +903,7 @@ class controlInterface {
         const fsckResultStyle = status.fsckResultStyle;
         const isFscking = status.isFscking;
         const isImporting = status.isImporting;
-        const importStatus = status.importStatus;
+        const CNDmpImportStatus = status.CNDmpImportStatus;
         const crawlWebRes = this.params.crawlWebRes;
         const crawlAssets = this.params.crawlAssets;
         const isWebResCompleted = this.crawler.isWebResCompleted;
@@ -936,9 +961,9 @@ class controlInterface {
             + `\n          el.textContent = status.isWebResCompleted ? \"已完成下载\" : \"未完成下载\"; el.style = status.isWebResCompleted ? \"color: green\" : \"\";`
             + `\n          el = document.getElementById(\"crawl_assets_lbl\");`
             + `\n          el.textContent = status.isAssetsCompleted ? \"已完成下载\" : \"未完成下载\";el.style = status.isAssetsCompleted ? \"color: green\": \"\"`
-            + `\n          el = document.getElementById(\"importstatus\");`
-            + `\n          el.textContent = status.importStatus; el.style = status.importStatusStyle;`
-            + `\n          document.getElementById(\"import_btn\").disabled = status.isDownloading || status.isImporting;`
+            + `\n          el = document.getElementById(\"cndmpimportstatus\");`
+            + `\n          el.textContent = status.CNDmpImportStatus; el.style = status.CNDmpImportStatusStyle;`
+            + `\n          document.getElementById(\"cn_import_btn\").disabled = status.isDownloading || status.isImporting;`
             + `\n          el = document.getElementById(\"fsckresult\");`
             + `\n          el.textContent = status.fsckResult; el.style = status.fsckResultStyle;`
             + `\n          document.getElementById(\"fsck_btn\").disabled = status.isFscking || status.isCheckingIntegrity;`
@@ -994,37 +1019,36 @@ class controlInterface {
             + `\n  <fieldset><legend>浏览器调试</legend>`
             + `\n    <div>`
             + `\n      通过下面这个链接即可通过浏览器登录游戏，便于调试。`
-            + `\n      <br>${aHref("index.html", "https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/index.html")}`
+            + `\n      <br>${aHref("index.html（日服）", "https://android.magi-reco.com/magica/index.html")}`
+            + `\n      <br>${aHref("index.html（国服）", "https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/index.html")}`
             + `\n      <br><i>需要F12然后开启设备模拟才能模拟触控操作。</i>`
             + `\n      <br><i>手机端可能需要切换到桌面UA（电脑版）。</i>`
             + `\n    </div>`
             + `\n  </fieldset>`
-            + `\n  <fieldset>`
-            + `\n  <legend>日服离线模式</legend>`
-            + `\n    <fieldset><legend>玩家配置（如看板背景等）</legend>`
+            + `\n  <hr>`
+            + `\n  <h2>上传个人账号数据</h2>`
+            + `\n${this.JPDumpListHtml}\n`
+            + `\n  <fieldset id="fieldset_upload_cn_dump">`
+            + `\n  <legend>导入之前另存的<b>国服/B站服</b>个人账号数据</legend>`
+            + `\n    <form enctype=\"multipart/form-data\" action=\"/api/upload_cn_dump\" method=\"post\">`
             + `\n      <div>`
-            + `\n        <ul>`
-            + `\n        <li>`
-            + `\n          选择形如[connect-XXXXXXXX-XXXXXXXX-玩家名.zip]的存档即可切换服务器为日服离线模式。`
-            + `\n        </li>`
-            + `\n        <li>`
-            + `\n          选择[国服离线模式]即可切换回国服离线模式。`
-            + `\n        </li>`
-            + `\n        </ul>`
+            + `\n        <input type=\"file\" name=\"uploaded_cn_dump\" id=\"dump_file\">`
             + `\n      </div>`
-            + `\n    </fieldset>`
-            + `\n    <fieldset><legend>上传日服账号存档</legend>`
-            + `\n      <form enctype=\"multipart/form-data\" action=\"/api/upload_jp_dump\" method=\"post\">`
-            + `\n        <div>`
-            + `\n          <input type=\"file\" name=\"uploaded_jp_dump\" id=\"jp_dump_file\">`
-            + `\n        </div>`
-            + `\n        <div>`
-            + `\n          <input type=\"submit\" value=\"上传\" id=\"import_btn\" ${isDownloading || isImporting ? "disabled" : ""}>`
-            + `\n          <label for=\"import_btn\"><b>将会覆盖之前的存档！</b></label>`
-            + `\n        </div>`
-            + `\n      </form>`
+            + `\n      <div>`
+            + `\n        <input type=\"submit\" value=\"上传并导入\" id=\"cn_import_btn\" ${isDownloading || isImporting ? "disabled" : ""}>`
+            + `\n        <label for=\"cn_import_btn\"><b>上传并导入后，将会覆盖当前的数据！</b></label>`
+            + `\n      </div>`
+            + `\n    </form>`
+            + `\n    <fieldset>`
+            + `\n    <legend>导入进度</legend>`
+            + `\n    <div>`
+            + `\n      <button id=\"refreshbtn7\" onclick=\"window.location.reload(true);\">刷新</button>`
+            + `\n      <label id=\"cndmpimportstatus\" style=\"${userdataDumpStatusStyle}\" for=\"refreshbtn7\">TO_BE_FILLED_BY_JAVASCRIPT</label>`
+            + `\n    </div>`
             + `\n    </fieldset>`
             + `\n  </fieldset>`
+            + `\n  <hr>`
+            + `\n  <h2>服务器配置与中间人CA证书</h2>`
             + `\n  <fieldset>`
             + `\n  <legend>HTTP代理</legend>`
             + `\n  <fieldset><legend>HTTP代理信息</legend>`
@@ -1136,19 +1160,19 @@ class controlInterface {
             + `\n  ${aHref("（点击隐藏详细设置说明，即让游戏客户端连接到本地服务器而不是直连官服）", "javascript:swapVerboseDesc();", false)}`
             + `\n    <ul>`
             + `\n      <li>`
-            + `\n        ${aHref("离线补丁版", patchedApkURL.href)}游戏客户端不需要CA证书；`
-            + `\n        <br>但模拟器中，目前仅发现${aHref("Android12的MuMuX模拟器", mumuXURL.href)}可以运行；`
+            + `\n        <!-- ${aHref("离线补丁版", oldPatchedCNApkURL.href)} -->离线补丁版（${aHref("日服", patchedJPApkURL.href)}，${aHref("国服", patchedCNApkURL.href)}）游戏客户端不需要CA证书；`
+            + `\n        <!-- <br>但模拟器中，目前仅发现${aHref("Android12的MuMuX模拟器", mumuXURL.href)}可以运行；`
             + `\n        <br>真机理论上只支持Android9以上系统，实际上目前仅在Android12上测试过。`
-            + `\n        <br>而且它目前只能免去对CA证书的需求，仍然需要继续设置Clash。`
+            + `\n        <br>而且 --><br>它目前只能免去对CA证书的需求，仍然需要继续设置Clash。`
             + `\n      </li><li>`
             + `\n        电脑上应该用${aHref("最新版NodeJS", nodeJsUrl.href)}直接跑${aHref("这个本地服务器", npmRepoUrl.href)}<b>（不推荐在模拟器里通过Termux运行本地服务器）</b>、用Android模拟器跑${aHref("游戏客户端", officialURL.href)}和${aHref("Clash for Android", clashURL.href)}，`
             + `\n        <br>然后用<code>adb -e reverse tcp:${httpProxyPort} tcp:${httpProxyPort}</code>命令设置端口映射来让模拟器里的Clash能连到外边；`
-            + `\n        <br>CA证书也安装在（跑着游戏客户端和Clash的）Android模拟器里；或者改用不需要CA证书的${aHref("离线补丁版", patchedApkURL.href)}游戏客户端；`
+            + `\n        <br>CA证书也安装在（跑着游戏客户端和Clash的）Android模拟器里；或者改用不需要CA证书的${aHref("离线补丁版", patchedCNApkURL.href)}游戏客户端；`
             + `\n        <br>（<code>adb</code>的<code>-e</code>参数指定连接至模拟器而不是真机；<code>-d</code>则反之。若有多个设备/模拟器则可用<code>-t</code>指定<code>adb devices -l</code>列出的transport_id编号，比如<code>-t 2</code>）`
             + `\n      </li><li>`
             + `\n        或是在Android真机上用${aHref("Termux", termuxURL.href)}跑这个本地服务器，`
             + `\n        <br>然后用类似${aHref("光速", gsxnjURL.href)}之类虚拟机来跑${aHref("游戏客户端", officialURL.href)}，`
-            + `\n        <br>并在虚拟机内安装CA证书（若是${aHref("离线补丁版", patchedApkURL.href)}游戏客户端则不需要CA证书）。`
+            + `\n        <br>并在虚拟机内安装CA证书（若是${aHref("离线补丁版", patchedCNApkURL.href)}游戏客户端则不需要CA证书）。`
             + `\n        <br>Clash则直接跑在真机上，然后需要设置Clash分流来<b>只让跑着游戏客户端的虚拟机App走代理，不能让跑着本地服务器的Termux也走代理</b>，`
             + `\n        <br>也就是在Clash的[网络]=>[访问控制模式]中选择<b>[仅允许已选择的应用]</b>，然后在[访问控制应用包列表]中<b>只勾选虚拟机App</b>（虚拟机里跑着游戏客户端以及下文提到的autoBattle脚本）。`
             + `\n        <br><i>（否则很显然，本地服务器转发到游戏官服时又被Clash拦截送回本地服务器，这样网络通信就“死循环”了）</i>`
@@ -1157,7 +1181,7 @@ class controlInterface {
             + `\n      </li><li>`
             + `\n        必须在Clash设置中启用<b>[DNS劫持]</b>。`
             + `\n      </li><li>`
-            + `\n        <b>如果不是${aHref("离线补丁版", patchedApkURL.href)}游戏客户端，则必须安装CA证书，且必须安装为Android的系统证书</b>`
+            + `\n        <b>如果不是${aHref("离线补丁版", patchedCNApkURL.href)}游戏客户端，则必须安装CA证书，且必须安装为Android的系统证书</b>`
             + `\n        <br><i>（必须<b>Root权限</b>，所以对于获取Root权限不便的真机，需要在虚拟机内安装游戏客户端；而虚拟机内可能不支持运行Clash，故Clash需要跑在虚拟机外）。</i>`
             + `\n        <br>安装CA证书这一步可以用${aHref("autoBattle脚本", autoBattleURL.href)}（安装后请先下拉在线更新到最新版）选择运行[安装CA证书]这个脚本自动完成。`
             + `\n      </li><li>`
@@ -1362,22 +1386,9 @@ class controlInterface {
             + `\n  </fieldset>`
             + `\n  <fieldset>`
             + `\n  <legend>导入之前另存的个人账号数据</legend>`
-            + `\n    <form enctype=\"multipart/form-data\" action=\"/api/upload_dump\" method=\"post\">`
-            + `\n      <div>`
-            + `\n        <input type=\"file\" name=\"uploaded_dump\" id=\"dump_file\">`
-            + `\n      </div>`
-            + `\n      <div>`
-            + `\n        <input type=\"submit\" value=\"上传并导入\" id=\"import_btn\" ${isDownloading || isImporting ? "disabled" : ""}>`
-            + `\n        <label for=\"import_btn\"><b>上传并导入后，将会覆盖当前的数据！</b></label>`
-            + `\n      </div>`
-            + `\n    </form>`
-            + `\n    <fieldset>`
-            + `\n    <legend>导入进度</legend>`
             + `\n    <div>`
-            + `\n      <button id=\"refreshbtn7\" onclick=\"window.location.reload(true);\">刷新</button>`
-            + `\n      <label id=\"importstatus\" style=\"${userdataDumpStatusStyle}\" for=\"refreshbtn7\">TO_BE_FILLED_BY_JAVASCRIPT</label>`
+            + `\n      请参看${aHref("导入国服个人账号数据", "#fieldset_upload_cn_dump", false)}。`
             + `\n    </div>`
-            + `\n    </fieldset>`
             + `\n  </fieldset>`
             + `\n  <hr>`
             + `\n  <h2 id=\"crawlstaticdata\">爬取游戏静态资源文件</h2>`
@@ -1430,8 +1441,8 @@ class controlInterface {
             + `\n  <fieldset>`
             + `\n  <legend>清理</legend>`
             + `\n  <div>`
-            + `\n    <button id=\"refreshbtn7\" onclick=\"window.location.reload(true);\">刷新</button>`
-            + `\n    <label id=\"fsckresult\" style=\"${fsckResultStyle}\" for=\"refreshbtn7\">TO_BE_FILLED_BY_JAVASCRIPT</label>`
+            + `\n    <button id=\"refreshbtn9\" onclick=\"window.location.reload(true);\">刷新</button>`
+            + `\n    <label id=\"fsckresult\" style=\"${fsckResultStyle}\" for=\"refreshbtn9\">TO_BE_FILLED_BY_JAVASCRIPT</label>`
             + `\n  </div>`
             + `\n  <form action=\"/api/fsck\" method=\"post\">`
             + `\n    <div>`
@@ -1532,22 +1543,22 @@ class controlInterface {
         const isWebResCompleted = this.crawler.isWebResCompleted;
         const isAssetsCompleted = this.crawler.isAssetsCompleted;
         const isImporting = this.userdataDmp.isImporting;
-        let importStatus = "", importStatusStyle = "color: red";
+        let CNDmpImportStatus = "", CNDmpImportStatusStyle = "color: red";
         if (isImporting) {
-            importStatus = "正在导入...";
-            importStatusStyle = "color: blue";
+            CNDmpImportStatus = "正在导入...";
+            CNDmpImportStatusStyle = "color: blue";
         }
         else {
             const lastImportError = this.userdataDmp.lastImportError;
             if (lastImportError == null) {
-                importStatus = "已导入";
-                importStatusStyle = "color: green";
+                CNDmpImportStatus = "已导入";
+                CNDmpImportStatusStyle = "color: green";
             }
             else {
-                importStatus = "导入过程出错";
-                importStatusStyle = "color: red";
+                CNDmpImportStatus = "导入过程出错";
+                CNDmpImportStatusStyle = "color: red";
                 if (lastImportError instanceof Error)
-                    importStatus += ` [${lastImportError.message}]`;
+                    CNDmpImportStatus += ` [${lastImportError.message}]`;
             }
         }
         return {
@@ -1567,9 +1578,54 @@ class controlInterface {
             isWebResCompleted: isWebResCompleted,
             isAssetsCompleted: isAssetsCompleted,
             isImporting: isImporting,
-            importStatus: importStatus,
-            importStatusStyle: importStatusStyle,
+            CNDmpImportStatus: CNDmpImportStatus,
+            CNDmpImportStatusStyle: CNDmpImportStatusStyle,
         };
+    }
+    get JPDumpListHtml() {
+        const defaultJPDump = parameters.defaultJPDump;
+        const JPDmpList = [defaultJPDump];
+        const selectedJPDump = this.params.selectedJPDump;
+        let result = [];
+        try {
+            // ensure directory exists
+            const JPDumpDir = this.JPDumpDir;
+            if (!fs.existsSync(JPDumpDir))
+                fs.mkdirSync(JPDumpDir);
+            if (!fs.statSync(JPDumpDir).isDirectory()) {
+                throw new Error(`${JPDumpDir} is not a directory`);
+            }
+            // now we can readdir
+            result = fs.readdirSync(JPDumpDir).filter(item => (0, util_2.isDir)(path.join(JPDumpDir, item)));
+            let item;
+            while ((item = result.shift()) != null)
+                JPDmpList.push(item);
+        }
+        catch (e) {
+            console.error("JPDumpListHtml", e);
+            while (JPDmpList.pop())
+                ;
+            JPDmpList.push(defaultJPDump);
+            JPDmpList.push("|\\/\\/\\/❌目录读取错误❌\\/\\/\\/|");
+            console.error(e);
+        }
+        return `<form action=\"/api/choose_jp_dump_entry\" method=\"post\">`
+            + `<fieldset><legend>选择要使用的<b>日服</b>账号存档</legend>`
+            + `<div><ul><!-- <li>`
+            + `  选择形如[connect-XXXXXXXX-XXXXXXXX-玩家名.zip]的存档，<b>并提交，</b>即可让服务器切换至中/日服本地离线双服务模式。`
+            + `</li><li>`
+            + `  <i>这种格式的个人账号存档在关服前，由美服玩家社区开发者${aHref("LiviaMedeiros", "https://github.com/LiviaMedeiros")}开发的connect.cirno.name从日服爬取数据保存生成。</i>`
+            + `</li>--> <li>`
+            + `  选择[${defaultJPDump}]，<b>并提交，</b>即可切回单国服本地离线模式。`
+            + `</li></ul></div>`
+            + `<div>`
+            + `${JPDmpList.map((item, index) => `<input type="radio" id="JPDumpZipNo${index + 1}" name="selectedJPDump" value="${item}"`
+                + `${item === selectedJPDump ? " checked" : ""}/>`
+                + `<label for="JPDumpZipNo${index + 1}">${item}</label>`).join("<br>")}<br>`
+            + `</div>`
+            + `<button type="submit" name="choose" style="margin-right: 1em;">提交</button>`
+            + `</fieldset>`
+            + `</form>`;
     }
     get addrSelectHtml() {
         let addrList = [];

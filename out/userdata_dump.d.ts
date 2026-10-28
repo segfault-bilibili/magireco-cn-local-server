@@ -1,20 +1,21 @@
+/// <reference types="node" />
 import * as parameters from "./parameters";
 import { localServer } from "./local_server";
-export type magirecoIDs = {
+export declare type magirecoIDs = {
     device_id: string;
 };
-export type openIdTicket = {
+export declare type openIdTicket = {
     open_id: string;
     ticket: string;
     uname?: string;
     timestamp?: number;
 };
-export type dumpRespEntry = {
+export declare type dumpRespEntry = {
     ts?: number;
     body?: any;
     brBody: string;
 };
-export type dump = {
+export declare type dump = {
     uid: number;
     timestamp: number;
     isBr: boolean;
@@ -62,7 +63,7 @@ export declare class userdataDmp {
     getDumpAsync(): Promise<dump>;
     private getDumpPromise;
     loadLastDump(): void;
-    importDumpAsync(src: Buffer): Promise<void>;
+    importCNDumpAsync(src: Buffer): Promise<void>;
     private getImportDumpPromise;
     private static convertDumpToBrBase64;
     private testLogin;

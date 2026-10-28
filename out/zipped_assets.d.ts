@@ -1,11 +1,14 @@
-type zipEntryName = string;
-type subDirectory = "cn_official" | "cn_mod" | "cn_output";
+/// <reference types="node" />
+declare type zipEntryName = string;
+declare type subDirectory = "cn_official" | "cn_mod" | "cn_output";
 export declare class zippedAssets {
     private static readonly assetJsonNames;
     private static readonly FHSigature;
     private static readonly CDFHSigature;
     private static readonly EOCDSigature;
+    private isJPUserdataDump;
     private static readonly cnOffcialZippedAssetsDir;
+    private static readonly jpUserdataDumpsDir;
     private readonly assetToZipMap;
     private readonly fileHandleMap;
     private static readonly fileExtRegEx;
@@ -19,6 +22,7 @@ export declare class zippedAssets {
     static CNLegacyIsKnown404(pathInUrl: string): boolean;
     private static readonly chunkSize;
     private constructor();
+    static initForJPUserdataDump(zipFileName: string): Promise<zippedAssets>;
     static init(): Promise<zippedAssets>;
     private static registerZips;
     private static readonly mapVerMagic;

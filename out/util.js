@@ -1,7 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getRandomGuid = exports.getRandomHex = exports.decompress = exports.compress = exports.resolveToIP = exports.reviver = exports.replacer = void 0;
-const crypto_1 = require("crypto");
+exports.isFile = exports.isDir = exports.getMime = exports.md5 = exports.getRandomGuid = exports.getRandomHex = exports.decompress = exports.compress = exports.resolveToIP = exports.reviver = exports.replacer = void 0;
+const fs = require("fs");
+const crypto = require("crypto");
 const dns = require("dns");
 const zlib = require("zlib");
 // stringify ES6 map
@@ -143,10 +144,42 @@ const decompress = (data, encoding) => {
 };
 exports.decompress = decompress;
 const getRandomHex = (charCount) => {
-    return (0, crypto_1.randomBytes)(Math.trunc((charCount + 1) / 2)).toString('hex').substring(0, charCount);
+    return crypto.randomBytes(Math.trunc((charCount + 1) / 2)).toString('hex').substring(0, charCount);
 };
 exports.getRandomHex = getRandomHex;
 const getRandomGuid = () => {
     return [8, 4, 4, 4, 12].map((len) => (0, exports.getRandomHex)(len)).join("-");
 };
 exports.getRandomGuid = getRandomGuid;
+const md5 = (file) => {
+    return crypto.createHash('md5').update(file).digest().toString('hex');
+};
+exports.md5 = md5;
+const defMime = "application/octet-stream";
+const mimeMap = new Map();
+mimeMap.set(".css", "text/css");
+mimeMap.set(".gz", "application/gzip");
+mimeMap.set(".html", "text/html; charset=utf-8");
+mimeMap.set(".jpg", "image/jpeg");
+mimeMap.set(".js", "application/javascript; charset=utf-8");
+mimeMap.set(".json", "application/json; charset=utf-8");
+mimeMap.set(".ExportJson", "application/json; charset=utf-8");
+mimeMap.set(".mp4", "video/mp4");
+mimeMap.set(".plist", "application/x-plist");
+mimeMap.set(".png", "image/png");
+const getMime = (fullpath) => {
+    var _a;
+    let ext = (_a = fullpath.match(/\.[^\.]*$/)) === null || _a === void 0 ? void 0 : _a[0];
+    if (ext == null)
+        return defMime;
+    let mime = mimeMap.get(ext);
+    if (mime == null) {
+        mime = defMime;
+    }
+    return mime;
+};
+exports.getMime = getMime;
+const isDir = (dirpath) => fs.existsSync(dirpath) && fs.statSync(dirpath).isDirectory();
+exports.isDir = isDir;
+const isFile = (dirpath) => fs.existsSync(dirpath) && fs.statSync(dirpath).isFile();
+exports.isFile = isFile;

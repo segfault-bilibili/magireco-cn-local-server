@@ -10,6 +10,7 @@ export declare class controlInterface {
     readonly crawler: staticResCrawler.crawler;
     static launch(): Promise<void>;
     openWebOnAndroid(): void;
+    private readonly JPDumpDir;
     private constructor();
     private closeAll;
     shutdown(): Promise<void>;
@@ -21,6 +22,7 @@ export declare class controlInterface {
     private homepageHTML;
     private getGameUid;
     private getStatus;
+    private get JPDumpListHtml();
     private get addrSelectHtml();
     private sendResultAsync;
 }

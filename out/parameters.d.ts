@@ -1,11 +1,11 @@
 import * as certGenerator from "./cert_generator";
 import * as bsgamesdkPwdAuthenticate from "./bsgamesdk-pwd-authenticate";
 import * as userdataDump from "./userdata_dump";
-export type listenAddr = {
+export declare type listenAddr = {
     port: number;
     host: string;
 };
-export type listenList = Record<string, listenAddr> & {
+export declare type listenList = Record<string, listenAddr> & {
     controlInterface: listenAddr;
     httpProxy: listenAddr;
     localServer: listenAddr;
@@ -14,7 +14,8 @@ export declare enum mode {
     ONLINE = 1,
     LOCAL_OFFLINE = 2
 }
-export type overrides = {
+export declare const defaultJPDump = "\u56FD\u670D\u79BB\u7EBF\u6A21\u5F0F";
+export declare type overrides = {
     gameUser?: {
         bgItemId?: string;
         modifyChara?: [number, Record<string, string | number>];
@@ -44,6 +45,7 @@ export declare class params {
     static readonly overridesDBPath: string;
     saveOverrideDB(fileContent?: string): void;
     get mode(): mode;
+    get selectedJPDump(): string;
     get autoOpenWeb(): boolean;
     get injectMadokamiSE(): boolean;
     get listenList(): listenList;

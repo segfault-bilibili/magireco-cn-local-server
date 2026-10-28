@@ -1,7 +1,10 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.fakeMagirecoProdRespHook = void 0;
+const path = require("path");
+const fs = require("node:fs");
 const http2 = require("http2");
+const zlib = require("zlib");
 const crypto = require("crypto");
 const util_1 = require("../util");
 const parameters = require("../parameters");
@@ -9,73 +12,37 @@ const staticResCrawler = require("../static_res_crawler");
 const userdataDump = require("../userdata_dump");
 const bsgamesdk_pwd_authenticate_1 = require("../bsgamesdk-pwd-authenticate");
 const missing_data_1 = require("./etc/missing_data");
+const _friend_search_shrunk_json_1 = require("./etc/_friend_search_shrunk_json");
+const cnNpcSupportMap_1 = require("./etc/cnNpcSupportMap");
+const cnQuestsMap_1 = require("./etc/cnQuestsMap");
+const cnFakeQuestResultsMap_1 = require("./etc/cnFakeQuestResultsMap");
 const favicon = require("../favicon");
+const magirecoJPProdUrlRegEx = /^(http|https):\/\/(android|dorothy)\.magi-reco\.com\/((|maintenance\/)magica\/.+|favicon\.ico)$/;
+const magirecoJPFriendSearchRegEx = /^(http|https):\/\/(android|dorothy)\.magi-reco\.com\/search\/friend_search\/_search$/;
+const noahappsJPregistUrlRegEx = /^(http|https):\/\/api-pnote2\.noahapps\.jp(\/|.+\/regist)$/;
+const magirecoJPtedataUrlRegEx = /^(http|https):\/\/te-data\.magi-reco\.com\/(config|sync)(|\?.*)$/;
+const AppAdjustUrlRegEx = /^(http|https):\/\/app\.adjust\.(com|net\.in|world)\/(session|attribution)(|\?.*)$/;
+const magirecoProdUrlRegEx = /^(http|https):\/\/l\d+-prod-[0-9a-z\-]+-mfsn\d*\.bilibiligame\.net\/((|maintenance\/)magica\/.+|favicon\.ico)$/;
+const magicaMaintenanceConfigRegEx = /^\/maintenance\/magica\/config((|\?.*)$)/;
+const magicaMaintenanceViewJsonRegEx = /^\/maintenance\/magica\/view\/json((|\?.*)$)/;
+const magirecoPatchUrlRegEx = /^(http|https):\/\/line\d+-prod-patch-mfsn\d*\.bilibiligame\.net\/magica\/.+$/;
+const apiPathNameRegEx = /^\/magica\/api\/.+$/;
+const slashGuidEndRegEx = /\/[\da-f]{8}(-[\da-f]{4}){3}-[\da-f]{12}$/;
+const browserDebugUrlRegEx = /^(http|https):\/\/10\.24\.19\.50:9997\/(magica\/.+|favicon.ico)$/;
+const bsgameSdkLoginRegEx = /^(http|https):\/\/line\d+-sdk-center-login-sh\.biligame\.net\/api\/external\/(login|login\/otp|user\.token\.oauth\.login)\/v3((|\?.*)$)/;
+const bsgameSdkCipherRegEx = /^(http|https):\/\/line\d+-sdk-center-login-sh\.biligame\.net\/api\/external\/issue\/cipher\/v3((|\?.*)$)/;
+const bsgameSdkOtpSendRegEx = /^(http|https):\/\/line\d+-sdk-center-login-sh\.biligame\.net\/api\/external\/otp\/send\/v3((|\?.*)$)/;
+const bilibiliAgreementConfigRegEx = /^(http|https):\/\/line\d-sdk-app-api\.biligame\.net\/api\/agreement\/config((|\?.*)$)/;
+const bilibiliGameAgreementRegEx = /^(http|https):\/\/game\.bilibili\.com\/agreement\/(updatetips|userterms|privacy)\/.+$/;
+const touristLoginRegEx = /^(http|https):\/\/p\.biligame\.com\/api\/external\/tourist\.login\/v3((|\?.*)$)/;
+const touristBindTelPwdRegEx = /^(http|https):\/\/line\d+-sdk-center-login-sh\.biligame\.net\/api\/external\/tourist\/bind\/tel\.pwd\/v3((|\?.*)$)/;
+const bilibiliGameRealnameAuthRegEx = /^(http|https):\/\/game\.bilibili\.com\/sdk\/authentication?.+$/;
+const part2Section3RegEx = /^\/magica\/resource\/download\/asset\/master\/resource\/2207081501\/asset_section_10230(1|2|3)\.json$/;
 class fakeMagirecoProdRespHook {
-    get stringifiedOverrideDB() {
-        return JSON.stringify(this.params.overridesDB, util_1.replacer);
-    }
-    get overrides() {
-        const lastDump = this.userdataDmp.lastDump;
-        if (lastDump == null)
-            return;
-        const uid = lastDump.uid;
-        if (typeof uid !== 'number' || isNaN(uid))
-            return;
-        let overrides = this.params.overridesDB.get(uid);
-        if (overrides == null) {
-            overrides = {};
-            this.params.overridesDB.set(uid, overrides);
-        }
-        return overrides;
-    }
-    getOverrideValue(key) {
-        return key.split(".").reduce((prev, curr) => {
-            if (prev == null)
-                return;
-            if (!(curr in prev))
-                return;
-            return prev[curr];
-        }, this.overrides);
-    }
-    isOverriden(key) {
-        const keysPopped = key.split(".");
-        const lastKey = keysPopped.pop();
-        const obj = keysPopped.reduce((prev, curr) => {
-            if (prev == null)
-                return;
-            if (!(curr in prev))
-                return;
-            return prev[curr];
-        }, this.overrides);
-        if (obj == null)
-            return false; // avoid crash
-        if (lastKey == null) {
-            console.error(`isOverriden key=[${key}] lastKey == null`);
-            throw new Error(`lastKey == null`);
-        }
-        return lastKey in obj;
-    }
-    setOverrideValue(key, val, reset = false) {
-        console.log(`setOverrideValue ... key=[${key}] val`, val);
-        const keysPopped = key.split(".");
-        const lastKey = keysPopped.pop();
-        if (lastKey == null)
-            return;
-        const obj = keysPopped.reduce((prev, curr) => {
-            if (prev == null)
-                return;
-            if (prev[curr] == null)
-                prev[curr] = {};
-            return prev[curr];
-        }, this.overrides);
-        if (val == null && reset)
-            delete obj[lastKey];
-        else
-            obj[lastKey] = val;
-        console.log(`setOverrideValue done key=[${key}] val`, val);
-        this.params.saveOverrideDB();
-    }
     constructor(params, crawler, dmp) {
+        this.questStartMap = new Map();
+        this.arenaSimulateMap = new Map();
+        this.etagDict = new Map();
         this.pageKeys = {
             //登录页
             ["page/TopPage"]: `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/TopPage?value=`
@@ -385,23 +352,82 @@ class fakeMagirecoProdRespHook {
         this.params = params;
         this.crawler = crawler;
         this.userdataDmp = dmp;
-        this.magirecoProdUrlRegEx = /^(http|https):\/\/l\d+-prod-[0-9a-z\-]+-mfsn\d*\.bilibiligame\.net\/((|maintenance\/)magica\/.+|favicon\.ico)$/;
-        this.magicaMaintenanceConfigRegEx = /^\/maintenance\/magica\/config((|\?.*)$)/;
-        this.magicaMaintenanceViewJsonRegEx = /^\/maintenance\/magica\/view\/json((|\?.*)$)/;
-        this.magirecoPatchUrlRegEx = /^(http|https):\/\/line\d+-prod-patch-mfsn\d*\.bilibiligame\.net\/magica\/.+$/;
-        this.apiPathNameRegEx = /^\/magica\/api\/.+$/;
-        this.slashGuidEndRegEx = /\/[\da-f]{8}(-[\da-f]{4}){3}-[\da-f]{12}$/;
-        this.browserDebugUrlRegEx = /^(http|https):\/\/10\.24\.19\.50:9997\/(magica\/.+|favicon.ico)$/;
-        this.bsgameSdkLoginRegEx = /^(http|https):\/\/line\d+-sdk-center-login-sh\.biligame\.net\/api\/external\/(login|login\/otp|user\.token\.oauth\.login)\/v3((|\?.*)$)/;
-        this.bsgameSdkCipherRegEx = /^(http|https):\/\/line\d+-sdk-center-login-sh\.biligame\.net\/api\/external\/issue\/cipher\/v3((|\?.*)$)/;
-        this.bsgameSdkOtpSendRegEx = /^(http|https):\/\/line\d+-sdk-center-login-sh\.biligame\.net\/api\/external\/otp\/send\/v3((|\?.*)$)/;
-        this.bilibiliAgreementConfigRegEx = /^(http|https):\/\/line\d-sdk-app-api\.biligame\.net\/api\/agreement\/config((|\?.*)$)/;
-        this.bilibiliGameAgreementRegEx = /^(http|https):\/\/game\.bilibili\.com\/agreement\/(updatetips|userterms|privacy)\/.+$/;
-        this.touristLoginRegEx = /^(http|https):\/\/p\.biligame\.com\/api\/external\/tourist\.login\/v3((|\?.*)$)/;
-        this.touristBindTelPwdRegEx = /^(http|https):\/\/line\d+-sdk-center-login-sh\.biligame\.net\/api\/external\/tourist\/bind\/tel\.pwd\/v3((|\?.*)$)/;
-        this.bilibiliGameRealnameAuthRegEx = /^(http|https):\/\/game\.bilibili\.com\/sdk\/authentication?.+$/;
-        this.part2Section3RegEx = /^\/magica\/resource\/download\/asset\/master\/resource\/2207081501\/asset_section_10230(1|2|3)\.json$/;
-        this.arenaSimulateMap = new Map();
+        let buf = new Uint8Array(Buffer.from(cnNpcSupportMap_1.cnNpcSupportMapBase64, 'base64'));
+        console.log(`decompressing npc SupportSelect data...`);
+        let decompressed = zlib.brotliDecompressSync(buf).toString('utf-8'); //FIXME about 70mb decompressed, slow (750ms)
+        this.cnNpcSupportMap = JSON.parse(decompressed, util_1.reviver);
+        buf = new Uint8Array(Buffer.from(cnQuestsMap_1.cnQuestsMapBase64, 'base64'));
+        console.log(`decompressing cn quests data...`);
+        decompressed = zlib.brotliDecompressSync(buf).toString('utf-8'); //FIXME about 70mb decompressed, slow (750ms)
+        this.cnQuestsMap = JSON.parse(decompressed, util_1.reviver);
+        buf = new Uint8Array(Buffer.from(cnFakeQuestResultsMap_1.cnFakeQuestResultsMapBase64, 'base64'));
+        console.log(`decompressing cn fakequestresults data...`);
+        decompressed = zlib.brotliDecompressSync(buf).toString('utf-8'); //FIXME about 70mb decompressed, slow (750ms)
+        this.cnFakeQuestResultsMap = JSON.parse(decompressed, util_1.reviver);
+    }
+    get stringifiedOverrideDB() {
+        return JSON.stringify(this.params.overridesDB, util_1.replacer);
+    }
+    get overrides() {
+        const lastDump = this.userdataDmp.lastDump;
+        if (lastDump == null)
+            return;
+        const uid = lastDump.uid;
+        if (typeof uid !== 'number' || isNaN(uid))
+            return;
+        let overrides = this.params.overridesDB.get(uid);
+        if (overrides == null) {
+            overrides = {};
+            this.params.overridesDB.set(uid, overrides);
+        }
+        return overrides;
+    }
+    getOverrideValue(key) {
+        return key.split(".").reduce((prev, curr) => {
+            if (prev == null)
+                return;
+            if (!(curr in prev))
+                return;
+            return prev[curr];
+        }, this.overrides);
+    }
+    isOverriden(key) {
+        const keysPopped = key.split(".");
+        const lastKey = keysPopped.pop();
+        const obj = keysPopped.reduce((prev, curr) => {
+            if (prev == null)
+                return;
+            if (!(curr in prev))
+                return;
+            return prev[curr];
+        }, this.overrides);
+        if (obj == null)
+            return false; // avoid crash
+        if (lastKey == null) {
+            console.error(`isOverriden key=[${key}] lastKey == null`);
+            throw new Error(`lastKey == null`);
+        }
+        return lastKey in obj;
+    }
+    setOverrideValue(key, val, reset = false) {
+        console.log(`setOverrideValue ... key=[${key}] val`, val);
+        const keysPopped = key.split(".");
+        const lastKey = keysPopped.pop();
+        if (lastKey == null)
+            return;
+        const obj = keysPopped.reduce((prev, curr) => {
+            if (prev == null)
+                return;
+            if (prev[curr] == null)
+                prev[curr] = {};
+            return prev[curr];
+        }, this.overrides);
+        if (val == null && reset)
+            delete obj[lastKey];
+        else
+            obj[lastKey] = val;
+        console.log(`setOverrideValue done key=[${key}] val`, val);
+        this.params.saveOverrideDB();
     }
     // if matched, keep a copy of request/response data in memory
     async matchRequest(method, url, httpVersion, headers) {
@@ -427,17 +453,248 @@ class fakeMagirecoProdRespHook {
                 interceptResponse: false,
             };
         }
-        const isMagiRecoProd = (url === null || url === void 0 ? void 0 : url.href.match(this.magirecoProdUrlRegEx)) != null;
-        const isMagiRecoPatch = (url === null || url === void 0 ? void 0 : url.href.match(this.magirecoPatchUrlRegEx)) != null;
-        const isBsgamesdkLogin = (url === null || url === void 0 ? void 0 : url.href.match(this.bsgameSdkLoginRegEx)) != null;
-        const isBsgamesdkCipher = (url === null || url === void 0 ? void 0 : url.href.match(this.bsgameSdkCipherRegEx)) != null;
-        const isBsgamesdkOtpSend = (url === null || url === void 0 ? void 0 : url.href.match(this.bsgameSdkOtpSendRegEx)) != null;
-        const isTouristLogin = (url === null || url === void 0 ? void 0 : url.href.match(this.touristLoginRegEx)) != null;
-        const isTouristBindTelPwd = (url === null || url === void 0 ? void 0 : url.href.match(this.touristBindTelPwdRegEx)) != null;
-        const isBilibiliAgreementConfig = (url === null || url === void 0 ? void 0 : url.href.match(this.bilibiliAgreementConfigRegEx)) != null;
-        const isBilibiliGameAgreement = (url === null || url === void 0 ? void 0 : url.href.match(this.bilibiliGameAgreementRegEx)) != null;
-        const isBilibiliGameRealnameAuth = (url === null || url === void 0 ? void 0 : url.href.match(this.bilibiliGameRealnameAuthRegEx)) != null;
-        const isBrowserDebug = (url === null || url === void 0 ? void 0 : url.href.match(this.browserDebugUrlRegEx)) != null || (isMagiRecoPatch && url.pathname === "/magica/fonts/lzs_v_2_1_p.ttf");
+        const isMagiRecoJP = (url === null || url === void 0 ? void 0 : url.href.match(magirecoJPProdUrlRegEx)) != null;
+        const isMagiRecoJPFriendSearch = (url === null || url === void 0 ? void 0 : url.href.match(magirecoJPFriendSearchRegEx)) != null;
+        const isNoahappsJPRegist = (url === null || url === void 0 ? void 0 : url.href.match(noahappsJPregistUrlRegEx)) != null;
+        const isMagiRecoJPtedata = (url === null || url === void 0 ? void 0 : url.href.match(magirecoJPtedataUrlRegEx)) != null;
+        const isAppAdjust = url === null || url === void 0 ? void 0 : url.href.match(AppAdjustUrlRegEx);
+        if (isMagiRecoJP) {
+            let statusCode = 200;
+            let mime = "application/octet-stream";
+            let body;
+            let etag;
+            const isApi = url.pathname.match(apiPathNameRegEx) != null;
+            let apiUnimplemented = false; //FIXME
+            if (isApi) {
+                mime = "application/json";
+                let apiName = url.pathname.replace(/^\/magica\/api\//, "");
+                if (apiName === "user/create") {
+                    body = { resultCode: "success" };
+                    //FIXME unimplemented, should create new user (not gameUser), tutorialId starts with OP000
+                    apiName = "page/TopPage";
+                }
+                if (apiName.match(/^page\/[^\/].+$/)) {
+                    body = { currentTime: this.currentTime };
+                    this.fixCurrentTime(body);
+                    const pageName = apiName.replace(/^page\//, "");
+                    const selectedJPDump = this.params.selectedJPDump;
+                    const JPDumpDir = path.join(".", "user_page_jsons", selectedJPDump);
+                    if ((0, util_1.isDir)(JPDumpDir)) {
+                        const pageDir = path.join(JPDumpDir, pageName);
+                        let valueSet = new Set();
+                        const value = url.searchParams.get("value");
+                        if (value != null && value !== "")
+                            valueSet = new Set(value.split(","));
+                        if ((0, util_1.isDir)(pageDir))
+                            fs.readdirSync(pageDir).forEach(item => valueSet.add(item.replace(/\.json$/, "")));
+                        valueSet.forEach(requestedValue => {
+                            if ((0, util_1.isDir)(pageDir)) {
+                                let filepath = path.join(pageDir, requestedValue + ".json");
+                                if ((0, util_1.isFile)(filepath)) {
+                                    body[requestedValue] = JSON.parse(fs.readFileSync(filepath, 'utf-8'));
+                                    valueSet.delete(requestedValue);
+                                }
+                            }
+                        });
+                        if (valueSet.size > 0) {
+                            const pageDirs = fs.readdirSync(JPDumpDir).filter(item => (0, util_1.isDir)(path.join(JPDumpDir, item)));
+                            valueSet.forEach(missingValue => {
+                                for (let item of pageDirs) {
+                                    if (item === pageName)
+                                        continue;
+                                    let filepath = path.join(JPDumpDir, item, missingValue + ".json");
+                                    if ((0, util_1.isFile)(filepath)) {
+                                        body[missingValue] = JSON.parse(fs.readFileSync(filepath, 'utf-8'));
+                                        valueSet.delete(missingValue);
+                                    }
+                                }
+                            });
+                        }
+                        if (valueSet.size > 0) {
+                            console.log(`pageName=[${pageName}] still missing: valueSet.size=[${valueSet.size}]`, valueSet);
+                        }
+                        body = JSON.stringify(body);
+                    }
+                    else {
+                        statusCode = 404;
+                        body = Buffer.alloc(0);
+                    }
+                }
+                else
+                    switch (apiName) {
+                        case "system/native/getDomainPath":
+                        case "gameUser/cacheClear": {
+                            body = `{"resultCode":"success"}`;
+                            break;
+                        }
+                        default: {
+                            statusCode = 400;
+                        }
+                    }
+            }
+            else { // JP Assets
+                const MagiRecoJPAssetPath = path.join(".", "static_staging_jp");
+                const getFilePath = (pathname = url.pathname) => {
+                    let filepath = path.join(MagiRecoJPAssetPath, url.pathname);
+                    if ((0, util_1.isFile)(filepath))
+                        return filepath;
+                    const fixList = [
+                        [/^(\/magica\/resource\/)download\/asset\/master\/resource\/(.+)$/, "$1$2"],
+                        // FIXME ratio mismatch! [/^(\/magica\/resource\/)image_web\/thumbnail(\/.+)\.png$/, "$1scenario/img$2.jpg"], //gallery in story archive
+                        [/^(\/magica\/resource\/image_)web(\/.+)$/, "$1native$2"],
+                    ];
+                    let replacedUrlPathname = fixList.reduce((prev, cur) => prev.replace(cur[0], cur[1]), pathname);
+                    let newfilepath = path.join(MagiRecoJPAssetPath, replacedUrlPathname);
+                    if ((0, util_1.isFile)(newfilepath))
+                        return newfilepath;
+                    return filepath;
+                };
+                let filepath = getFilePath();
+                if (filepath.match(/\.(hca|usm|jpg|png|vfx[a-z]{1}|moc3|plist|ExportJson)\.[a-z]{3}$/)) {
+                    let origFilePath = getFilePath(url.pathname.replace(/\.[a-z]{3}$/, ""));
+                    if ((0, util_1.isFile)(origFilePath)) {
+                        const blockSize = 1048576;
+                        const suffix = new Uint8Array(Buffer.from(filepath.substring(filepath.length - 3)));
+                        const start = suffix.reduce((prev, cur) => prev * 26 + (cur - new Uint8Array(Buffer.from("a", "ascii"))[0]), 0) * blockSize;
+                        const fd = fs.openSync(origFilePath, "r");
+                        const filesize = fs.statSync(origFilePath).size;
+                        const remaining = filesize - start;
+                        if (remaining > 0) {
+                            const buffersize = remaining > blockSize ? blockSize : remaining;
+                            fs.readSync(fd, body = new Uint8Array(buffersize), 0, buffersize, start);
+                            mime = "application/octet-stream";
+                        }
+                    }
+                }
+                if (body == null && (0, util_1.isFile)(filepath)) {
+                    body = fs.readFileSync(filepath);
+                    //enable browser debug
+                    if (url.pathname === '/magica/js/system/replacement.js') {
+                        body = Buffer.from(body.toString('utf-8').replace(/window\.isDebug\s*=\s*false;/, "window.isDebug=window.showBackdoor=!0;"), 'utf-8');
+                    }
+                    // fix resource download error
+                    if (url.pathname.match(/^\/magica\/resource\/download\/asset\/master\/.+\.json\.gz$/)) {
+                        body = zlib.gunzipSync(body);
+                    }
+                    const etagDict = this.etagDict;
+                    const mtimeMs = fs.statSync(filepath).mtimeMs;
+                    let val = etagDict.get(url.pathname);
+                    if (val == null) {
+                        etag = (0, util_1.md5)(body);
+                        etagDict.set(url.pathname, [etag, mtimeMs]);
+                    }
+                    else {
+                        if (mtimeMs > val[1]) {
+                            etag = (0, util_1.md5)(body);
+                            etagDict.set(url.pathname, [etag, mtimeMs]);
+                        }
+                        else {
+                            etag = val[0];
+                        }
+                    }
+                    if ((headers === null || headers === void 0 ? void 0 : headers[http2.constants.HTTP2_HEADER_IF_NONE_MATCH]) === etag) {
+                        statusCode = 304;
+                        body = Buffer.alloc(0);
+                    }
+                    mime = (0, util_1.getMime)(filepath.replace(/\.gz$/, ""));
+                }
+                else {
+                    if (url.pathname === "/magica/resource/image_web/debug/selectedBranch.json") {
+                        body = `{"webBranch":"mybrowserdebug"}`;
+                    }
+                    else {
+                        if (body == null)
+                            statusCode = 404;
+                    }
+                }
+            }
+            let respHeaders = {
+                [http2.constants.HTTP2_HEADER_CONTENT_TYPE]: mime,
+            };
+            if (etag != null)
+                respHeaders[http2.constants.HTTP2_HEADER_ETAG] = etag;
+            return {
+                nextAction: "fakeResponse",
+                fakeResponse: {
+                    statusCode: statusCode,
+                    statusMessage: statusCode == 200
+                        ? "OK" : statusCode == 304
+                        ? "Not Modified" : statusCode == 404
+                        ? "Not Found" : "Bad Request",
+                    headers: respHeaders,
+                    body: body,
+                },
+                interceptResponse: false,
+            };
+        }
+        else if (isMagiRecoJPFriendSearch) {
+            return {
+                nextAction: "fakeResponse",
+                fakeResponse: {
+                    statusCode: 200,
+                    statusMessage: "OK",
+                    headers: {
+                        [http2.constants.HTTP2_HEADER_CONTENT_TYPE]: (0, util_1.getMime)(".json"),
+                    },
+                    body: _friend_search_shrunk_json_1._friend_search_json,
+                },
+                interceptResponse: false,
+            };
+        }
+        else if (isNoahappsJPRegist) {
+            return {
+                nextAction: "fakeResponse",
+                fakeResponse: {
+                    statusCode: 200,
+                    statusMessage: "OK",
+                    headers: {
+                        [http2.constants.HTTP2_HEADER_CONTENT_TYPE]: (0, util_1.getMime)(".json"),
+                    },
+                    body: `{"status":"0"}`,
+                },
+                interceptResponse: false,
+            };
+        }
+        else if (isMagiRecoJPtedata) {
+            return {
+                nextAction: "fakeResponse",
+                fakeResponse: {
+                    statusCode: 200,
+                    statusMessage: "OK",
+                    headers: {
+                        [http2.constants.HTTP2_HEADER_CONTENT_TYPE]: (0, util_1.getMime)(".json"),
+                    },
+                    body: `{"code":"0"}`,
+                },
+                interceptResponse: false,
+            };
+        }
+        else if (isAppAdjust) {
+            return {
+                nextAction: "fakeResponse",
+                fakeResponse: {
+                    statusCode: 200,
+                    statusMessage: "OK",
+                    headers: {
+                        [http2.constants.HTTP2_HEADER_CONTENT_TYPE]: (0, util_1.getMime)(".json"),
+                    },
+                    body: `{"app_token":"111111qqqqqq","adid":"ffffffffffffffffffffffffffffffff","ask_in":5000,`
+                        + `"attribution":{"tracker_token":"fffffff","tracker_name":"Organic","network":"Organic"}}`,
+                },
+                interceptResponse: false,
+            };
+        }
+        const isMagiRecoProd = (url === null || url === void 0 ? void 0 : url.href.match(magirecoProdUrlRegEx)) != null;
+        const isMagiRecoPatch = (url === null || url === void 0 ? void 0 : url.href.match(magirecoPatchUrlRegEx)) != null;
+        const isBsgamesdkLogin = (url === null || url === void 0 ? void 0 : url.href.match(bsgameSdkLoginRegEx)) != null;
+        const isBsgamesdkCipher = (url === null || url === void 0 ? void 0 : url.href.match(bsgameSdkCipherRegEx)) != null;
+        const isBsgamesdkOtpSend = (url === null || url === void 0 ? void 0 : url.href.match(bsgameSdkOtpSendRegEx)) != null;
+        const isTouristLogin = (url === null || url === void 0 ? void 0 : url.href.match(touristLoginRegEx)) != null;
+        const isTouristBindTelPwd = (url === null || url === void 0 ? void 0 : url.href.match(touristBindTelPwdRegEx)) != null;
+        const isBilibiliAgreementConfig = (url === null || url === void 0 ? void 0 : url.href.match(bilibiliAgreementConfigRegEx)) != null;
+        const isBilibiliGameAgreement = (url === null || url === void 0 ? void 0 : url.href.match(bilibiliGameAgreementRegEx)) != null;
+        const isBilibiliGameRealnameAuth = (url === null || url === void 0 ? void 0 : url.href.match(bilibiliGameRealnameAuthRegEx)) != null;
+        const isBrowserDebug = (url === null || url === void 0 ? void 0 : url.href.match(browserDebugUrlRegEx)) != null || (isMagiRecoPatch && url.pathname === "/magica/fonts/lzs_v_2_1_p.ttf");
         if (!isMagiRecoProd && !isMagiRecoPatch
             && !isBsgamesdkLogin && !isBsgamesdkCipher && !isBsgamesdkOtpSend
             && !isTouristLogin && !isTouristBindTelPwd
@@ -546,7 +803,7 @@ class fakeMagirecoProdRespHook {
                 interceptResponse: false,
             };
         }
-        const isApi = url.pathname.match(this.apiPathNameRegEx) != null;
+        const isApi = url.pathname.match(apiPathNameRegEx) != null;
         let apiUnimplemented = false;
         if (isApi) {
             let statusCode = 200;
@@ -555,7 +812,7 @@ class fakeMagirecoProdRespHook {
             const serverDown = Date.now() > 0 ? undefined : { reason: "maintenance" }; // DEBUG TODO this.params.serverDown;
             const isBanned = Date.now() > 0 ? undefined : true; // DEBUG TODO this.params.isBanned;
             const apiName = url.pathname.replace(/^\/magica\/api\//, "")
-                .replace(this.slashGuidEndRegEx, "");
+                .replace(slashGuidEndRegEx, "");
             if (apiName.match(/^system\/(game\/login|sns\/login\/[0-9a-z]{32})$/)) {
                 body = this.fakeSystemLogin();
                 const loginType = apiName.replace(/\/[0-9a-z]{32}$/, "").replace(/\//g, " ");
@@ -598,6 +855,7 @@ class fakeMagirecoProdRespHook {
                     case "userChara/visualize":
                     case "userLive2d/set":
                     case "search/friend_search/_search":
+                    case "page/SupportSelect":
                     case "quest/start":
                     case "arena/start":
                     case "quest/native/get":
@@ -657,7 +915,7 @@ class fakeMagirecoProdRespHook {
                     case "page/Ban":
                         {
                             let inviteCode;
-                            const bannedTime = `${this.getDateTimeString()} [此为当前时间，请去本地服务器后台解封]`;
+                            const bannedTime = `${this.currentTime} [此为当前时间，请去本地服务器后台解封]`;
                             const lastDump = this.userdataDmp.lastDump;
                             if (lastDump != null) {
                                 const respBodyObj = userdataDump.getUnBrBody(lastDump.httpResp.get, this.pageKeys["page/TopPage"]);
@@ -797,15 +1055,15 @@ class fakeMagirecoProdRespHook {
                 contentType = this.crawler.getContentType(pathname);
                 body = await this.crawler.readFileAsync(pathname);
                 if (body == null) {
-                    if (url.pathname.match(this.magicaMaintenanceConfigRegEx) != null) {
+                    if (url.pathname.match(magicaMaintenanceConfigRegEx) != null) {
                         contentType = "application/json; charset=utf-8";
                         body = Buffer.from(staticResCrawler.crawler.maintenanceConfigStr, 'utf-8');
                     }
-                    else if (url.pathname.match(this.magicaMaintenanceViewJsonRegEx) != null) {
+                    else if (url.pathname.match(magicaMaintenanceViewJsonRegEx) != null) {
                         contentType = "application/json; charset=utf-8";
                         body = Buffer.from(staticResCrawler.crawler.maintenanceViewJsonStr, 'utf-8');
                     }
-                    else if (url.pathname.match(this.part2Section3RegEx) != null) {
+                    else if (url.pathname.match(part2Section3RegEx) != null) {
                         // not a workaround: response from offical server was like this
                         contentType = "application/json; charset=utf-8";
                         body = Buffer.from(JSON.stringify([]), 'utf-8');
@@ -884,21 +1142,21 @@ class fakeMagirecoProdRespHook {
                 nextAction: "passOnRequestBody",
                 interceptResponse: false,
             };
-        const isMagiRecoProd = (url === null || url === void 0 ? void 0 : url.href.match(this.magirecoProdUrlRegEx)) != null;
-        const isMagiRecoPatch = (url === null || url === void 0 ? void 0 : url.href.match(this.magirecoPatchUrlRegEx)) != null;
+        const isMagiRecoProd = (url === null || url === void 0 ? void 0 : url.href.match(magirecoProdUrlRegEx)) != null;
+        const isMagiRecoPatch = (url === null || url === void 0 ? void 0 : url.href.match(magirecoPatchUrlRegEx)) != null;
         if (!isMagiRecoProd && !isMagiRecoPatch)
             return {
                 nextAction: "passOnRequestBody",
                 interceptResponse: false,
             };
-        const isApi = url.pathname.match(this.apiPathNameRegEx) != null;
+        const isApi = url.pathname.match(apiPathNameRegEx) != null;
         let apiUnimplemented = false;
         if (isApi) {
             let statusCode = 200;
             let contentType = `application/json;charset=UTF-8`;
             let respBody;
             const apiName = url.pathname.replace(/^\/magica\/api\//, "")
-                .replace(this.slashGuidEndRegEx, "");
+                .replace(slashGuidEndRegEx, "");
             switch (apiName) {
                 case "test/logger/error":
                     {
@@ -921,6 +1179,11 @@ class fakeMagirecoProdRespHook {
                 case "search/friend_search/_search":
                     {
                         respBody = this.fakeFriendSearch(apiName, reqBody);
+                        break;
+                    }
+                case "page/SupportSelect":
+                    {
+                        respBody = this.fakeSupportSelect(apiName, reqBody);
                         break;
                     }
                 case "page/CharaEnhancementTree":
@@ -982,7 +1245,7 @@ class fakeMagirecoProdRespHook {
             requestId: `${(0, util_1.getRandomHex)(32)}`,
             timestamp: `${new Date().getTime()}`,
             code: 0,
-            hash: `${(0, util_1.getRandomHex)(16)}`, // fake one
+            hash: `${(0, util_1.getRandomHex)(16)}`,
             cipher_key: "-----BEGIN PUBLIC KEY-----\nMIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDjb4V7EidX/ym28t2ybo0U6t0n\n6p4ej8VjqKHg100va6jkNbNTrLQqMCQCAYtXMXXp2Fwkk6WR+12N9zknLjf+C9sx\n/+l48mjUU8RqahiFD1XT/u2e0m2EN029OhCgkHx3Fc/KlFSIbak93EH/XlYis0w+\nXl69GV6klzgxW6d2xQIDAQAB\n-----END PUBLIC KEY-----",
             server_message: "",
         };
@@ -1071,7 +1334,7 @@ class fakeMagirecoProdRespHook {
     fakeEmptyResp(apiName) {
         console.log(`fakeEmptyResp for apiName=[${apiName}]`);
         const obj = {
-            currentTime: this.getDateTimeString(),
+            currentTime: this.currentTime,
             resourceUpdated: false,
             eventList: [],
             regularEventList: [],
@@ -1081,7 +1344,7 @@ class fakeMagirecoProdRespHook {
         };
         return Buffer.from(JSON.stringify(obj));
     }
-    getDateTimeString() {
+    get currentTime() {
         const d = new Date(Date.now() + 8 * 60 * 60 * 1000);
         let year = String(d.getUTCFullYear());
         let monthDate = [
@@ -1104,7 +1367,7 @@ class fakeMagirecoProdRespHook {
     }
     fixCurrentTime(respBodyObj) {
         if (typeof (respBodyObj === null || respBodyObj === void 0 ? void 0 : respBodyObj.currentTime) === 'string') {
-            respBodyObj.currentTime = respBodyObj.currentTime.substring(0, 10) + this.getDateTimeString().substring(10);
+            respBodyObj.currentTime = respBodyObj.currentTime.substring(0, 10) + this.currentTime.substring(10);
         }
     }
     fakeMyPage(apiName) {
@@ -1153,7 +1416,7 @@ class fakeMagirecoProdRespHook {
             this.checkForMissing(replica.userQuestAdventureList, this.missingData.userQuestAdventureList, "adventureId");
         }
         // fix currentTime
-        const currentTime = replica.currentTime = this.getDateTimeString();
+        const currentTime = replica.currentTime = this.currentTime;
         // keep AP and BP below max
         const userStatusList = replica === null || replica === void 0 ? void 0 : replica.userStatusList;
         if (Array.isArray(userStatusList)) {
@@ -1429,6 +1692,50 @@ class fakeMagirecoProdRespHook {
             return this.fakeErrorResp("错误", `找不到好友推荐数据`);
         return Buffer.from(JSON.stringify(respBodyObj), 'utf-8');
     }
+    fakeSupportSelect(apiName, reqBody) {
+        var _a, _b, _c;
+        let respBody;
+        if (reqBody != null) {
+            // NPC supports
+            let parsedReqBody;
+            let strNpcHelpIds;
+            parsedReqBody = JSON.parse(reqBody.toString('utf-8'));
+            strNpcHelpIds = (_a = parsedReqBody === null || parsedReqBody === void 0 ? void 0 : parsedReqBody.strNpcHelpIds) === null || _a === void 0 ? void 0 : _a.split(",");
+            if (strNpcHelpIds == null)
+                strNpcHelpIds = [];
+            let npcHelpList = strNpcHelpIds.map(id => {
+                let item;
+                let file = this.cnNpcSupportMap.get(id);
+                if (id == null)
+                    return;
+                try {
+                    item = JSON.parse(file).npcHelpList[0];
+                }
+                catch (e) {
+                    console.log(`error, cannot read [${id}] from cnNpcSupportMap`);
+                    item = undefined;
+                }
+                return item;
+            }).filter(item => item != null);
+            // player supports
+            const lastDump = this.userdataDmp.lastDump;
+            if (lastDump == null)
+                return this.fakeErrorResp("错误", "未加载个人账号数据");
+            if (apiName !== "page/SupportSelect") {
+                console.error(`fakePagedResult invalid apiName=[${apiName}]`);
+                return;
+            }
+            const urlBase = `https://l3-prod-all-gs-mfsn2.bilibiligame.net/magica/api/page/SupportSelect`;
+            let fetchedResponse = userdataDump.unBrBase64((_c = (_b = lastDump.httpResp.post.get(urlBase)) === null || _b === void 0 ? void 0 : _b.values().next().value) === null || _c === void 0 ? void 0 : _c.brBody);
+            let supportUserList = fetchedResponse === null || fetchedResponse === void 0 ? void 0 : fetchedResponse.supportUserList;
+            if (supportUserList == null)
+                supportUserList = [];
+            ;
+            let respBodyObj = { currentTime: this.currentTime, npcHelpList: npcHelpList, supportUserList: supportUserList };
+            this.fixCurrentTime(respBodyObj);
+            return respBody = Buffer.from(JSON.stringify(respBodyObj), 'utf-8');
+        }
+    }
     parsePageNum(reqBody, type) {
         if (reqBody != null && typeof reqBody !== 'string')
             return;
@@ -1494,7 +1801,7 @@ class fakeMagirecoProdRespHook {
             return;
         }
         const urlBase = urlBases[apiName];
-        const matched = pathname.match(this.slashGuidEndRegEx);
+        const matched = pathname.match(slashGuidEndRegEx);
         const guid = matched != null ? matched[0].replace(/^\//, "") : undefined;
         if (guid == null) {
             return this.fakeErrorResp("错误", "参数非法");
@@ -1557,24 +1864,39 @@ class fakeMagirecoProdRespHook {
         if (typeof myUserId !== 'string' || !myUserId.match(userdataDump.guidRegEx)) {
             return this.fakeErrorResp("错误", "无法读取用户ID");
         }
-        if (apiName === "quest/start") {
-            apiName = "arena/start"; // FIXME: pretend to be arena/start - apis afterwards NOT WORKING
-            const faked = {
-                arenaBattleType: "SIMULATE",
-                opponentUserId: (0, util_1.getRandomGuid)(),
-                arenaBattleOpponentTeamType: "FAKE",
-            };
-            reqBody = JSON.stringify(faked);
-        }
+        let arenaBattleType;
+        let questBattleId;
+        let userQuestBattleResultId;
         switch (apiName) {
+            case "quest/start":
+                {
+                    arenaBattleType = "QUEST";
+                    try {
+                        const parsed = JSON.parse(reqBody);
+                        questBattleId = parsed.questBattleId;
+                        if (typeof questBattleId !== 'number' || isNaN(questBattleId)) {
+                            throw new Error(`fakeArenaResp(quest mode) read questBattleId from request body failed`);
+                        }
+                    }
+                    catch (e) {
+                        console.error(e);
+                    }
+                    const faked = {
+                        arenaBattleType: arenaBattleType,
+                        opponentUserId: (0, util_1.getRandomGuid)(),
+                        arenaBattleOpponentTeamType: "FAKE",
+                    };
+                    reqBody = JSON.stringify(faked);
+                } // fall through
             case "arena/start":
                 {
                     let opponentUserId;
                     let arenaBattleOpponentTeamType;
                     try {
                         const parsed = JSON.parse(reqBody);
-                        if (parsed.arenaBattleType !== "SIMULATE") {
-                            return this.fakeErrorResp("错误", "目前镜层只支持演习", false);
+                        arenaBattleType = parsed.arenaBattleType;
+                        if (arenaBattleType !== "SIMULATE" && arenaBattleType !== "QUEST") {
+                            return this.fakeErrorResp("错误", "目前副本只支持镜层演习", false);
                         }
                         opponentUserId = parsed.opponentUserId;
                         if (typeof opponentUserId !== 'string' || !opponentUserId.match(userdataDump.guidRegEx)) {
@@ -1591,9 +1913,25 @@ class fakeMagirecoProdRespHook {
                         console.error(`fakeArenaStart error parsing`, e);
                         return;
                     }
-                    const userQuestBattleResultId = (0, util_1.getRandomGuid)();
-                    this.arenaSimulateMap.set(userQuestBattleResultId, opponentUserId);
-                    const createdAt = this.getDateTimeString();
+                    if (arenaBattleType === "SIMULATE") {
+                        userQuestBattleResultId = (0, util_1.getRandomGuid)();
+                        this.arenaSimulateMap.set(userQuestBattleResultId, opponentUserId);
+                    }
+                    else if (arenaBattleType === "QUEST") {
+                        if (typeof questBattleId === 'number' && !isNaN(questBattleId)) {
+                            userQuestBattleResultId = (0, util_1.getRandomGuid)();
+                            this.questStartMap.set(userQuestBattleResultId, questBattleId);
+                        }
+                        else {
+                            console.error(`questBattleId is not number`);
+                            return;
+                        }
+                    }
+                    else {
+                        console.error(`userQuestBattleResultId is not set yet`);
+                        return;
+                    }
+                    const createdAt = this.currentTime;
                     const obj = {
                         userQuestBattleResultList: [
                             {
@@ -1630,6 +1968,15 @@ class fakeMagirecoProdRespHook {
                             || !userQuestBattleResultId.match(userdataDump.guidRegEx)) {
                             console.error(`fakeArenaNativeGet userQuestBattleResultId must be guid`);
                             return;
+                        }
+                        const questBattleId = this.questStartMap.get(userQuestBattleResultId);
+                        if (questBattleId != null) {
+                            // quest, not arena simulation
+                            const questData = this.cnQuestsMap.get(`${questBattleId}`);
+                            if (typeof questData !== 'string') {
+                                console.error(`fakeQuestNativeGet cannot find questData`);
+                            }
+                            return Buffer.from(questData, 'utf-8');
                         }
                         const opponentUserId = this.arenaSimulateMap.get(userQuestBattleResultId);
                         if (typeof opponentUserId !== 'string' || !opponentUserId.match(userdataDump.guidRegEx)) {
@@ -1726,6 +2073,15 @@ class fakeMagirecoProdRespHook {
                             console.error(`fakeArenaNativeResultSend userQuestBattleResultId must be string and guid`);
                             return;
                         }
+                        const questBattleId = this.questStartMap.get(userQuestBattleResultId);
+                        if (questBattleId != null) {
+                            // quest, not arena simulation
+                            const fakeQuestResultData = this.cnFakeQuestResultsMap.get(`${questBattleId}`);
+                            if (typeof fakeQuestResultData !== 'string') {
+                                console.error(`fakeQuestNativeGet cannot find fakeQuestResultData`);
+                            }
+                            return Buffer.from(fakeQuestResultData, 'utf-8');
+                        }
                         const opponentUserId = this.arenaSimulateMap.get(userQuestBattleResultId);
                         if (typeof opponentUserId !== 'string' || !opponentUserId.match(userdataDump.guidRegEx)) {
                             console.error(`fakeArenaNativeResultSend opponentUserId must be string and guid`);
@@ -1769,8 +2125,8 @@ class fakeMagirecoProdRespHook {
                                     userId: myUserId,
                                     opponentUserId: opponentUserId,
                                     arenaBattleStatus: parsed.result === "FAILED" ? "LOSE" : "WIN",
-                                    completedAt: this.getDateTimeString(),
-                                    createdAt: this.getDateTimeString(),
+                                    completedAt: this.currentTime,
+                                    createdAt: this.currentTime,
                                 }
                             ]
                         }));
@@ -1829,7 +2185,7 @@ class fakeMagirecoProdRespHook {
             return;
         }
         const obj = {
-            currentTime: this.getDateTimeString(),
+            currentTime: this.currentTime,
             resourceUpdated: false,
             eventList: [],
             regularEventList: [],
