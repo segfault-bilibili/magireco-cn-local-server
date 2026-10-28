@@ -14,6 +14,7 @@ import { missingData } from "./etc/missing_data";
 import { _friend_search_json } from "./etc/_friend_search_shrunk_json";
 import { cnNpcSupportMapBase64 } from "./etc/cnNpcSupportMap";
 import { cnQuestsMapBase64 } from "./etc/cnQuestsMap";
+import { cnFakeQuestResultsMapBase64 } from "./etc/cnFakeQuestResultsMap";
 import * as favicon from "../favicon";
 
 
@@ -50,6 +51,7 @@ const part2Section3RegEx = /^\/magica\/resource\/download\/asset\/master\/resour
 export class fakeMagirecoProdRespHook implements hook {
     private readonly cnNpcSupportMap: Map<string, any>;
     private readonly cnQuestsMap: Map<string, any>;
+    private readonly cnFakeQuestResultsMap: Map<string, any>;
 
     private readonly params: parameters.params;
     private readonly crawler: staticResCrawler.crawler;
@@ -135,6 +137,11 @@ export class fakeMagirecoProdRespHook implements hook {
         console.log(`decompressing cn quests data...`)
         decompressed = zlib.brotliDecompressSync(buf).toString('utf-8'); //FIXME about 70mb decompressed, slow (750ms)
         this.cnQuestsMap = JSON.parse(decompressed, reviver);
+
+        buf = new Uint8Array(Buffer.from(cnFakeQuestResultsMapBase64, 'base64'));
+        console.log(`decompressing cn fakequestresults data...`)
+        decompressed = zlib.brotliDecompressSync(buf).toString('utf-8'); //FIXME about 70mb decompressed, slow (750ms)
+        this.cnFakeQuestResultsMap = JSON.parse(decompressed, reviver);
     }
 
     // if matched, keep a copy of request/response data in memory
@@ -1792,6 +1799,17 @@ export class fakeMagirecoProdRespHook implements hook {
                             console.error(`fakeArenaNativeResultSend userQuestBattleResultId must be string and guid`);
                             return;
                         }
+
+                        const questBattleId = this.questStartMap.get(userQuestBattleResultId);
+                        if (questBattleId != null) {
+                            // quest, not arena simulation
+                            const fakeQuestResultData = this.cnFakeQuestResultsMap.get(`${questBattleId}`);
+                            if (typeof fakeQuestResultData !== 'string') {
+                                console.error(`fakeQuestNativeGet cannot find fakeQuestResultData`);
+                            }
+                            return Buffer.from(fakeQuestResultData, 'utf-8');
+                        }
+
                         const opponentUserId = this.arenaSimulateMap.get(userQuestBattleResultId);
                         if (typeof opponentUserId !== 'string' || !opponentUserId.match(userdataDump.guidRegEx)) {
                             console.error(`fakeArenaNativeResultSend opponentUserId must be string and guid`);
