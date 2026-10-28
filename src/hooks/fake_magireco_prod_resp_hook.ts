@@ -173,7 +173,7 @@ export class fakeMagirecoProdRespHook implements hook {
                     apiName = "page/TopPage";
                 }
                 if (apiName.match(/^page\/[^\/].+$/)) {
-                    body = { currentTime: "" }; this.fixCurrentTime(body);
+                    body = { currentTime: this.currentTime }; this.fixCurrentTime(body);
                     const pageName = apiName.replace(/^page\//, "");
                     const selectedJPDump = this.params.selectedJPDump;
                     const JPDumpDir = path.join(".", "user_page_jsons", selectedJPDump);
@@ -603,7 +603,7 @@ export class fakeMagirecoProdRespHook implements hook {
                 case "page/Ban":
                     {
                         let inviteCode: string | undefined;
-                        const bannedTime = `${this.getDateTimeString()} [此为当前时间，请去本地服务器后台解封]`;
+                        const bannedTime = `${this.currentTime} [此为当前时间，请去本地服务器后台解封]`;
                         const lastDump = this.userdataDmp.lastDump;
                         if (lastDump != null) {
                             const respBodyObj = userdataDump.getUnBrBody(lastDump.httpResp.get, this.pageKeys["page/TopPage"]);
@@ -1035,7 +1035,7 @@ export class fakeMagirecoProdRespHook implements hook {
         console.log(`fakeEmptyResp for apiName=[${apiName}]`);
 
         const obj = {
-            currentTime: this.getDateTimeString(),
+            currentTime: this.currentTime,
             resourceUpdated: false,
             eventList: [],
             regularEventList: [],
@@ -1045,7 +1045,7 @@ export class fakeMagirecoProdRespHook implements hook {
         };
         return Buffer.from(JSON.stringify(obj));
     }
-    private getDateTimeString(): string {
+    private get currentTime(): string {
         const d = new Date(Date.now() + 8 * 60 * 60 * 1000);
         let year = String(d.getUTCFullYear());
         let monthDate = [
@@ -1068,7 +1068,7 @@ export class fakeMagirecoProdRespHook implements hook {
 
     private fixCurrentTime(respBodyObj: any): void {
         if (typeof respBodyObj?.currentTime === 'string') {
-            respBodyObj.currentTime = respBodyObj.currentTime.substring(0, 10) + this.getDateTimeString().substring(10);
+            respBodyObj.currentTime = respBodyObj.currentTime.substring(0, 10) + this.currentTime.substring(10);
         }
     }
 
@@ -1116,7 +1116,7 @@ export class fakeMagirecoProdRespHook implements hook {
             this.checkForMissing(replica.userQuestAdventureList, this.missingData.userQuestAdventureList, "adventureId");
         }
         // fix currentTime
-        const currentTime = replica.currentTime = this.getDateTimeString();
+        const currentTime = replica.currentTime = this.currentTime;
         // keep AP and BP below max
         const userStatusList = replica?.userStatusList;
         if (Array.isArray(userStatusList)) {
@@ -1423,7 +1423,7 @@ export class fakeMagirecoProdRespHook implements hook {
             let supportUserList = fetchedResponse?.supportUserList;
             if (supportUserList == null) supportUserList = [];;
 
-            let respBodyObj = {currentTime: "", npcHelpList: npcHelpList, supportUserList: supportUserList };
+            let respBodyObj = {currentTime: this.currentTime, npcHelpList: npcHelpList, supportUserList: supportUserList };
             this.fixCurrentTime(respBodyObj);
             return respBody = Buffer.from(JSON.stringify(respBodyObj), 'utf-8');
         }
@@ -1598,7 +1598,7 @@ export class fakeMagirecoProdRespHook implements hook {
                     const userQuestBattleResultId = getRandomGuid();
                     this.arenaSimulateMap.set(userQuestBattleResultId, opponentUserId);
 
-                    const createdAt = this.getDateTimeString();
+                    const createdAt = this.currentTime;
 
                     const obj = {
                         userQuestBattleResultList: [
@@ -1784,8 +1784,8 @@ export class fakeMagirecoProdRespHook implements hook {
                                     userId: myUserId,
                                     opponentUserId: opponentUserId,
                                     arenaBattleStatus: parsed.result === "FAILED" ? "LOSE" : "WIN",
-                                    completedAt: this.getDateTimeString(),
-                                    createdAt: this.getDateTimeString(),
+                                    completedAt: this.currentTime,
+                                    createdAt: this.currentTime,
                                 }
                             ]
                         }));
@@ -1843,7 +1843,7 @@ export class fakeMagirecoProdRespHook implements hook {
             return;
         }
         const obj: Record<string, any> = {
-            currentTime: this.getDateTimeString(),
+            currentTime: this.currentTime,
             resourceUpdated: false,
             eventList: [],
             regularEventList: [],
