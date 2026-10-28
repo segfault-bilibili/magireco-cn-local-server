@@ -4,7 +4,7 @@ import * as http from "http";
 import * as http2 from "http2";
 import * as zlib from "zlib";
 import * as crypto from "crypto";
-import { replacer, compress, getRandomHex, getRandomGuid, getMime, md5, isDir, isFile } from "../util";
+import { replacer, compress, getRandomHex, getRandomGuid, getMime, md5, isDir, isFile, reviver } from "../util";
 import { fakeResponse, hook, passOnRequest, passOnRequestBody } from "../local_server";
 import * as parameters from "../parameters";
 import * as staticResCrawler from "../static_res_crawler";
@@ -12,6 +12,7 @@ import * as userdataDump from "../userdata_dump";
 import { bsgamesdkPwdAuth } from "../bsgamesdk-pwd-authenticate";
 import { missingData } from "./etc/missing_data";
 import { _friend_search_json } from "./etc/_friend_search_shrunk_json";
+import { npcSupportMapBase64 } from "./etc/npcSupportMap";
 import * as favicon from "../favicon";
 
 
@@ -46,6 +47,8 @@ const bilibiliGameRealnameAuthRegEx = /^(http|https):\/\/game\.bilibili\.com\/sd
 const part2Section3RegEx = /^\/magica\/resource\/download\/asset\/master\/resource\/2207081501\/asset_section_10230(1|2|3)\.json$/;
 
 export class fakeMagirecoProdRespHook implements hook {
+    private readonly npcSupportMap: Map<string, any>;
+
     private readonly params: parameters.params;
     private readonly crawler: staticResCrawler.crawler;
     private readonly userdataDmp: userdataDump.userdataDmp;
@@ -119,6 +122,11 @@ export class fakeMagirecoProdRespHook implements hook {
         this.params = params;
         this.crawler = crawler;
         this.userdataDmp = dmp;
+
+        let buf = new Uint8Array(Buffer.from(npcSupportMapBase64, 'base64'));
+        console.log(`decompressing npc SupportSelect data...`)
+        let decompressed = zlib.brotliDecompressSync(buf).toString('utf-8'); //FIXME about 70mb decompressed, slow (750ms)
+        this.npcSupportMap = JSON.parse(decompressed, reviver);
     }
 
     // if matched, keep a copy of request/response data in memory
@@ -1397,19 +1405,18 @@ export class fakeMagirecoProdRespHook implements hook {
             parsedReqBody = JSON.parse(reqBody.toString('utf-8'));
             strNpcHelpIds = parsedReqBody?.strNpcHelpIds?.split(",");
             if (strNpcHelpIds == null) strNpcHelpIds = [];
-            let npcHelpList = strNpcHelpIds.map((id) => {
+            let npcHelpList = strNpcHelpIds.map(id => {
                 let item: Object | undefined;
-                let npcSupportPath = path.join(".", "npcSupport", `${id}.json`);
+                let file = this.npcSupportMap.get(id);
+                if (id == null) return;
                 try {
-                    item = JSON.parse(
-                        fs.readFileSync(npcSupportPath, 'utf-8')
-                    ).npcHelpList[0];
+                    item = JSON.parse(file).npcHelpList[0];
                 } catch (e) {
-                    console.log(`error, cannot read [${npcSupportPath}]`)
+                    console.log(`error, cannot read [${id}] from npcSupportMap`)
                     item = undefined;
                 }
                 return item;
-            });
+            }).filter(item => item != null);
 
             // player supports
             const lastDump = this.userdataDmp.lastDump;
@@ -1423,7 +1430,7 @@ export class fakeMagirecoProdRespHook implements hook {
             let supportUserList = fetchedResponse?.supportUserList;
             if (supportUserList == null) supportUserList = [];;
 
-            let respBodyObj = {currentTime: this.currentTime, npcHelpList: npcHelpList, supportUserList: supportUserList };
+            let respBodyObj = { currentTime: this.currentTime, npcHelpList: npcHelpList, supportUserList: supportUserList };
             this.fixCurrentTime(respBodyObj);
             return respBody = Buffer.from(JSON.stringify(respBodyObj), 'utf-8');
         }
