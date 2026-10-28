@@ -12,7 +12,8 @@ import * as userdataDump from "../userdata_dump";
 import { bsgamesdkPwdAuth } from "../bsgamesdk-pwd-authenticate";
 import { missingData } from "./etc/missing_data";
 import { _friend_search_json } from "./etc/_friend_search_shrunk_json";
-import { npcSupportMapBase64 } from "./etc/npcSupportMap";
+import { cnNpcSupportMapBase64 } from "./etc/cnNpcSupportMap";
+import { cnQuestsMapBase64 } from "./etc/cnQuestsMap";
 import * as favicon from "../favicon";
 
 
@@ -47,12 +48,14 @@ const bilibiliGameRealnameAuthRegEx = /^(http|https):\/\/game\.bilibili\.com\/sd
 const part2Section3RegEx = /^\/magica\/resource\/download\/asset\/master\/resource\/2207081501\/asset_section_10230(1|2|3)\.json$/;
 
 export class fakeMagirecoProdRespHook implements hook {
-    private readonly npcSupportMap: Map<string, any>;
+    private readonly cnNpcSupportMap: Map<string, any>;
+    private readonly cnQuestsMap: Map<string, any>;
 
     private readonly params: parameters.params;
     private readonly crawler: staticResCrawler.crawler;
     private readonly userdataDmp: userdataDump.userdataDmp;
 
+    private readonly questStartMap = new Map<string, number>();
     private readonly arenaSimulateMap = new Map<string, string>();
 
     get stringifiedOverrideDB(): string {
@@ -123,10 +126,15 @@ export class fakeMagirecoProdRespHook implements hook {
         this.crawler = crawler;
         this.userdataDmp = dmp;
 
-        let buf = new Uint8Array(Buffer.from(npcSupportMapBase64, 'base64'));
+        let buf = new Uint8Array(Buffer.from(cnNpcSupportMapBase64, 'base64'));
         console.log(`decompressing npc SupportSelect data...`)
         let decompressed = zlib.brotliDecompressSync(buf).toString('utf-8'); //FIXME about 70mb decompressed, slow (750ms)
-        this.npcSupportMap = JSON.parse(decompressed, reviver);
+        this.cnNpcSupportMap = JSON.parse(decompressed, reviver);
+
+        buf = new Uint8Array(Buffer.from(cnQuestsMapBase64, 'base64'));
+        console.log(`decompressing cn quests data...`)
+        decompressed = zlib.brotliDecompressSync(buf).toString('utf-8'); //FIXME about 70mb decompressed, slow (750ms)
+        this.cnQuestsMap = JSON.parse(decompressed, reviver);
     }
 
     // if matched, keep a copy of request/response data in memory
@@ -1407,12 +1415,12 @@ export class fakeMagirecoProdRespHook implements hook {
             if (strNpcHelpIds == null) strNpcHelpIds = [];
             let npcHelpList = strNpcHelpIds.map(id => {
                 let item: Object | undefined;
-                let file = this.npcSupportMap.get(id);
+                let file = this.cnNpcSupportMap.get(id);
                 if (id == null) return;
                 try {
                     item = JSON.parse(file).npcHelpList[0];
                 } catch (e) {
-                    console.log(`error, cannot read [${id}] from npcSupportMap`)
+                    console.log(`error, cannot read [${id}] from cnNpcSupportMap`)
                     item = undefined;
                 }
                 return item;
@@ -1567,25 +1575,38 @@ export class fakeMagirecoProdRespHook implements hook {
             return this.fakeErrorResp("错误", "无法读取用户ID");
         }
 
-        if (apiName === "quest/start") {
-            apiName = "arena/start"; // FIXME: pretend to be arena/start - apis afterwards NOT WORKING
-            const faked = {
-                arenaBattleType: "SIMULATE",
-                opponentUserId: getRandomGuid(),
-                arenaBattleOpponentTeamType: "FAKE",
-            }
-            reqBody = JSON.stringify(faked);
-        }
-
+        let arenaBattleType: string;
+        let questBattleId: number | undefined;
+        let userQuestBattleResultId: string;
         switch (apiName) {
+            case "quest/start":
+                {
+                    arenaBattleType = "QUEST";
+                    try {
+                        const parsed = JSON.parse(reqBody);
+                        questBattleId = parsed.questBattleId;
+                        if (typeof questBattleId !== 'number' || isNaN(questBattleId)) {
+                            throw new Error(`fakeArenaResp(quest mode) read questBattleId from request body failed`);
+                        }
+                    } catch (e) {
+                        console.error(e);
+                    }
+                    const faked = {
+                        arenaBattleType: arenaBattleType,
+                        opponentUserId: getRandomGuid(),
+                        arenaBattleOpponentTeamType: "FAKE",
+                    }
+                    reqBody = JSON.stringify(faked);
+                } // fall through
             case "arena/start":
                 {
                     let opponentUserId: string | undefined;
                     let arenaBattleOpponentTeamType: string | undefined;
                     try {
                         const parsed = JSON.parse(reqBody);
-                        if (parsed.arenaBattleType !== "SIMULATE") {
-                            return this.fakeErrorResp("错误", "目前镜层只支持演习", false);
+                        arenaBattleType = parsed.arenaBattleType;
+                        if (arenaBattleType !== "SIMULATE" && arenaBattleType !== "QUEST") {
+                            return this.fakeErrorResp("错误", "目前副本只支持镜层演习", false);
                         }
                         opponentUserId = parsed.opponentUserId;
                         if (typeof opponentUserId !== 'string' || !opponentUserId.match(userdataDump.guidRegEx)) {
@@ -1602,8 +1623,21 @@ export class fakeMagirecoProdRespHook implements hook {
                         return;
                     }
 
-                    const userQuestBattleResultId = getRandomGuid();
-                    this.arenaSimulateMap.set(userQuestBattleResultId, opponentUserId);
+                    if (arenaBattleType === "SIMULATE") {
+                        userQuestBattleResultId = getRandomGuid();
+                        this.arenaSimulateMap.set(userQuestBattleResultId, opponentUserId);
+                    } else if (arenaBattleType === "QUEST") {
+                        if (typeof questBattleId === 'number' && !isNaN(questBattleId)) {
+                            userQuestBattleResultId = getRandomGuid();
+                            this.questStartMap.set(userQuestBattleResultId, questBattleId);
+                        } else {
+                            console.error(`questBattleId is not number`);
+                            return;
+                        }
+                    } else {
+                        console.error(`userQuestBattleResultId is not set yet`);
+                        return;
+                    }
 
                     const createdAt = this.currentTime;
 
@@ -1646,6 +1680,17 @@ export class fakeMagirecoProdRespHook implements hook {
                             console.error(`fakeArenaNativeGet userQuestBattleResultId must be guid`);
                             return;
                         }
+
+                        const questBattleId = this.questStartMap.get(userQuestBattleResultId);
+                        if (questBattleId != null) {
+                            // quest, not arena simulation
+                            const questData = this.cnQuestsMap.get(`${questBattleId}`);
+                            if (typeof questData !== 'string') {
+                                console.error(`fakeQuestNativeGet cannot find questData`);
+                            }
+                            return Buffer.from(questData, 'utf-8');
+                        }
+
                         const opponentUserId = this.arenaSimulateMap.get(userQuestBattleResultId);
                         if (typeof opponentUserId !== 'string' || !opponentUserId.match(userdataDump.guidRegEx)) {
                             console.error(`fakeArenaNativeGet opponentUserId not found or invalid`);
