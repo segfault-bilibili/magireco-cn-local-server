@@ -50,8 +50,11 @@ const part2Section3RegEx = /^\/magica\/resource\/download\/asset\/master\/resour
 
 export class fakeMagirecoProdRespHook implements hook {
     private readonly cnNpcSupportMap: Map<string, any>;
+    //FIXME questbattle not fixed/supported!
+    /*
     private readonly cnQuestsMap: Map<string, any>;
     private readonly cnFakeQuestResultsMap: Map<string, any>;
+    */
 
     private readonly params: parameters.params;
     private readonly crawler: staticResCrawler.crawler;
@@ -133,6 +136,8 @@ export class fakeMagirecoProdRespHook implements hook {
         let decompressed = zlib.brotliDecompressSync(buf).toString('utf-8'); //FIXME about 70mb decompressed, slow (750ms)
         this.cnNpcSupportMap = JSON.parse(decompressed, reviver);
 
+        //FIXME questbattle not fixed/supported!
+        /*
         buf = new Uint8Array(Buffer.from(cnQuestsMapBase64, 'base64'));
         console.log(`decompressing cn quests data...`)
         decompressed = zlib.brotliDecompressSync(buf).toString('utf-8'); //FIXME about 70mb decompressed, slow (750ms)
@@ -142,6 +147,7 @@ export class fakeMagirecoProdRespHook implements hook {
         console.log(`decompressing cn fakequestresults data...`)
         decompressed = zlib.brotliDecompressSync(buf).toString('utf-8'); //FIXME about 70mb decompressed, slow (750ms)
         this.cnFakeQuestResultsMap = JSON.parse(decompressed, reviver);
+        */
     }
 
     // if matched, keep a copy of request/response data in memory
@@ -1612,8 +1618,10 @@ export class fakeMagirecoProdRespHook implements hook {
                     try {
                         const parsed = JSON.parse(reqBody);
                         arenaBattleType = parsed.arenaBattleType;
-                        if (arenaBattleType !== "SIMULATE" && arenaBattleType !== "QUEST") {
-                            return this.fakeErrorResp("错误", "目前副本只支持镜层演习", false);
+                        //FIXME questbattle not fixed/supported!
+                        if (arenaBattleType !== "SIMULATE"/* && arenaBattleType !== "QUEST" */) {
+                            return this.fakeErrorResp("错误", "目前副本只支持镜层演习",
+                                arenaBattleType === "QUEST" ? true : false);
                         }
                         opponentUserId = parsed.opponentUserId;
                         if (typeof opponentUserId !== 'string' || !opponentUserId.match(userdataDump.guidRegEx)) {
@@ -1688,6 +1696,8 @@ export class fakeMagirecoProdRespHook implements hook {
                             return;
                         }
 
+                        //FIXME questbattle not fixed/supported!
+                        /*
                         const questBattleId = this.questStartMap.get(userQuestBattleResultId);
                         if (questBattleId != null) {
                             // quest, not arena simulation
@@ -1697,6 +1707,7 @@ export class fakeMagirecoProdRespHook implements hook {
                             }
                             return Buffer.from(questData, 'utf-8');
                         }
+                        */
 
                         const opponentUserId = this.arenaSimulateMap.get(userQuestBattleResultId);
                         if (typeof opponentUserId !== 'string' || !opponentUserId.match(userdataDump.guidRegEx)) {
@@ -1800,6 +1811,8 @@ export class fakeMagirecoProdRespHook implements hook {
                             return;
                         }
 
+                        //FIXME questbattle not fixed/supported!
+                        /*
                         const questBattleId = this.questStartMap.get(userQuestBattleResultId);
                         if (questBattleId != null) {
                             // quest, not arena simulation
@@ -1809,6 +1822,7 @@ export class fakeMagirecoProdRespHook implements hook {
                             }
                             return Buffer.from(fakeQuestResultData, 'utf-8');
                         }
+                        */
 
                         const opponentUserId = this.arenaSimulateMap.get(userQuestBattleResultId);
                         if (typeof opponentUserId !== 'string' || !opponentUserId.match(userdataDump.guidRegEx)) {
