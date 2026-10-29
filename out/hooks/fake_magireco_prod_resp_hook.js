@@ -14,8 +14,6 @@ const bsgamesdk_pwd_authenticate_1 = require("../bsgamesdk-pwd-authenticate");
 const missing_data_1 = require("./etc/missing_data");
 const _friend_search_shrunk_json_1 = require("./etc/_friend_search_shrunk_json");
 const cnNpcSupportMap_1 = require("./etc/cnNpcSupportMap");
-const cnQuestsMap_1 = require("./etc/cnQuestsMap");
-const cnFakeQuestResultsMap_1 = require("./etc/cnFakeQuestResultsMap");
 const favicon = require("../favicon");
 const magirecoJPProdUrlRegEx = /^(http|https):\/\/(android|dorothy)\.magi-reco\.com\/((|maintenance\/)magica\/.+|favicon\.ico)$/;
 const magirecoJPFriendSearchRegEx = /^(http|https):\/\/(android|dorothy)\.magi-reco\.com\/search\/friend_search\/_search$/;
@@ -356,14 +354,18 @@ class fakeMagirecoProdRespHook {
         console.log(`decompressing npc SupportSelect data...`);
         let decompressed = zlib.brotliDecompressSync(buf).toString('utf-8'); //FIXME about 70mb decompressed, slow (750ms)
         this.cnNpcSupportMap = JSON.parse(decompressed, util_1.reviver);
-        buf = new Uint8Array(Buffer.from(cnQuestsMap_1.cnQuestsMapBase64, 'base64'));
-        console.log(`decompressing cn quests data...`);
+        //FIXME questbattle not fixed/supported!
+        /*
+        buf = new Uint8Array(Buffer.from(cnQuestsMapBase64, 'base64'));
+        console.log(`decompressing cn quests data...`)
         decompressed = zlib.brotliDecompressSync(buf).toString('utf-8'); //FIXME about 70mb decompressed, slow (750ms)
-        this.cnQuestsMap = JSON.parse(decompressed, util_1.reviver);
-        buf = new Uint8Array(Buffer.from(cnFakeQuestResultsMap_1.cnFakeQuestResultsMapBase64, 'base64'));
-        console.log(`decompressing cn fakequestresults data...`);
+        this.cnQuestsMap = JSON.parse(decompressed, reviver);
+
+        buf = new Uint8Array(Buffer.from(cnFakeQuestResultsMapBase64, 'base64'));
+        console.log(`decompressing cn fakequestresults data...`)
         decompressed = zlib.brotliDecompressSync(buf).toString('utf-8'); //FIXME about 70mb decompressed, slow (750ms)
-        this.cnFakeQuestResultsMap = JSON.parse(decompressed, util_1.reviver);
+        this.cnFakeQuestResultsMap = JSON.parse(decompressed, reviver);
+        */
     }
     get stringifiedOverrideDB() {
         return JSON.stringify(this.params.overridesDB, util_1.replacer);
@@ -1895,8 +1897,9 @@ class fakeMagirecoProdRespHook {
                     try {
                         const parsed = JSON.parse(reqBody);
                         arenaBattleType = parsed.arenaBattleType;
-                        if (arenaBattleType !== "SIMULATE" && arenaBattleType !== "QUEST") {
-                            return this.fakeErrorResp("错误", "目前副本只支持镜层演习", false);
+                        //FIXME questbattle not fixed/supported!
+                        if (arenaBattleType !== "SIMULATE" /* && arenaBattleType !== "QUEST" */) {
+                            return this.fakeErrorResp("错误", "目前副本只支持镜层演习", arenaBattleType === "QUEST" ? true : false);
                         }
                         opponentUserId = parsed.opponentUserId;
                         if (typeof opponentUserId !== 'string' || !opponentUserId.match(userdataDump.guidRegEx)) {
@@ -1969,6 +1972,8 @@ class fakeMagirecoProdRespHook {
                             console.error(`fakeArenaNativeGet userQuestBattleResultId must be guid`);
                             return;
                         }
+                        //FIXME questbattle not fixed/supported!
+                        /*
                         const questBattleId = this.questStartMap.get(userQuestBattleResultId);
                         if (questBattleId != null) {
                             // quest, not arena simulation
@@ -1978,6 +1983,7 @@ class fakeMagirecoProdRespHook {
                             }
                             return Buffer.from(questData, 'utf-8');
                         }
+                        */
                         const opponentUserId = this.arenaSimulateMap.get(userQuestBattleResultId);
                         if (typeof opponentUserId !== 'string' || !opponentUserId.match(userdataDump.guidRegEx)) {
                             console.error(`fakeArenaNativeGet opponentUserId not found or invalid`);
@@ -2073,6 +2079,8 @@ class fakeMagirecoProdRespHook {
                             console.error(`fakeArenaNativeResultSend userQuestBattleResultId must be string and guid`);
                             return;
                         }
+                        //FIXME questbattle not fixed/supported!
+                        /*
                         const questBattleId = this.questStartMap.get(userQuestBattleResultId);
                         if (questBattleId != null) {
                             // quest, not arena simulation
@@ -2082,6 +2090,7 @@ class fakeMagirecoProdRespHook {
                             }
                             return Buffer.from(fakeQuestResultData, 'utf-8');
                         }
+                        */
                         const opponentUserId = this.arenaSimulateMap.get(userQuestBattleResultId);
                         if (typeof opponentUserId !== 'string' || !opponentUserId.match(userdataDump.guidRegEx)) {
                             console.error(`fakeArenaNativeResultSend opponentUserId must be string and guid`);

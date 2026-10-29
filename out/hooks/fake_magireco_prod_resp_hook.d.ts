@@ -9,8 +9,6 @@ import * as staticResCrawler from "../static_res_crawler";
 import * as userdataDump from "../userdata_dump";
 export declare class fakeMagirecoProdRespHook implements hook {
     private readonly cnNpcSupportMap;
-    private readonly cnQuestsMap;
-    private readonly cnFakeQuestResultsMap;
     private readonly params;
     private readonly crawler;
     private readonly userdataDmp;
