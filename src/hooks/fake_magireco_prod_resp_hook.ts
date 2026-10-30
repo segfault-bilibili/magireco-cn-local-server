@@ -322,6 +322,7 @@ export class fakeMagirecoProdRespHook implements hook {
                     mime = getMime(filepath.replace(/\.gz$/, ""));
                 } else {
                     if (url.pathname === "/magica/resource/image_web/debug/selectedBranch.json") {
+                        mime = getMime(url.pathname);
                         body = `{"webBranch":"mybrowserdebug"}`;
                     } else {
                         if (body == null) statusCode = 404;
