@@ -201,47 +201,55 @@ export class fakeMagirecoProdRespHook implements hook {
                     //FIXME unimplemented, should create new user (not gameUser), tutorialId starts with OP000
                     apiName = "page/TopPage";
                 }
-                if (apiName.match(/^page\/[^\/].+$/)) {
-                    body = { currentTime: this.currentTime }; this.fixCurrentTime(body);
-                    const pageName = apiName.replace(/^page\//, "");
-                    const selectedJPDump = this.params.selectedJPDump;
-                    const JPDumpDir = path.join(".", "user_page_jsons", selectedJPDump);
-                    if (isDir(JPDumpDir)) {
-                        const pageDir = path.join(JPDumpDir, pageName);
-                        let valueSet: Set<string> = new Set();
-                        const value = url.searchParams.get("value");
-                        if (value != null && value !== "") valueSet = new Set(value.split(","));
-                        if (isDir(pageDir)) fs.readdirSync(pageDir).forEach(item => valueSet.add(item.replace(/\.json$/, "")));
-                        valueSet.forEach(requestedValue => {
-                            if (isDir(pageDir)) {
-                                let filepath = path.join(pageDir, requestedValue + ".json");
-                                if (isFile(filepath)) {
-                                    body[requestedValue] = JSON.parse(fs.readFileSync(filepath, 'utf-8'));
-                                    valueSet.delete(requestedValue)
-                                }
-                            }
-                        });
-                        if (valueSet.size > 0) {
-                            const pageDirs = fs.readdirSync(JPDumpDir).filter(item => isDir(path.join(JPDumpDir, item)));
-                            valueSet.forEach(missingValue => {
-                                for (let item of pageDirs) {
-                                    if (item === pageName) continue;
-                                    let filepath = path.join(JPDumpDir, item, missingValue + ".json");
-                                    if (isFile(filepath)) {
-                                        body[missingValue] = JSON.parse(fs.readFileSync(filepath, 'utf-8'));
-                                        valueSet.delete(missingValue);
-                                    }
-                                }
-                            });
-                        }
-                        if (valueSet.size > 0) {
-                            console.log(`pageName=[${pageName}] still missing: valueSet.size=[${valueSet.size}]`, valueSet);
+                if (apiName.match(/^friend\/user\/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/)) {
+                    apiName = "friend/user";
+                    let fakeURLStr = `https://android.magi-reco.com/magica/api/page/MyPage`
+                        + `?value=user,gameUser,userCardList,userCharaList,userDoppelList,userPieceList`
+                        + `,userArenaBattle,userFollowList,supportBonus`;
+                    let neededData = this.fakePageApiJP("page/MyPage", new URL(fakeURLStr));
+                    if (neededData != null) {
+                        let parsed = JSON.parse(neededData.toString("utf-8"));
+                        let leaderId = parsed.gameUser.leaderId;
+                        let leaderUserCard = parsed.userCardList.find((card: any) => card.id === leaderId);
+                        let supportDeck = parsed.userDeckList.find((deck: any) => deck.deckType == 20);
+                        let supportDeckCardIdList = [1, 2, 3, 4, 5, 6]
+                            .map(num => `userCardId${num}`)
+                            .filter(key => key !== "");
+                        let supportDeckCardList = supportDeckCardIdList
+                            .map(key => supportDeck[key])
+                            .map(cardId => parsed.userCardList.find((card: any) => card.id === cardId));
+                        let supportCharaList = supportDeckCardIdList
+                            .map(key => parsed.userCharaList.find((chara: any) => chara.userCardId === key))
+                            .filter((chara: any) => chara != null);
+                        let supportDoppelList = supportCharaList
+                            .map(key => parsed.userDoppelList.find((chara: any) => chara.userCardId === key))
+                            .filter((chara: any) => chara != null);
+                        let supportPieceList = Array.from(Object.keys(supportDeck))
+                            .filter((key: any) => key.match(/^userPieceId[0-9]{3}$/))
+                            .map((key: any) => supportDeck[key])
+                            .filter((pieceId: any) => pieceId != null)
+                            .map((pieceId: any) => parsed.userPieceList.find((piece: any) => piece.id === pieceId))
+                            .filter((piece: any) => piece != null);
+
+                        body = {
+                            userId: parsed.user.id,
+                            gameUser: parsed.gameUser,
+                            leaderUserCard: leaderUserCard,
+                            userDeck: supportDeck,
+                            userCardList: supportDeckCardList,
+                            userCharaList: supportCharaList,//FIXME not yet understood
+                            userDoppelList: supportDoppelList,
+                            userPieceList: supportPieceList,
+                            userArenaBattle: parsed.userArenaBattle,
+                            followCount: parsed.userFollowList.length,
+                            followerCount: parsed.supportBonus.followerCount,
                         }
                         body = JSON.stringify(body);
-                    } else {
-                        statusCode = 404;
-                        body = Buffer.alloc(0);
+                        statusCode = 200;
                     }
+                } else if (apiName.match(/^page\/[^\/].+$/)) {
+                    body = this.fakePageApiJP(apiName, url);
+                    statusCode = (body == null || body.length == 0) ? 404 : 200;
                 } else switch (apiName) {
                     case "system/native/getDomainPath":
                     case "gameUser/cacheClear": {
@@ -1456,6 +1464,48 @@ export class fakeMagirecoProdRespHook implements hook {
             this.fixCurrentTime(respBodyObj);
             return respBody = Buffer.from(JSON.stringify(respBodyObj), 'utf-8');
         }
+    }
+
+    private fakePageApiJP(apiName: string, url: URL): Buffer | undefined {
+        let body: any;
+        body = { currentTime: this.currentTime }; this.fixCurrentTime(body);
+        const pageName = apiName.replace(/^page\//, "");
+        const selectedJPDump = this.params.selectedJPDump;
+        const JPDumpDir = path.join(".", "user_page_jsons", selectedJPDump);
+        if (isDir(JPDumpDir)) {
+            const pageDir = path.join(JPDumpDir, pageName);
+            let valueSet: Set<string> = new Set();
+            const value = url.searchParams.get("value");
+            if (value != null && value !== "") valueSet = new Set(value.split(","));
+            if (isDir(pageDir)) fs.readdirSync(pageDir).forEach(item => valueSet.add(item.replace(/\.json$/, "")));
+            valueSet.forEach(requestedValue => {
+                if (isDir(pageDir)) {
+                    let filepath = path.join(pageDir, requestedValue + ".json");
+                    if (isFile(filepath)) {
+                        body[requestedValue] = JSON.parse(fs.readFileSync(filepath, 'utf-8'));
+                        valueSet.delete(requestedValue)
+                    }
+                }
+            });
+            if (valueSet.size > 0) {
+                const pageDirs = fs.readdirSync(JPDumpDir).filter(item => isDir(path.join(JPDumpDir, item)));
+                valueSet.forEach(missingValue => {
+                    for (let item of pageDirs) {
+                        if (item === pageName) continue;
+                        let filepath = path.join(JPDumpDir, item, missingValue + ".json");
+                        if (isFile(filepath)) {
+                            body[missingValue] = JSON.parse(fs.readFileSync(filepath, 'utf-8'));
+                            valueSet.delete(missingValue);
+                        }
+                    }
+                });
+            }
+            if (valueSet.size > 0) {
+                console.log(`pageName=[${pageName}] still missing: valueSet.size=[${valueSet.size}]`, valueSet);
+            }
+            return Buffer.from(JSON.stringify(body));
+        }
+
     }
 
     private parsePageNum(reqBody: string | Buffer | undefined, type: "page" | "charaId"): number | undefined {
