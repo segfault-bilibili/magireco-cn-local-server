@@ -197,7 +197,7 @@ export class fakeMagirecoProdRespHook implements hook {
                 mime = "application/json";
                 let apiName = url.pathname.replace(/^\/magica\/api\//, "");
                 if (apiName === "user/create") {
-                    body = { resultCode: "success" };
+                    body = { resultCode: "success", currentTime: this.currentTime };
                     //FIXME unimplemented, should create new user (not gameUser), tutorialId starts with OP000
                     apiName = "page/TopPage";
                 }
