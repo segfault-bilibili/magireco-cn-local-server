@@ -243,6 +243,22 @@ export class fakeMagirecoProdRespHook implements hook {
                             userArenaBattle: parsed.userArenaBattle,
                             followCount: parsed.userFollowList.length,
                             followerCount: parsed.supportBonus.followerCount,
+                            userName: parsed.user.loginName,
+                            userRank: parsed.gameUser.level,
+                            lastAccessDate: parsed.user.lastAccessDate,
+                            inviteCode: parsed.gameUser.inviteCode,
+                            comment: parsed.gameUser.comment,
+                            cardId: leaderUserCard.card.cardId,
+                            charaName: leaderUserCard.card.cardName,
+                            cardRank: leaderUserCard.card.rank,
+                            attributeId: leaderUserCard.card.attributeId,
+                            level: leaderUserCard.level,
+                            displayCardId: leaderUserCard.displayCardId,
+                            revision: 1,
+                            follow: false,
+                            follower: false,
+                            blocked: false,
+                            definiteClassRank: parsed.userArenaBattle.definiteClassRank,
                         }
                         body = JSON.stringify(body);
                         statusCode = 200;
