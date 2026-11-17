@@ -39,6 +39,7 @@ export declare class fakeMagirecoProdRespHook implements hook {
     private modifyGameChara;
     private fakeFriendSearch;
     private fakeSupportSelect;
+    private fakePageApiJP;
     private parsePageNum;
     private fakePagedResult;
     private fakeGuidResult;
