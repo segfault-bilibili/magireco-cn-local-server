@@ -2360,6 +2360,41 @@ export class fakeMagirecoProdRespHook implements hook {
                 replacement: "(location.href=$1)",
             },
             */
+            ["/magica/template/collection/CharaCollectionDetail.html"]: {
+                matchPattern: /data-voice="46">副本胜利④<\/div> <\/div> <\/div>/,
+                replacePattern: /data-voice="46">副本胜利④<\/div> <\/div> <\/div>/,
+                replacement: "/data-voice=\"46\">副本胜利④</div> </div>"
+                    + "  <div class=\"commonFrame3 quest\"> <p class=\"common_title_frame\">隐藏语音</p>"
+                    + "    <div class=\"commonFrame4 voiceBtn\" data-voice=\"41\">点击魔法少女⑨(#41)</div>"
+                    + "  </div>"
+                    //+ "  <div class=\"commonFrame3 quest\"> <p class=\"common_title_frame\">剧情语音</p>"
+                    // playable, but should be played in story archive instead - they are already available there
+                    //+ "    <div class=\"commonFrame4 voiceBtn\" data-voice=\"03\">个人剧情①结语(#03)</div>"
+                    //+ "    <div class=\"commonFrame4 voiceBtn\" data-voice=\"04\">个人剧情②结语(#04)</div>"
+                    //+ "    <div class=\"commonFrame4 voiceBtn\" data-voice=\"05\">个人剧情③结语(#05)</div>"
+                    // not playable
+                    //+ "    <div class=\"commonFrame4 voiceBtn\" data-voice=\"06\">个人剧情选关①(#06)</div>"
+                    //+ "    <div class=\"commonFrame4 voiceBtn\" data-voice=\"07\">个人剧情选关②(#07)</div>"
+                    //+ "    <div class=\"commonFrame4 voiceBtn\" data-voice=\"08\">个人剧情选关③(#08)</div>"
+                    //+ "    <div class=\"commonFrame4 voiceBtn\" data-voice=\"09\">个人剧情选关④(#09)</div>"
+                    //+ "    <div class=\"commonFrame4 voiceBtn\" data-voice=\"10\">个人剧情选关⑤(#10)</div>"
+                    //+ "    <div class=\"commonFrame4 voiceBtn\" data-voice=\"11\">个人剧情选关⑥(#11)</div>"
+                    //+ "  </div>"
+                    + "  <div class=\"commonFrame3 quest\"> <p class=\"common_title_frame\">战斗语音</p>"
+                    + "    <div class=\"commonFrame4 voiceBtn\" data-voice=\"63\">使用Magia时①(#63)</div>"
+                    + "    <div class=\"commonFrame4 voiceBtn\" data-voice=\"64\">使用Magia时②(#64)</div>"
+                    + "    <div class=\"commonFrame4 voiceBtn\" data-voice=\"65\">使用Magia时③(#65)</div>"
+                    + "    <div class=\"commonFrame4 voiceBtn\" data-voice=\"66\">使用Magia时④(#66)</div>"
+                    + "  </div>"
+                    + "  <div class=\"commonFrame3 quest\"> <p class=\"common_title_frame\">废案语音</p>"
+                    // same as above, not playable
+                    //+ "    <div class=\"commonFrame4 voiceBtn\" data-voice=\"12\">个人剧情选关⑦(#12)</div>"
+                    + "    <div class=\"commonFrame4 voiceBtn\" data-voice=\"23\">魔法少女觉醒④(#23)</div>"
+                    + "    <div class=\"commonFrame4 voiceBtn\" data-voice=\"32\">GvG(#32)</div>"
+                    + "    <div class=\"commonFrame4 voiceBtn\" data-voice=\"46\">副本胜利④(#46)</div>"
+                    + "  </div>"
+                    + "</div>/",
+            }
         }
 
     private checkForMissing = (existingArray: Array<any>, missingArray: Array<any>, key: string) => {
